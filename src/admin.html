@@ -337,7 +337,7 @@ const RENDER = {
 				(ap.status === "open"
 					? '<div class="field"><textarea data-reply placeholder="Your answer, sent to the account" maxlength="2000"></textarea></div><div class="row">' +
 						'<button class="btn primary" data-do="accepted">Accept</button><button class="btn danger" data-do="rejected">Turn down</button>' +
-						'<a class="btn" href="#user/' + esc(ap.user_id) + '">Open account</a></div><p class="dim small">Accepting lifts the strike it's about. Lift other sanctions on the account page.</p>'
+						'<a class="btn" href="#user/' + esc(ap.user_id) + '">Open account</a></div><p class="dim small">Accepting lifts the strike it is about. Lift other sanctions on the account page.</p>'
 					: '<p class="small"><b>' + (ap.status === "accepted" ? "Accepted" : "Turned down") + "</b>" + (ap.reviewer ? " by @" + esc(ap.reviewer) : "") + " · " + esc(when(ap.resolved_at)) + "</p>" +
 						(ap.staff_reply ? '<p class="dim" style="white-space:pre-wrap">' + esc(ap.staff_reply) + "</p>" : "")) +
 				"</div>").join("") : '<div class="empty">' + (status === "open" ? "No open appeals." : "Nothing here.") + "</div>");
