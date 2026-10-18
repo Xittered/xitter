@@ -48,6 +48,9 @@ const DEFAULTS = {
 	limits: { image_mb: 5, video_mb: Number(process.env.MAX_VIDEO_MB ?? 200), video_seconds: Number(process.env.MAX_VIDEO_SECONDS ?? 600) },
 	// per account per 15 minutes (ratelimit.ts); sign-in and mail limits are fixed
 	rate_limits: { read: 6000, endpoint: 1000, write: 1500, post: 150, engage: 1000, dm: 1500, upload: 150 },
+	// longest post per badge, in X's weighted characters (textlen.ts); grey covers
+	// government organisations and officials
+	post_limits: { none: 4000, blue: 25000, business: 128000, government: 256000 },
 	// shown above every timeline until the viewer closes it; a new id shows it again
 	announcement: { id: "", text: "", link: "" },
 	// handles every new account follows

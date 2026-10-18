@@ -2,6 +2,7 @@ import type { User } from "./auth";
 import { sql } from "./db";
 import { newId } from "./ids";
 import { hasBlockedPhrase } from "./settings";
+import { postLimitFor, weightedLength } from "./textlen";
 import type { PostRow } from "./model";
 import { articlesByIds } from "./articles";
 import { blockedFor, hasMutedWord, isBlockedEitherWay, mutedFor, outOfView, protectedFor, suspendedFor } from "./blocks";
@@ -11,7 +12,6 @@ import { webSource } from "./platforms";
 import { pollCard, pollsByIds } from "./polls";
 import { toUser, userCols, usersByIds } from "./users";
 
-export const MAX_POST_LENGTH = 280;
 // @name, not preceded by a word character (so e-mail addresses do not count)
 export const MENTION = /(?<![\w@])@(\w{1,15})/g;
 const NO_LIMIT = "9223372036854775807";
@@ -152,10 +152,17 @@ const MAX_EDITS = 5;
 
 // Text changes only; media, replies and quotes stay as posted. The post keeps its
 // id and what it said before goes to post_versions.
+// the author's limit goes by their badge (textlen.ts, Admin > Settings)
+async function checkLength(userId: string, text: string) {
+	const [u] = await sql`select verified_type from users where id = ${userId}::bigint`;
+	const limit = postLimitFor(u?.verified_type);
+	if (weightedLength(text) > limit) throw new PostError(`Posts are limited to ${limit.toLocaleString("en-US")} characters.`, 186);
+}
+
 export async function editPost(userId: string, postId: string, text: string): Promise<void> {
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
 	if (!text.trim()) throw new PostError("Your post is empty.", 170);
-	if ([...text].length > MAX_POST_LENGTH) throw new PostError(`Posts are limited to ${MAX_POST_LENGTH} characters.`, 186);
+	await checkLength(userId, text);
 	const [post] = await sql`select p.id::text, p.text, p.created_at, p.edit_count, p.edited_at, u.status,
 			exists (select 1 from users x where x.id = p.user_id and x.pinned_post_id = p.id) as pinned
 		from posts p join users u on u.id = p.user_id where p.id = ${postId}::bigint and p.user_id = ${userId}::bigint`;
@@ -368,6 +375,7 @@ export async function createPost(userId: string, text: string, opts: { replyToId
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
 	const [author] = await sql`select status from users where id = ${userId}::bigint`;
 	if (author?.status === "restricted") throw new PostError("Your account can't post right now.", 326);
+	await checkLength(userId, text);
 	const id = newId();
 	let conversationId = id;
 	if (opts.replyToId) {

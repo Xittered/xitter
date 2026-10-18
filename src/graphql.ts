@@ -30,7 +30,6 @@ import { isId, newId } from "./ids";
 import { attachMedia } from "./media";
 import { cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, replyEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
 import {
-	MAX_POST_LENGTH,
 	PostError,
 	ancestors,
 	bookmarkedPosts,
@@ -283,7 +282,6 @@ const createTweet: Handler = async (viewer, vars) => {
 		.map((m: any) => String(m?.media_id ?? ""))
 		.filter(isId);
 	if (!text && !mediaIds.length) throw new PostError("Your post is empty.", 170);
-	if ([...text].length > MAX_POST_LENGTH) throw new PostError(`Posts are limited to ${MAX_POST_LENGTH} characters.`, 186);
 	const previous = vars.edit_options?.previous_tweet_id;
 	if (previous !== undefined) {
 		if (!isId(previous)) throw new PostError("Invalid post id.", 144);
@@ -569,6 +567,9 @@ const handlers: Record<string, Handler> = {
 	},
 	Bookmarks: bookmarks,
 	CreateTweet: createTweet,
+	// the composer's long post (over 280 weighted characters): the same request,
+	// answered under notetweet_create. Bold and italic (richtext_options) aren't kept.
+	CreateNoteTweet: async (v, vars) => ({ data: { notetweet_create: ((await createTweet(v, vars)) as any).data.create_tweet } }),
 	DeleteTweet: async (v, vars) => {
 		await deletePost(v.id, postId(vars));
 		return { data: { delete_tweet: { tweet_results: {} } } };
@@ -851,7 +852,6 @@ const articleHandlers: Record<string, Handler> = {
 	}),
 	ArticleEntityPublish: async (v, vars) => {
 		const text = typeof vars.tweetText === "string" ? vars.tweetText : "";
-		if ([...text].length > MAX_POST_LENGTH) throw new PostError(`Posts are limited to ${MAX_POST_LENGTH} characters.`, 186);
 		const result = await withPost(v.id, await articles.publish(v.id, articleId(vars), text, (t, id) => createPost(v.id, t, { articleId: id, source: v.postSource })));
 		return { data: { articleentity_publish: { article_entity_results: { result } } } };
 	},
