@@ -73,6 +73,8 @@ export const posterUrl = (id: string) => `${PUBLIC_ORIGIN}/media/poster/${id}.jp
 // stored paths are relative so the instance can move to another domain
 export const absolute = (path: string | null) => (path?.startsWith("/") ? PUBLIC_ORIGIN + path : path);
 
+const MAX_PENDING_PER_USER = 8;
+const MAX_SEGMENTS = 10_000;
 const uploadError = (message: string, status = 400) => Response.json({ error: message, errors: [{ code: 324, message }] }, { status });
 
 async function params(req: Request, url: URL): Promise<{ fields: Record<string, string>; file?: Buffer }> {
@@ -213,6 +215,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (video && !(await videoSupported())) return uploadError("Video uploads are not available on this server.");
 			if (!video && fields.media_type && !/^image\//.test(fields.media_type)) return uploadError("Only images and videos can be uploaded.");
 			if (!Number.isInteger(total) || total <= 0 || total > (video ? maxVideoBytes() : MAX_GIF)) return uploadError("File is too large or empty.");
+			if ([...pending.values()].filter((p) => p.userId === viewer.id).length >= MAX_PENDING_PER_USER) return uploadError("Finish your other uploads first.", 429);
 			const newMedia = newId();
 			pending.set(newMedia, { userId: viewer.id, total, category: fields.media_category ?? "", video, chunks: new Map(), started: Date.now() });
 			return Response.json({ ...idFields(newMedia), expires_after_secs: 86400 }, { status: 202 });
@@ -223,7 +226,9 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!file) return uploadError("No data in APPEND.");
 			const received = [...p.chunks.values()].reduce((n, c) => n + c.length, 0);
 			if (received + file.length > p.total) return uploadError("More data than announced at INIT.");
-			p.chunks.set(Number(fields.segment_index) || 0, file);
+			const index = Number(fields.segment_index ?? 0);
+			if (!Number.isInteger(index) || index < 0 || index > MAX_SEGMENTS) return uploadError("Bad segment_index.");
+			p.chunks.set(index, file);
 			return new Response(null, { status: 204 });
 		}
 		// the video uploader: one blob holding the consecutive segments listed in
@@ -233,7 +238,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!p || p.userId !== viewer.id) return uploadError("Unknown upload.", 404);
 			if (!file) return uploadError("No data in APPENDMULTI.");
 			const first = Number((fields.segment_indexes ?? "0").split(",")[0]);
-			if (!Number.isInteger(first) || first < 0) return uploadError("Bad segment_indexes.");
+			if (!Number.isInteger(first) || first < 0 || first > MAX_SEGMENTS) return uploadError("Bad segment_indexes.");
 			if (fields.media_md5 && new Bun.CryptoHasher("md5").update(file).digest("hex") !== fields.media_md5.toLowerCase())
 				return uploadError("Segment checksum does not match.");
 			const received = [...p.chunks.values()].reduce((n, c) => n + c.length, 0);

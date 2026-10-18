@@ -1,5 +1,7 @@
 // Settings > Your account: password, deactivation. Username and language go
 // through account/settings.json (rest.ts) and use the helpers here.
+import { hateInName } from "./hate";
+import { automodStrike } from "./moderation";
 import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { sql } from "./db";
@@ -31,8 +33,15 @@ export async function changeUsername(viewer: Viewer, wanted: string): Promise<st
 	const problem = usernameProblem(wanted);
 	if (problem) return problem;
 	if (isReserved(wanted)) return "That username is reserved.";
+	const [renames] = await sql`select count(*)::int as n from username_changes where user_id = ${viewer.id}::bigint and changed_at > now() - interval '1 day'`;
+	if (renames.n >= 5) return "You've changed your username too often today. Try again tomorrow.";
 	const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${wanted}) and id <> ${viewer.id}::bigint`;
 	if (taken) return "That username has been taken. Please choose another.";
+	const hate = hateInName(wanted);
+	if (hate) {
+		await automodStrike(viewer.id, hate, "name", wanted);
+		return "That username isn't allowed here.";
+	}
 	// a blocked word (names.ts): staff are only refused, anyone else is suspended
 	const blocked = blockedNameIn(wanted);
 	if (blocked) {
@@ -66,6 +75,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		if (!(await passwordMatches(viewer.id, f.current_password))) return error(231, "Your current password is incorrect.", 403);
 		const next = f.new_password ?? "";
 		if (next.length < 8) return error(214, "Your password needs to be at least 8 characters.");
+		if (next.length > 256) return error(214, "Passwords are at most 256 characters.");
 		if (next !== (f.password_confirmation ?? next)) return error(214, "The two passwords don't match.");
 		if (next === f.current_password) return error(214, "Your new password must be different from your current one.");
 		await sql`update users set password_hash = ${await Bun.password.hash(next)} where id = ${viewer.id}::bigint`;
@@ -83,6 +93,8 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		const f = await body(req);
 		if (!(await passwordMatches(viewer.id, f.current_password ?? f.password))) return error(231, "Your password is incorrect.", 403);
 		if (viewer.role) return error(214, "Staff accounts can't be deactivated here.");
+		const [standing] = await sql`select status, status_until from users where id = ${viewer.id}::bigint`;
+		if (standing?.status !== "active" || standing.status_until) return error(214, "Your account can't be deactivated while a sanction is in effect.");
 		await sql`update users set status = 'suspended', deactivated_at = now() where id = ${viewer.id}::bigint`;
 		await sql`delete from sessions where user_id = ${viewer.id}::bigint`;
 		const headers = new Headers();

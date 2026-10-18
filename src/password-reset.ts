@@ -64,6 +64,7 @@ export async function resetRoute(req: Request, url: URL): Promise<Response> {
 	if (!row) return page(`<h1>Link expired</h1><p>This reset link is invalid or has been used. <a href="/">Back to sign in</a>, then ask for a new one.</p>`, 410);
 	const password = String(f?.get("password") ?? "");
 	if (password.length < 8) return form(token, "Your password needs to be at least 8 characters.");
+	if (password.length > 256) return form(token, "Passwords are at most 256 characters.");
 	if (password !== String(f?.get("confirm") ?? "")) return form(token, "The two passwords don't match.");
 	await sql`update users set password_hash = ${await Bun.password.hash(password)} where id = ${row.user_id}::bigint`;
 	await sql`update password_resets set used = true where token_hash = ${hash(token)}`;

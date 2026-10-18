@@ -250,6 +250,20 @@ accounts custom badges and delete uploads. Settings also hold maintenance mode
 trends, and a post pinned to the top of every home timeline.
 `bun scripts/test-admin-extra.ts` checks these.
 
+The automod (`src/hate.ts`) refuses slurs, explicit hate, transphobia and
+abuse like "kill yourself" in posts, replies, scheduled posts, profiles, names,
+polls, image descriptions, lists, communities, articles and Community Notes.
+It reads through look-alike letters from other alphabets, Unicode styles,
+leetspeak, invisible characters, accents, repeated letters, letters spelled
+out one by one and reversed or upside-down text. Reclaimed queer words pass
+unless the text attacks someone, and NSFW text isn't touched. DMs are end-to-end
+encrypted, so the server can't read them. Each refusal is an appealable
+strike, and strikes, from staff or automatic, follow a ladder set in
+Settings > Automod (by default a warning, a day, a week, 30 days, then
+permanent). `bun test ./scripts/test-hate.ts` checks evasions and false
+positives without a server; `bun scripts/test-automod.ts` checks the ladder,
+expiry, write paths and request limits against one.
+
 - `GET /_debug/unknown` lists the client calls no handler answers yet, most
   frequent first. Start there when a screen is empty.
 - `scripts/test-*.ts` check each feature end to end against a running server,

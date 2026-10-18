@@ -101,6 +101,8 @@ export async function mutedKeywords(userId: string) {
 export async function addKeyword(userId: string, f: KeywordForm): Promise<string | undefined> {
 	const keyword = (f.keyword ?? "").trim();
 	if (!keyword || [...keyword].length > 100) return "Muted words must be 1 to 100 characters.";
+	const [count] = await sql`select count(*)::int as n from muted_keywords where user_id = ${userId}::bigint`;
+	if (count.n >= 1000) return "You can mute up to 1000 words.";
 	const surfaces = surfacesOf(f.mute_surfaces);
 	await sql`insert into muted_keywords (id, user_id, keyword, surfaces, exclude_following, valid_until)
 		values (${newId()}::bigint, ${userId}::bigint, ${keyword}, ${sql.array(surfaces.length ? surfaces : ["home_timeline", "tweet_replies", "notifications"], "TEXT")},

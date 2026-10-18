@@ -24,6 +24,7 @@ import { chatMedia } from "./chat-media";
 import { sql } from "./db";
 import { absolute } from "./media";
 import { newId } from "./ids";
+import { hit } from "./ratelimit";
 import * as thrift from "./thrift";
 import { type Struct, bool, i32, i64, list, str, struct } from "./thrift";
 import { userById, userByName } from "./users";
@@ -300,7 +301,13 @@ function deliver(userIds: string[], events: Uint8Array[], except?: ServerWebSock
 	for (const id of userIds) for (const ws of sockets.get(id) ?? []) if (ws !== except) ws.send(frame);
 }
 
+export function closeSockets(userId: string) {
+	for (const ws of sockets.get(userId) ?? []) ws.close(4001, "suspended");
+	sockets.delete(userId);
+}
+
 export const chatSocket = {
+	maxPayloadLength: 64 * 1024,
 	open(ws: ServerWebSocket<SocketData>) {
 		if (process.env.LOG_REQUESTS) console.log(`chat socket open for ${ws.data.userId}`);
 		let set = sockets.get(ws.data.userId);
@@ -312,6 +319,7 @@ export const chatSocket = {
 	},
 	async message(ws: ServerWebSocket<SocketData>, data: string | Buffer) {
 		if (typeof data === "string") return;
+		if (!hit("endpoint", `${ws.data.userId}:chat-socket`).ok) return;
 		let frame: Struct;
 		try {
 			frame = thrift.decode(new Uint8Array(data));
@@ -333,6 +341,14 @@ export const chatSocket = {
 		deliver(all, [thrift.encode(ev)], ws);
 	},
 };
+
+function groupText(value: unknown, max: number): string | null {
+	if (value == null) return null;
+	if (typeof value !== "string" && typeof value !== "number") throw new ChatError("Invalid group details.");
+	const text = String(value);
+	if (text.length > max) throw new ChatError("Group details are too long.");
+	return text;
+}
 
 // --- the inbox
 
@@ -514,9 +530,9 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		await writable(v.id, all);
 		const admins = [...new Set([v.id, ...ids(vars.admin_user_ids)])];
 		const now = String(Date.now());
-		const metadata = { group_name: vars.group_title ?? "", description: "", description_ckey_version: vars.conversation_key_version ?? "1",
-			created_at_msec: now, updated_at_msec: now, group_avatar_url: vars.avatar_url ?? null, message_ttl_msec: vars.ttl_msec ?? null,
-			classification: { __typename: "XChatGroupClassification", group_type: vars.group_type ?? "Normal" },
+		const metadata = { group_name: groupText(vars.group_title, 4000) ?? "", description: "", description_ckey_version: groupText(vars.conversation_key_version, 40) ?? "1",
+			created_at_msec: now, updated_at_msec: now, group_avatar_url: groupText(vars.avatar_url, 2048), message_ttl_msec: Number.isFinite(Number(vars.ttl_msec)) && vars.ttl_msec != null ? String(Math.max(0, Math.min(Number(vars.ttl_msec), 31_536_000_000))) : null,
+			classification: { __typename: "XChatGroupClassification", group_type: vars.group_type === "Normal" || vars.group_type == null ? "Normal" : (groupText(vars.group_type, 40) ?? "Normal") },
 			group_invite_details: null, screen_capture_blocking_enabled: false, is_grok_enabled: false,
 			admin_settings: { __typename: "XChatGroupAdminSettings", add_member: true, edit_group_info: true, send_message: false, start_call: false, edit_message_ttl: true, block_screen_capture: true }, admins };
 		await sql.begin(async (tx) => {
@@ -536,9 +552,9 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const id = String(vars.conversation_id ?? "");
 		const group = await groupAdmin(v, id);
 		const metadata = { ...group.metadata, updated_at_msec: String(Date.now()) };
-		for (const [input, output] of [["group_name", "group_name"], ["group_description", "description"], ["avatar_url", "group_avatar_url"]])
-			if (vars[input] != null) metadata[output] = String(vars[input]);
-		metadata.description_ckey_version = vars.conversation_key_version;
+		for (const [input, output, max] of [["group_name", "group_name", 4000], ["group_description", "description", 8000], ["avatar_url", "group_avatar_url", 2048]] as const)
+			if (vars[input] != null) metadata[output] = groupText(vars[input], max);
+		metadata.description_ckey_version = groupText(vars.conversation_key_version, 40);
 		await sql`update chat_conversations set metadata = ${JSON.stringify(metadata)}::text::jsonb where id = ${id}`;
 		const seqs = await actionEvents(v, id, vars.action_signatures, [3, 4]);
 		return { data: { xchat_edit_group: { __typename: "EditGroupConversationResult", conversation_key_change_sequence_id: seqs[0] ?? null } } };
@@ -632,7 +648,9 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 	}),
 	AddXChatPublicKeyMutation: async (v, vars) => {
 		const k = vars.public_key ?? {};
-		if (typeof k.public_key !== "string" || typeof k.signing_public_key !== "string")
+		const long = [k.public_key, k.signing_public_key, k.identity_public_key_signature, k.registration_method].some((x) => x != null && (typeof x !== "string" || x.length > 4096));
+		const [keys] = await sql`select count(*)::int as n from chat_keys where user_id = ${v.id}::bigint`;
+		if (long || keys.n >= 200 || typeof k.public_key !== "string" || typeof k.signing_public_key !== "string")
 			return { data: { user_add_public_key: { __typename: "AddPublicKeyResponse", error_code: "InvalidPublicKey", version: null, token_map: null } } };
 		const [last] = await sql`select max(version)::text as v from chat_keys where user_id = ${v.id}::bigint`;
 		const version = vars.generate_version || !/^\d+$/.test(String(vars.version ?? "")) ? String(BigInt(last?.v ?? "0") + 1n) : String(vars.version);
@@ -815,6 +833,8 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const all = await joinable(v.id, conversationId);
 		const action = Array.isArray(vars.action_signatures) ? vars.action_signatures[0] : undefined;
 		const wrapped = Array.isArray(vars.conversation_participant_keys) ? vars.conversation_participant_keys : [];
+		if (wrapped.length > 200 || wrapped.some((p: any) => String(p?.encrypted_conversation_key ?? "").length > 8192 || String(p?.user_id ?? "").length > 20 || String(p?.public_key_version ?? "").length > 20))
+			throw new ChatError("Too many keys.");
 		if (!action?.encoded_message_event_detail && (!wrapped.length || all.some((id) => !wrapped.some((p: any) => p.user_id === id))))
 			throw new ChatError("Missing the key change.");
 		const sig = action?.message_event_signature ?? {};

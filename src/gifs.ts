@@ -60,7 +60,7 @@ const cursor = (vars: Vars): Record<string, string> => (typeof vars.cursor === "
 
 export const gifHandlers = {
 	GifSearch: async (_v: Viewer, vars: Vars) => {
-		const q = String(vars.rawQuery ?? vars.raw_query ?? vars.query ?? vars.searchTerm ?? "").trim();
+		const q = String(vars.rawQuery ?? vars.raw_query ?? vars.query ?? vars.searchTerm ?? "").trim().slice(0, 100);
 		if (!q) return { data: { gif_search_slice: { items: [], slice_info: {} } } };
 		return { data: { gif_search_slice: slice(await klipy("/search", { q, limit: count(vars), ...cursor(vars) })) } };
 	},

@@ -888,7 +888,7 @@ const RENDER = {
 	},
 
 	async settings(main) {
-		const [{ settings: s, features, branding, slots }, { operations: o }] = await Promise.all([api("settings"), api("operations")]);
+		const [{ settings: s, features, branding, slots }, { operations: o, automod: am }] = await Promise.all([api("settings"), api("operations")]);
 		const admin = can("admin");
 		const dis = admin ? "" : " disabled";
 		const modes = { invite: "Invite only: a code is needed", open: "Open: anyone can sign up, codes optional", closed: "Closed: no new accounts" };
@@ -932,6 +932,11 @@ const RENDER = {
 			'<div class="box"><h2>Blocked names</h2><p class="dim small">No handle, display name, bio, location or website may contain these. Sign-up with one is refused; an account that puts one in its profile is suspended at once (staff are only refused). Poll choices, image descriptions, lists and communities with one are refused. Case, accents, look-alike letters from other alphabets, separators, digits for letters (n1gg3r) and repeated letters are ignored; in a bio and the other longer fields words are read one at a time. One per line.</p>' +
 			'<textarea id="blockedNames"' + dis + ">" + esc((o.blocked_names || []).join("\n")) + "</textarea>" +
 			(admin ? '<div class="row" style="margin-top:8px"><button class="btn primary" data-save-ops>Save</button><button class="btn" id="checkNames">Check existing accounts</button></div><div id="nameHits"></div>' : "") + "</div>" +
+			'<div class="box"><h2>Automod</h2><p class="dim small">Slurs, explicit hate, transphobia and abuse such as "kill yourself" are refused in posts, profiles, names, polls, image descriptions, lists, communities, articles and notes. Each refusal is a strike the account can appeal. Reclaimed queer words used without an attack and NSFW text are left alone. DMs are end-to-end encrypted, so they can\'t be read.</p>' +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="amOn"' + (am.enabled ? " checked" : "") + dis + "> Strike accounts automatically</label>" +
+			'<div class="field"><label>Strikes count for (days)</label><input id="amDays" type="number" min="1" max="3650" value="' + esc(am.strike_days) + '"' + dis + "></div>" +
+			'<div class="field"><label>Steps, one per strike: 0 is a warning, a number is hours suspended, -1 is permanent</label><input id="amLadder" value="' + esc(am.ladder.join(", ")) + '"' + dis + "></div>" +
+			(admin ? '<button class="btn primary" id="saveAutomod">Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Trends</h2><div class="field"><label>Hidden hashtags, one per line</label><textarea id="hiddenTrends"' + dis + ">" + esc(o.hidden_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			'<div class="field"><label>Promoted hashtags, shown first</label><textarea id="promotedTrends"' + dis + ">" + esc(o.promoted_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div>" +
@@ -987,6 +992,7 @@ const RENDER = {
 				act(() => api("blockedNameAccounts", { suspend: true }), "Suspended").then(route);
 			};
 		});
+		if ($("#saveAutomod")) $("#saveAutomod").onclick = () => act(() => api("saveAutomod", { enabled: $("#amOn").checked, strike_days: Number($("#amDays").value), ladder: $("#amLadder").value.split(",").map((x) => Number(x.trim())) }), "Automod saved").then(route);
 		main.querySelectorAll("[data-save-ops]").forEach((b) => b.onclick = () => act(() => api("saveOperations", {
 			maintenance: $("#maint").checked,
 			message: $("#maintMsg").value,
@@ -1008,13 +1014,17 @@ const RENDER = {
 		main.querySelectorAll("[data-reset]").forEach((b) => b.onclick = () => act(() => api("resetBranding", { slot: b.dataset.reset }), "Back to the default").then(route));
 	},
 
-	async audit(main) {
-		const { entries } = await api("audit");
-		main.innerHTML = '<h1>Audit log</h1><div class="scroll">' + (entries.length
+	async audit(main, filter = {}) {
+		const { entries } = await api("audit", filter);
+		main.innerHTML = '<h1>Audit log</h1><div class="bar"><input id="auditWho" placeholder="@handle" value="' + esc(filter.target || "") + '">' +
+			'<select id="auditAction"><option value="">Every action</option>' + ["automod_strike", "escalate", "expire_sanction", "auto_suspend_name", "temporary_status", "set_status", "bulk_status", "send_staff_message", "revoke_strike", "resolve_appeal", "save_automod"]
+				.map((a) => '<option value="' + a + '"' + (filter.action === a ? " selected" : "") + ">" + a.replace(/_/g, " ") + "</option>").join("") + "</select>" +
+			'<label class="row"><input type="checkbox" id="auditAuto"' + (filter.automatic ? " checked" : "") + '> Automatic only</label><button class="btn" id="auditGo">Filter</button></div><div class="scroll">' + (entries.length
 			? '<table class="table"><tr><th>When</th><th>Who</th><th>Did</th><th>To</th><th>Details</th></tr>' +
-				entries.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>@" + esc(e.actor ?? "?") + "</td><td>" + esc(e.action.replace(/_/g, " ")) + "</td><td>" +
+				entries.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>" + (e.automatic ? '<span class="pill">automod</span>' : "@" + esc(e.actor ?? "?")) + "</td><td>" + esc(e.action.replace(/_/g, " ")) + "</td><td>" +
 					(e.target_name ? '<a href="#user/' + esc(e.target) + '">@' + esc(e.target_name) + "</a>" : esc(e.target ?? "")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</table>"
 			: '<div class="empty">Nothing yet.</div>') + "</div>";
+		$("#auditGo").onclick = () => RENDER.audit(main, { target: $("#auditWho").value.trim(), action: $("#auditAction").value, automatic: $("#auditAuto").checked });
 	},
 };
 
@@ -1039,7 +1049,7 @@ function userTable(users, orgs = false, pick = false) {
 }
 
 async function renderUser(main, id) {
-	const { user: u, invited, log } = await api("user", { id });
+	const { user: u, invited, log, strikes, next_step } = await api("user", { id });
 	const isOrg = u.verified_type === "business" || u.verified_type === "government";
 	const [affiliates, { badges }, { notes }, { messages }, sessions, handles] = await Promise.all([
 		isOrg ? api("affiliates", { orgId: id }).then((r) => r.affiliates) : [],
@@ -1088,6 +1098,7 @@ async function renderUser(main, id) {
 		"</div>" +
 		// standing
 		'<div class="box"><h2>Standing</h2><p class="dim small">Now: <b>' + esc(u.status) + "</b>" + (u.status_until ? " until " + esc(when(u.status_until)) : "") + "</p>" +
+		'<p class="dim small">Active strikes: <b>' + strikes + "</b>. The next strike " + (next_step < 0 ? "suspends for good" : next_step > 0 ? "suspends for " + next_step + " hours" : "is a warning") + ".</p>" +
 		'<div class="field"><label>Reason (kept in the audit log)</label><input id="reason" placeholder="optional"></div>' +
 		'<div class="field"><label>For</label><select id="for"' + (!can("moderator") || self ? " disabled" : "") + '><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select></div><div class="row">' +
 		[["active", "Reinstate", ""], ["restricted", "Restrict", "Can read, can't post"], ["limited", "Limit", "Only followers see their posts"], ["suspended", "Suspend", "Signed out, hidden everywhere"]]
@@ -1105,7 +1116,7 @@ async function renderUser(main, id) {
 			(m.revoked_at ? '<s class="dim">' + esc(m.body) + "</s>" : esc(m.body)) + '<br><span class="dim small">' + (m.actor ? "@" + esc(m.actor) + " · " : "") + esc(when(m.created_at)) + (m.read_at ? " · read" : "") + (m.revoked_at ? " · withdrawn" : "") + "</span>" +
 			(m.kind === "strike" && !m.revoked_at && can("moderator") ? ' <button class="btn" data-unstrike="' + esc(m.id) + '">Withdraw</button>' : "") + "</p>").join("") + "</div>" : "") +
 		(can("moderator") && !self ? '<div class="field"><select id="msgKind"><option value="message">Message</option><option value="warning">Warning</option><option value="strike">Strike</option></select></div>' +
-			'<div class="field"><textarea id="msgBody" maxlength="2000" placeholder="What they\'ll read"></textarea></div><button class="btn primary" id="send">Send</button>' : "") + "</div>" +
+			'<div class="field"><textarea id="msgBody" maxlength="2000" placeholder="What they\'ll read"></textarea></div><label class="row" style="margin:6px 0"><input type="checkbox" id="msgEscalate" checked> A strike counts toward suspension</label><button class="btn primary" id="send">Send</button>' : "") + "</div>" +
 		'<div class="box"><h2>Staff notes</h2><p class="dim small">Only staff see these.</p>' +
 		(notes.length ? '<div class="list" style="margin-bottom:12px">' + notes.map((n) => '<p style="white-space:pre-wrap">' + esc(n.body) + '<br><span class="dim small">@' + esc(n.actor ?? "?") + " · " + esc(when(n.created_at)) + "</span></p>").join("") + "</div>" : "") +
 		'<div class="field"><textarea id="noteBody" maxlength="2000" placeholder="Context for other staff"></textarea></div><button class="btn primary" id="addNote">Add note</button></div>' +
@@ -1121,7 +1132,7 @@ async function renderUser(main, id) {
 		(isOrg ? '<h2>Affiliates</h2>' + (can("admin") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : "") +
 			(affiliates.length ? '<div class="scroll"><table class="table">' + affiliates.map((a) => '<tr><td>' + person(a) + "</td><td>" + (can("admin") ? '<button class="btn danger" data-unaff="' + esc(a.id) + '">Remove</button>' : "") + "</td></tr>").join("") + "</table></div>" : '<div class="empty">No affiliates yet.</div>') : "") +
 		(invited.length ? "<h2>Invited</h2><p>" + invited.map((i) => '<a href="#user/' + esc(i.id) + '">@' + esc(i.screen_name) + "</a>").join(", ") + "</p>" : "") +
-		"<h2>History</h2>" + (log.length ? '<table class="table">' + log.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>@" + esc(e.actor ?? "?") + " " + esc(e.action.replace(/_/g, " ")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</table>" : '<div class="empty">No staff actions yet.</div>');
+		"<h2>History</h2>" + (log.length ? '<table class="table">' + log.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>" + (e.automatic ? "automod" : "@" + esc(e.actor ?? "?")) + " " + esc(e.action.replace(/_/g, " ")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</table>" : '<div class="empty">No staff actions yet.</div>');
 
 	const again = () => renderUser(main, id);
 	if ($("#saveCounts")) $("#saveCounts").onclick = () => act(() => api("setUserCounts", { id, counts: Object.fromEntries([...main.querySelectorAll("[data-count]")].map((el) => [el.dataset.count, el.value])) }), "Counts saved").then(again);
@@ -1163,7 +1174,7 @@ async function renderUser(main, id) {
 	if ($("#orgBadge")) $("#orgBadge").onchange = () => act(() => api("setOrgBadge", { id, badgeId: $("#orgBadge").value }), "Badge set").then(again);
 	if ($("#send")) $("#send").onclick = async () => {
 		if ($("#msgKind").value === "strike" && !(await ask("Give @" + u.screen_name + " a strike?"))) return;
-		act(() => api("sendStaffMessage", { id, kind: $("#msgKind").value, body: $("#msgBody").value }), "Sent").then(again);
+		act(() => api("sendStaffMessage", { id, kind: $("#msgKind").value, body: $("#msgBody").value, escalate: $("#msgEscalate").checked }), "Sent").then(again);
 	};
 	$("#addNote").onclick = () => act(() => api("addStaffNote", { id, body: $("#noteBody").value }), "Note added").then(again);
 	main.querySelectorAll("[data-unstrike]").forEach((b) => b.onclick = () => act(() => api("revokeStrike", { id: b.dataset.unstrike }), "Strike withdrawn").then(again));

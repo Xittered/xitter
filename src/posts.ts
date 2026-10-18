@@ -1,6 +1,8 @@
 import type { User } from "./auth";
 import { sql } from "./db";
 import { newId } from "./ids";
+import { hateIn } from "./hate";
+import { automodStrike } from "./moderation";
 import { hasBlockedPhrase } from "./settings";
 import { postLimitFor, weightedLength } from "./textlen";
 import type { PostRow } from "./model";
@@ -159,7 +161,15 @@ export async function checkLength(userId: string, text: string) {
 	if (weightedLength(text) > limit) throw new PostError(`Posts are limited to ${limit.toLocaleString("en-US")} characters.`, 186);
 }
 
+export async function refuseHate(userId: string, text: string, where: Parameters<typeof automodStrike>[2] = "post") {
+	const hit = hateIn(text);
+	if (!hit) return;
+	await automodStrike(userId, hit, where, text);
+	throw new PostError("Your post contains a slur or hate speech this instance doesn't allow.", 186);
+}
+
 export async function editPost(userId: string, postId: string, text: string): Promise<void> {
+	await refuseHate(userId, text);
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
 	if (!text.trim()) throw new PostError("Your post is empty.", 170);
 	await checkLength(userId, text);
@@ -372,9 +382,10 @@ export async function likedPosts(viewerId: string, userId: string, limit = 100):
 }
 
 export async function createPost(userId: string, text: string, opts: { replyToId?: string; quoteId?: string; articleId?: string; source?: string; communityId?: string; placeId?: string; replyPolicy?: string } = {}): Promise<string> {
+	const [author] = await sql`select status, deactivated_at from users where id = ${userId}::bigint`;
+	if (!author || author.status === "restricted" || author.status === "suspended" || author.deactivated_at) throw new PostError("Your account can't post right now.", 326);
+	await refuseHate(userId, text);
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
-	const [author] = await sql`select status from users where id = ${userId}::bigint`;
-	if (author?.status === "restricted") throw new PostError("Your account can't post right now.", 326);
 	await checkLength(userId, text);
 	const id = newId();
 	let conversationId = id;

@@ -216,7 +216,7 @@ const ROUTES: Route[] = [
 	{
 		method: "GET", pattern: /^\/search\/posts$/, scope: "read",
 		run: async (v, _m, _r, url) => {
-			const q = (url.searchParams.get("q") ?? "").trim();
+			const q = (url.searchParams.get("q") ?? "").trim().slice(0, 500);
 			if (!q) throw new ApiError(400, "Give a query in q.");
 			const limit = limitOf(url);
 			const ids = await searchPosts(q, { viewerId: v.id, top: url.searchParams.get("sort") === "top", limit, before: cursorOf(url) });
@@ -228,7 +228,7 @@ const ROUTES: Route[] = [
 	{
 		method: "GET", pattern: /^\/search\/users$/, scope: "read",
 		run: async (v, _m, _r, url) => {
-			const q = (url.searchParams.get("q") ?? "").trim();
+			const q = (url.searchParams.get("q") ?? "").trim().slice(0, 500);
 			if (!q) throw new ApiError(400, "Give a query in q.");
 			const ids = await searchUsers(v.id, q, limitOf(url));
 			const byId = await usersByIds(v.id, ids);

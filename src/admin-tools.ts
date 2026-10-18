@@ -11,6 +11,7 @@ import { sql } from "./db";
 import { newId } from "./ids";
 import { MEDIA_DIR, sniffImage } from "./media";
 import { NOTICE_TYPES } from "./model";
+import { escalate } from "./moderation";
 import { blockedNameIn, blockedWordIn, suspendForName } from "./names";
 import { setSetting, settings } from "./settings";
 import { clientIp, ipAllowed, parseRange } from "./staff-access";
@@ -147,7 +148,8 @@ export const toolActions: Record<string, Action> = {
 			const message = newId();
 			await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${message}::bigint, ${id}::bigint, ${a.id}::bigint, ${kind}, ${textOf(b.body)})`;
 			await audit(a, "send_staff_message", id, { kind, message });
-			return { id: message };
+			const escalation = kind === "strike" && b.escalate !== false ? await escalate(id, a.id, `strike from @${a.screen_name}`) : undefined;
+			return { id: message, escalation };
 		},
 	},
 	revokeStrike: {
@@ -192,9 +194,12 @@ export const toolActions: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't change your own standing.");
 			const user = await guard(a, id);
 			if (!["restricted", "limited", "suspended"].includes(b.status)) throw new AdminError("Choose a sanction.");
+			const [current] = await sql`select status_until from users where id = ${id}::bigint`;
+			const SEVERITY: Record<string, number> = { active: 0, limited: 1, restricted: 2, suspended: 3 };
+			if (!current.status_until && SEVERITY[user.status] > SEVERITY[b.status]) throw new AdminError(`The account is already ${user.status} until lifted. Reinstate it first.`);
 			const hours = Number(b.hours);
 			if (!Number.isFinite(hours) || hours < 1 || hours > 8760) throw new AdminError("Choose 1–8760 hours.");
-			await sql`update users set status_restore = coalesce(status_restore, status), status = ${b.status}, status_until = now() + ${hours} * interval '1 hour' where id = ${id}::bigint`;
+			await sql`update users set status_restore = coalesce(status_restore, status), status = ${b.status}, status_until = now() + ${hours} * interval '1 hour', deactivated_at = null where id = ${id}::bigint`;
 			if (b.status === "suspended") await sql`delete from sessions where user_id = ${id}::bigint`;
 			await audit(a, "temporary_status", id, { status: b.status, hours, previous: user.status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
@@ -210,7 +215,7 @@ export const toolActions: Record<string, Action> = {
 				await guard(a, id);
 			}
 			await sql.begin(async (tx) => {
-				await tx`update users set status = ${b.status}, status_until = null, status_restore = null where id = any(${tx.array(ids, "INT8")})`;
+				await tx`update users set status = ${b.status}, status_until = null, status_restore = null, deactivated_at = null where id = any(${tx.array(ids, "INT8")})`;
 				if (b.status === "suspended") await tx`delete from sessions where user_id = any(${tx.array(ids, "INT8")})`;
 			});
 			await audit(a, "bulk_status", null, { ids, status: b.status });
@@ -368,7 +373,20 @@ export const toolActions: Record<string, Action> = {
 	},
 
 	// maintenance mode, blocked phrases, trend controls and the pinned post
-	operations: { role: "support", run: async () => ({ operations: settings().operations }) },
+	operations: { role: "support", run: async () => ({ operations: settings().operations, automod: settings().automod }) },
+	saveAutomod: {
+		role: "admin",
+		run: async (a, b) => {
+			const days = Number(b.strike_days);
+			if (typeof b.enabled !== "boolean" || !Number.isInteger(days) || days < 1 || days > 3650) throw new AdminError("Strikes count for 1–3650 days.");
+			if (!Array.isArray(b.ladder) || !b.ladder.length || b.ladder.length > 10) throw new AdminError("Give 1–10 steps.");
+			const ladder = b.ladder.map(Number);
+			if (ladder.some((h: number) => !Number.isInteger(h) || h < -1 || h > 87_600)) throw new AdminError("Each step is 0 (a warning), hours of suspension, or -1 (permanent).");
+			await setSetting("automod", { enabled: b.enabled, strike_days: days, ladder });
+			await audit(a, "save_automod", null, { enabled: b.enabled, strike_days: days, ladder });
+			return {};
+		},
+	},
 	saveOperations: {
 		role: "admin",
 		run: async (a, b) => {

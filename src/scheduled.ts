@@ -6,7 +6,7 @@ import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { attachMedia } from "./media";
-import { PostError, checkLength, createPost } from "./posts";
+import { PostError, checkLength, createPost, refuseHate } from "./posts";
 
 type Vars = Record<string, any>;
 
@@ -19,13 +19,17 @@ const ids = (value: unknown): string[] => (Array.isArray(value) ? value.map(Stri
 // keep what the client sent, but only plain values
 function cleanRequest(request: Vars | undefined): Vars {
 	const r = request ?? {};
-	return {
-		...r,
+	const out: Vars = {
 		status: typeof r.status === "string" ? r.status : "",
-		media_ids: ids(r.media_ids),
-		exclude_reply_user_ids: ids(r.exclude_reply_user_ids),
-		thread_tweets: Array.isArray(r.thread_tweets) ? r.thread_tweets : [],
+		media_ids: ids(r.media_ids).slice(0, 4),
+		exclude_reply_user_ids: ids(r.exclude_reply_user_ids).slice(0, 50),
+		thread_tweets: Array.isArray(r.thread_tweets) ? r.thread_tweets.slice(0, 25) : [],
 	};
+	if (isId(r.in_reply_to_status_id)) out.in_reply_to_status_id = r.in_reply_to_status_id;
+	if (typeof r.attachment_url === "string" && r.attachment_url.length <= 300) out.attachment_url = r.attachment_url;
+	for (const key of ["auto_populate_reply_metadata", "possibly_sensitive"]) if (typeof r[key] === "boolean") out[key] = r[key];
+	if (JSON.stringify(out).length > 300_000) throw new PostError("That post is too large to keep.", 186);
+	return out;
 }
 
 function item(row: any) {
@@ -52,7 +56,10 @@ async function check(userId: string, request: Vars, kind: "scheduled" | "draft")
 	const [n] = await sql`select count(*)::int as n from scheduled_posts where user_id = ${userId}::bigint and kind = ${kind}`;
 	if (n.n >= MAX_PENDING) throw new PostError(`You can keep up to ${MAX_PENDING} ${kind === "draft" ? "drafts" : "scheduled posts"}.`, 214);
 	if (kind === "scheduled" && !request.status.trim() && !request.media_ids.length) throw new PostError("Your post is empty.", 170);
+	const [author] = await sql`select status from users where id = ${userId}::bigint`;
+	if (author?.status !== "active" && author?.status !== "limited") throw new PostError("Your account can't post right now.", 326);
 	await checkLength(userId, request.status);
+	await refuseHate(userId, request.status);
 }
 
 async function create(v: Viewer, vars: Vars, kind: "scheduled" | "draft") {

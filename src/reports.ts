@@ -122,6 +122,8 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 		// a resent last step files once
 		const [dupe] = await sql`select 1 from reports where reporter_id = ${viewer.id}::bigint and post_id is not distinct from ${draft.postId}::bigint
 			and user_id is not distinct from ${draft.userId}::bigint and reason = ${draft.reason} and created_at > now() - interval '1 minute'`;
+		const [recent] = await sql`select count(*)::int as n from reports where reporter_id = ${viewer.id}::bigint and created_at > now() - interval '1 hour'`;
+		if (recent.n >= 30) return Response.json({ errors: [{ code: 88, message: "You've sent a lot of reports. Try again later." }] }, { status: 429 });
 		if (!dupe) {
 			await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
 				values (${newId()}::bigint, ${viewer.id}::bigint, ${draft.postId}::bigint, ${draft.userId}::bigint, ${draft.reason}, ${textIn})`;

@@ -42,6 +42,7 @@ export async function codeAccepted(userId: string, input: string): Promise<boole
 // Sign-in with the right password but a second factor still to come: a
 // 15 minute, five-guess challenge the code screen answers.
 export async function startChallenge(screenName: string, password: string): Promise<string | undefined> {
+	if (password.length > 1024 || screenName.length > 64) return undefined;
 	const [u] = await sql`select id::text, password_hash, totp_enabled from users where lower(screen_name) = lower(${screenName}) and status <> 'suspended'`;
 	if (!u?.totp_enabled) return undefined;
 	if (!(await Bun.password.verify(password, u.password_hash).catch(() => false))) return undefined;

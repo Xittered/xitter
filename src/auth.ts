@@ -85,6 +85,7 @@ export async function createUser(screenName: string, name: string, password: str
 }
 
 export async function login(screenName: string, password: string): Promise<{ token: string; csrf: string; userId: string } | undefined> {
+	if (password.length > 1024 || screenName.length > 64) return undefined;
 	await expireSanctions();
 	// accounts with a second factor sign in through the dialog's code step (startSession)
 	const [u] = await sql`select id, password_hash, deactivated_at from users where lower(screen_name) = lower(${screenName}) and not totp_enabled

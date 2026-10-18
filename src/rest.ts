@@ -1,6 +1,8 @@
 // The few REST endpoints the client still uses next to GraphQL.
 
 import { blockedNameIn, blockedWordIn, forbiddenText, suspendForName } from "./names";
+import { hateIn, hateInName } from "./hate";
+import { automodStrike } from "./moderation";
 import { hasBlockedPhrase } from "./settings";
 import { hashflagsJson } from "./hashflags";
 import { accountsRoute } from "./accounts";
@@ -79,6 +81,11 @@ async function profileRoute(path: string, viewer: Viewer, req: Request): Promise
 			if ([...value].length > max) return profileError(`${field} is limited to ${max} characters.`);
 			if (field === "name" && !value) return profileError("Name can't be blank.");
 			if (field === "url" && value && !/^https?:\/\/\S+$/.test(value)) return profileError("Website must be an http or https address.");
+			const hate = field === "name" ? hateInName(value) : hateIn(value);
+			if (hate) {
+				await automodStrike(viewer.id, hate, field === "name" ? "name" : "profile", value);
+				return profileError(field === "name" ? "That name isn't allowed here." : "Your profile contains a slur or hate speech this instance doesn't allow.");
+			}
 			// a blocked word (names.ts): suspended, staff only refused; the
 			// name ignores spacing, the longer fields are read word by word
 			if (field === "name" ? blockedNameIn(value) : blockedWordIn(value)) {

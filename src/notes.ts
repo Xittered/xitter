@@ -2,7 +2,7 @@ import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { blockedFor, isBlockedEitherWay, outOfView } from "./blocks";
-import { getPost, postsByIds, PostError } from "./posts";
+import { getPost, postsByIds, PostError, refuseHate } from "./posts";
 import { noteText, tweetEntry, tweetResult } from "./model";
 
 function id(value: unknown): string {
@@ -116,6 +116,7 @@ export const noteHandlers = {
 		const data = vars.data_v1 ?? {};
 		const text = typeof data.summary === "string" ? data.summary.trim() : typeof data.summary?.text === "string" ? data.summary.text.trim() : "";
 		if (!text || [...text].length > 500) throw new PostError("Notes must contain 1–500 characters.", 186);
+		await refuseHate(v.id, text, "note");
 		const classification = data.classification === "MisinformedOrPotentiallyMisleading" ? "Misleading" : data.classification ?? "Misleading";
 		if (!["Misleading", "NotMisleading"].includes(classification)) throw new PostError("Invalid classification.", 144);
 		const tags = (key: string) => Array.isArray(data[key]) ? data[key].filter((x: unknown) => typeof x === "string" && x.length < 60).slice(0, 20) : [];
@@ -155,6 +156,7 @@ export const noteHandlers = {
 		const suggestion = typeof vars.suggestion === "string" ? vars.suggestion.trim() : "";
 		const source = typeof vars.source_link === "string" ? vars.source_link.trim() : "";
 		if ([...suggestion].length > 500 || source.length > 2048 || (source && !/^https?:\/\/[^\s<>]+$/.test(source))) throw new PostError("Invalid request source or explanation.", 144);
+		await refuseHate(v.id, suggestion, "note");
 		const [r] = await sql`insert into community_note_requests(post_id, user_id, source_link, suggestion) values(${vars.tweet_id}::bigint, ${v.id}::bigint, ${source || null}, ${suggestion || null})
 			on conflict(post_id,user_id) do update set source_link = excluded.source_link, suggestion = excluded.suggestion returning created_at`;
 		return { data: { birdwatchbatsignal_create: { type: "BirdwatchBatSignal", created_at: String(new Date(r.created_at).getTime()) } } };

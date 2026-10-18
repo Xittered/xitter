@@ -33,7 +33,7 @@ import { startScheduler } from "./scheduled";
 import { gifProxy } from "./gifs";
 import { cardImage } from "./explore-cards";
 import { rememberIp, requestIp } from "./login-history";
-import { hit, limitApi, limitedResponse } from "./ratelimit";
+import { bucketsFor, hit, limitApi, limitedResponse } from "./ratelimit";
 import { actingViewer, delegateMay } from "./delegation";
 import { automationRoute } from "./automation";
 import { stickerImage, stickerPacks } from "./stickers";
@@ -135,6 +135,20 @@ async function serveClient(req: Request, pathname: string): Promise<Response> {
 	return new Response(new Uint8Array(body), { headers: { "content-type": type, "cache-control": "no-cache", etag } });
 }
 
+const MAX_API_BODY = 2 * 1024 * 1024;
+
+function shapeFits(value: unknown): boolean {
+	let nodes = 0;
+	const walk = (v: unknown, depth: number): boolean => {
+		if (++nodes > 20_000 || depth > 32) return false;
+		if (typeof v === "string") return v.length <= 1_000_000;
+		if (Array.isArray(v)) return v.length <= 5_000 && v.every((x) => walk(x, depth + 1));
+		if (v && typeof v === "object") return Object.entries(v).every(([k, x]) => k.length <= 200 && walk(x, depth + 1));
+		return true;
+	};
+	return walk(value, 0);
+}
+
 function parseJson(text: string | null): any {
 	if (!text) return {};
 	try {
@@ -176,6 +190,10 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 	if (path === "/xitter/client_error" && req.method === "POST") return clientError(req, viewer);
 	const limited = limitApi(viewer, req.method, path, operation, url);
 	if (limited) return limited;
+	if (viewer.status === "restricted" && bucketsFor(req.method, path, operation, url).some((b) => b === "post" || b === "dm"))
+		return apiError(403, 326, "Your account can't post or send messages right now.");
+	if (req.method !== "GET" && !/^\/(i|1\.1)\/media\/upload2?\.json$/.test(path) && Number(req.headers.get("content-length") ?? 0) > MAX_API_BODY)
+		return apiError(413, 324, "That request is too large.");
 	if (process.env.LOG_REQUESTS) console.log(`api ${req.method} ${gql >= 0 ? `graphql:${parts[parts.length - 1]}` : path}`);
 	// the client reports its own render errors through telemetry
 	// (not uploads: a binary body isn't URI-encoded text)
@@ -195,6 +213,7 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 			let vars = req.method === "GET" ? parseJson(url.searchParams.get("variables")) : parseJson(await req.text()).variables;
 			// the chat app sends its variables as a JSON string
 			if (typeof vars === "string") vars = parseJson(vars);
+			if (!shapeFits(vars)) return apiError(413, 324, "That request is too large.");
 			return runOperation(name, viewer, vars ?? {});
 		}
 	} else if (path === "/live_pipeline/events") {
@@ -245,6 +264,8 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/xchat/ws") {
 		const userId = socketUser(url.searchParams.get("token") ?? "");
 		if (!userId) return new Response("bad token", { status: 401 });
+		const [account] = await sql`select 1 from users where id = ${userId}::bigint and status <> 'suspended'`;
+		if (!account) return new Response("suspended", { status: 403 });
 		return server.upgrade(req, { data: { userId } }) ? undefined : new Response("expected a websocket", { status: 400 });
 	}
 	if (p.startsWith("/juicebox/")) return juiceboxProxy(req, p.slice("/juicebox/".length));
@@ -364,6 +385,7 @@ async function route(req: Request): Promise<Response | undefined> {
 const server = Bun.serve({
 	port: PORT,
 	fetch: handle,
+	maxRequestBodySize: 16 * 1024 * 1024,
 	websocket: chatSocket,
 	error(e) {
 		console.error(e);

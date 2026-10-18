@@ -8,6 +8,7 @@
 import { sql } from "./db";
 import { newId } from "./ids";
 import { LOOKALIKE, foldGlyphs } from "./fold";
+import { hateIn } from "./hate";
 import { hasBlockedPhrase, settings } from "./settings";
 
 export { foldGlyphs };
@@ -75,12 +76,12 @@ export function blockedWordIn(...texts: string[]): string | undefined {
 
 // text anyone may write that staff don't want on the instance: a blocked
 // phrase, or a blocked name word read word by word
-export const forbiddenText = (...texts: string[]) => texts.some((t) => hasBlockedPhrase(t)) || !!blockedWordIn(...texts);
+export const forbiddenText = (...texts: string[]) => texts.some((t) => hasBlockedPhrase(t)) || !!blockedWordIn(...texts) || !!hateIn(...texts);
 
 // An account that took a blocked name: suspended and signed out everywhere,
 // with a line in the audit log. Staff are left alone (the caller refuses).
 export async function suspendForName(userId: string, name: string) {
-	await sql`update users set status = 'suspended', status_until = null where id = ${userId}::bigint and role is null`;
+	await sql`update users set status = 'suspended', status_until = null, status_restore = null, deactivated_at = null where id = ${userId}::bigint and role is null`;
 	await sql`delete from sessions where user_id = ${userId}::bigint and exists (select 1 from users where id = ${userId}::bigint and role is null)`;
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'auto_suspend_name', ${userId}, ${JSON.stringify({ name })}::text::jsonb)`;
 }

@@ -11,6 +11,7 @@ import { sql } from "./db";
 import { isFlag } from "./flags";
 import { isId, newId } from "./ids";
 import { createInvite } from "./invites";
+import { activeStrikes } from "./moderation";
 import { REASONS } from "./reports";
 import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
@@ -235,9 +236,11 @@ const ACTIONS: Record<string, Action> = {
 			if (!u) throw new AdminError("No such account.", 404);
 			const invited = await sql`select u.id::text as id, u.screen_name from users u join invites i on i.code = u.invite_code
 				where i.created_by = ${id}::bigint order by u.created_at`;
-			const log = await sql`select l.action, l.detail, l.created_at, a.screen_name as actor from audit_log l
+			const log = await sql`select l.action, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic from audit_log l
 				left join users a on a.id = l.actor_id where l.target = ${id} order by l.id desc limit 50`;
-			return { user: u, invited, log };
+			const strikes = await activeStrikes(id);
+			const ladder = settings().automod.ladder;
+			return { user: u, invited, log, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
 		},
 	},
 
@@ -325,7 +328,7 @@ const ACTIONS: Record<string, Action> = {
 			if (!["active", "restricted", "limited", "suspended"].includes(status)) throw new AdminError("Unknown standing.");
 			if (id === a.id) throw new AdminError("You can't change your own standing.");
 			await guard(a, id);
-			await sql`update users set status = ${status}, status_until = null, status_restore = null where id = ${id}::bigint`;
+			await sql`update users set status = ${status}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
 			if (status === "suspended") await sql`delete from sessions where user_id = ${id}::bigint`;
 			await audit(a, "set_status", id, { status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
@@ -661,13 +664,20 @@ const ACTIONS: Record<string, Action> = {
 
 	audit: {
 		role: "support",
-		run: async (_a, b) => ({
-			entries: await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor,
-				t.screen_name as target_name
-				from audit_log l left join users a on a.id = l.actor_id
-				left join users t on l.target ~ '^[0-9]+$' and t.id = l.target::bigint
-				order by l.id desc limit 100 offset ${Number(b.offset) || 0}`,
-		}),
+		run: async (_a, b) => {
+			const action = typeof b.action === "string" && /^[a-z_]{1,40}$/.test(b.action) ? b.action : null;
+			const who = typeof b.target === "string" ? b.target.trim().replace(/^@/, "").slice(0, 15) : "";
+			const offset = Math.max(0, Math.min(Number(b.offset) || 0, 100_000));
+			return {
+				entries: await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic,
+					t.screen_name as target_name
+					from audit_log l left join users a on a.id = l.actor_id
+					left join users t on l.target ~ '^[0-9]+$' and t.id = l.target::bigint
+					where ${action ? sql`l.action = ${action}` : sql`true`} and ${b.automatic ? sql`l.actor_id is null` : sql`true`}
+						and ${who ? sql`lower(t.screen_name) = lower(${who})` : sql`true`}
+					order by l.id desc limit 100 offset ${offset}`,
+			};
+		},
 	},
 };
 

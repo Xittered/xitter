@@ -9,6 +9,8 @@ import { isId, newId } from "./ids";
 import { type MediaRow, mediaUrl, posterUrl } from "./media";
 import { userResult } from "./model";
 import { userById } from "./users";
+import { hateIn } from "./hate";
+import { automodStrike } from "./moderation";
 import { hasBlockedPhrase } from "./settings";
 
 export const MAX_TITLE = 100;
@@ -228,6 +230,11 @@ export async function publish(viewerId: string, id: string, tweetText: unknown, 
 	if (!row.plain_text.trim()) throw new ArticleError("The article is empty.");
 	if (row.hidden) throw new ArticleError("Staff have hidden this article.");
 	if (hasBlockedPhrase(row.plain_text)) throw new ArticleError("The article contains a phrase this instance doesn't allow.");
+	const hate = hateIn(row.title, row.plain_text);
+	if (hate) {
+		await automodStrike(viewerId, hate, "article", `${row.title}\n${row.plain_text}`);
+		throw new ArticleError("The article contains a slur or hate speech this instance doesn't allow.");
+	}
 	if (row.state !== "Published") {
 		await createPost(typeof tweetText === "string" ? tweetText : "", id);
 		await sql`update articles set state = 'Published', first_published_at = coalesce(first_published_at, now()) where id = ${id}::bigint`;
