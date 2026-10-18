@@ -1,0 +1,71 @@
+# Xitter with Postgres. First run:
+#   docker/env.sh                      writes .env with fresh secrets
+#   docker compose up -d --build       (add --profile keybackup for chat key backup)
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://xitter:${POSTGRES_PASSWORD:?run docker/env.sh first}@db:5432/xitter
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
+      JUICEBOX_URL: http://realm:8580
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - client:/app/client
+      - media:/app/media
+      - data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: xitter
+      POSTGRES_DB: xitter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run docker/env.sh first}
+    volumes:
+      - db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xitter -d xitter"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Juicebox realm for chat passcode recovery (see deploy/juicebox)
+  realm:
+    profiles: ["keybackup"]
+    build: deploy/juicebox
+    restart: unless-stopped
+    command: ["-provider", "postgres", "-port", "8580"]
+    environment:
+      DATABASE_URL: postgres://juicebox:${REALM_DB_PASSWORD:?run docker/env.sh first}@realm-db:5432/juicebox
+      REALM_ID: ${JUICEBOX_REALM_ID:?run docker/env.sh first}
+      TENANT_SECRETS: '{"xitter":{"1":"${JUICEBOX_TENANT_SECRET:?run docker/env.sh first}"}}'
+    depends_on:
+      realm-db:
+        condition: service_healthy
+  realm-db:
+    profiles: ["keybackup"]
+    image: postgres:18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: juicebox
+      POSTGRES_DB: juicebox
+      POSTGRES_PASSWORD: ${REALM_DB_PASSWORD:?run docker/env.sh first}
+    volumes:
+      - realm-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U juicebox -d juicebox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db:
+  client:
+  media:
+  data:
+  realm-db:

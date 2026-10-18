@@ -121,6 +121,27 @@ the current build. `--token <auth_token>` (the cookie from a signed-in x.com
 tab) or `--har <file>` pins the signed-in page instead, with that account's
 switches; nothing about the account is kept.
 
+### With Docker Compose
+
+`compose.yaml` runs Xitter and Postgres 18, with ffmpeg and `pg_dump` in the
+image. The client is downloaded into its volume on the first start.
+
+```sh
+docker/env.sh                  # writes .env with fresh secrets; edit PUBLIC_ORIGIN, HOST_PORT, mail keys there
+docker compose up -d --build
+docker compose exec app bun scripts/create-user.ts <name> <password> "<display name>"
+docker compose exec app bun scripts/make-admin.ts <name>
+```
+
+Add `--profile keybackup` to `up` to also run the Juicebox realm for chat
+passcode recovery (built from `deploy/juicebox`, with its own Postgres); its
+realm ID and tenant secret come from `.env`, so keep that file and back it up
+with the volumes (`db`, `client`, `media`, `data`, `realm-db`). Other scripts
+run the same way, e.g. `docker compose exec app bun scripts/invite.ts`, and
+any variable from the Configuration table can be added to `.env`.
+`FETCH_CLIENT=0` skips the first-start download; `docker compose exec app bun
+scripts/fetch-client.ts --latest` re-pins the build.
+
 ### Keep these private
 
 - An `auth_token` cookie is a live login to your X account. Use it only for

@@ -1,0 +1,15 @@
+.git
+node_modules
+client
+media
+data
+har-raw
+samples
+android
+deploy
+.probe
+.env
+realm.env
+server.log*
+*.md
+!README.md
