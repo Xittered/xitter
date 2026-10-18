@@ -1,6 +1,7 @@
 // Settings > Your account: password, deactivation. Username and language go
 // through account/settings.json (rest.ts) and use the helpers here.
 import { blockedNameIn, suspendForName } from "./names";
+import { isReserved, usernameProblem } from "./invites";
 import { sql } from "./db";
 import type { Viewer } from "./auth";
 
@@ -27,7 +28,9 @@ async function passwordMatches(userId: string, password: string | undefined): Pr
 
 export async function changeUsername(viewer: Viewer, wanted: string): Promise<string | undefined> {
 	if (wanted === viewer.screen_name) return undefined;
-	if (!/^[A-Za-z0-9_]{1,15}$/.test(wanted)) return "Usernames can only contain letters, numbers and underscores, up to 15 characters.";
+	const problem = usernameProblem(wanted);
+	if (problem) return problem;
+	if (isReserved(wanted)) return "That username is reserved.";
 	const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${wanted}) and id <> ${viewer.id}::bigint`;
 	if (taken) return "That username has been taken. Please choose another.";
 	// a blocked word (names.ts): staff are only refused, anyone else is suspended
@@ -42,7 +45,7 @@ export async function changeUsername(viewer: Viewer, wanted: string): Promise<st
 }
 
 export async function usernameAvailable(userId: string, wanted: string): Promise<{ available: boolean; suggestions: string[] }> {
-	const valid = /^[A-Za-z0-9_]{1,15}$/.test(wanted);
+	const valid = !usernameProblem(wanted) && !isReserved(wanted);
 	const [taken] = valid ? await sql`select 1 from users where lower(screen_name) = lower(${wanted}) and id <> ${userId}::bigint` : [{}];
 	if (valid && !taken) return { available: true, suggestions: [] };
 	const base = wanted.replace(/[^A-Za-z0-9_]/g, "").slice(0, 11) || "user";

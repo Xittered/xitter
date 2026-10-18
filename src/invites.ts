@@ -32,6 +32,8 @@ const RESERVED = new Set(
 	"all home explore notifications messages chat settings search compose i login logout signup signin register admin root api public media abs abouts about tos privacy help support account accounts verified premium jobs grok lists bookmarks communities topics hashtag intent share oauth xitter twitter x moderator mod staff system".split(" "),
 );
 
+export const isReserved = (name: string) => RESERVED.has(name.toLowerCase());
+
 export class SignupError extends Error {}
 
 // what's wrong with a new username, said plainly: "letters, digits and

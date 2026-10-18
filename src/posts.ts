@@ -153,7 +153,7 @@ const MAX_EDITS = 5;
 // Text changes only; media, replies and quotes stay as posted. The post keeps its
 // id and what it said before goes to post_versions.
 // the author's limit goes by their badge (textlen.ts, Admin > Settings)
-async function checkLength(userId: string, text: string) {
+export async function checkLength(userId: string, text: string) {
 	const [u] = await sql`select verified_type from users where id = ${userId}::bigint`;
 	const limit = postLimitFor(u?.verified_type);
 	if (weightedLength(text) > limit) throw new PostError(`Posts are limited to ${limit.toLocaleString("en-US")} characters.`, 186);
