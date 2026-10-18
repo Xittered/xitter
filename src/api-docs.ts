@@ -1,10 +1,9 @@
 // /api: the public API's documentation (public-api.ts), open to everyone.
 
+import { accountPage, esc } from "./account-page";
 import { PUBLIC_ORIGIN } from "./config";
 import { RULES } from "./ratelimit";
 import { settings } from "./settings";
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 type Endpoint = [method: string, path: string, scope: "read" | "write", what: string];
 
@@ -28,19 +27,18 @@ const ENDPOINTS: Endpoint[] = [
 	["POST", "/media", "write", "Upload an image, GIF or video: the file is the whole body, with its <code>Content-Type</code>. Returns a <code>media_id</code> for <code>/posts</code>; a video may still be <code>processing</code>."],
 ];
 
-export function apiDocsPage(): Response {
+const DOCS_CSS = `table{width:100%;border-collapse:collapse}
+td{padding:10px 8px;border-top:1px solid var(--border);vertical-align:top}
+td:first-child,td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:nowrap}
+td:first-child{font-weight:700}
+.w{color:#f91880}.r{color:var(--success)}
+@media (max-width:560px){tr{display:grid;grid-template-columns:auto 1fr;border-top:1px solid var(--border);padding:8px 0}td{border:0;padding:2px 8px 2px 0}td:nth-child(2){white-space:normal;word-break:break-all}td:nth-child(3){grid-column:1/-1}}`;
+
+export function apiDocsPage(req: Request): Promise<Response> {
 	const name = esc(settings().instance_name);
 	const base = `${PUBLIC_ORIGIN}/api/v1`;
 	const window = (b: keyof typeof RULES) => `${RULES[b].limit} per ${RULES[b].window / 60_000} minutes`;
-	const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>API · ${name}</title>
-<style>body{margin:0;background:#000;color:#e7e9ea;font:16px/1.55 system-ui,sans-serif}
-main{width:min(760px,92vw);margin:0 auto;padding:32px 0 64px}h1{font-size:30px;margin:0 0 8px}h2{font-size:20px;margin:36px 0 8px}
-a{color:#1d9bf0}.dim{color:#71767b}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
-code{background:#16181c;border-radius:4px;padding:1px 5px}pre{background:#16181c;border-radius:8px;padding:14px 16px;overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:15px}td{padding:10px 8px;border-top:1px solid #2f3336;vertical-align:top}
-td:first-child{white-space:nowrap;font-family:ui-monospace,monospace;font-size:13px;font-weight:700}td:nth-child(2){font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap}.table{overflow-x:auto}
-.w{color:#f91880}.r{color:#00ba7c}</style></head><body><main>
-<h1>${name} API</h1>
+	const body = `<h1>${name} API</h1>
 <p class="dim">Read and post on ${name} from scripts and bots, as your own account.</p>
 
 <h2>Signing in</h2>
@@ -49,7 +47,7 @@ td:first-child{white-space:nowrap;font-family:ui-monospace,monospace;font-size:1
 <p>Requests go to <code>${esc(base)}</code>. Bodies are JSON (or a form); answers are JSON with the result in <code>data</code>, or <code>{"error": "..."}</code> with a 4xx or 5xx status.</p>
 
 <h2>Endpoints</h2>
-<div class="table"><table>${ENDPOINTS.map(([m, p, s, w]) => `<tr><td>${m}</td><td>${esc(p)}</td><td><span class="${s === "write" ? "w" : "r"}">${s}</span> · ${w}</td></tr>`).join("")}</table></div>
+<table>${ENDPOINTS.map(([m, p, s, w]) => `<tr><td>${m}</td><td>${esc(p)}</td><td><span class="${s === "write" ? "w" : "r"}">${s}</span> · ${w}</td></tr>`).join("")}</table>
 
 <h2>Paging</h2>
 <p>Lists take <code>limit</code> (20 by default, 100 at most). Those that page give <code>next_cursor</code>: pass it back as <code>cursor</code> for the next page; it is <code>null</code> at the end.</p>
@@ -71,8 +69,7 @@ td:first-child{white-space:nowrap;font-family:ui-monospace,monospace;font-size:1
 <p>A post: <code>id</code>, <code>text</code>, <code>created_at</code>, <code>edited_at</code>, <code>url</code>, <code>author</code> (an account), <code>reply_to</code>, <code>quote_of</code>, <code>sensitive</code>, <code>counts</code> (likes, reposts, replies, quotes, bookmarks, views), <code>viewer</code> (whether you liked, reposted, bookmarked it), <code>media</code>; in timelines a repost adds <code>reposted_by</code> and <code>reposted_at</code>.</p>
 <p>An account: <code>id</code>, <code>screen_name</code>, <code>name</code>, <code>bio</code>, <code>location</code>, <code>website</code>, <code>avatar_url</code>, <code>banner_url</code>, <code>verified_type</code>, <code>protected</code>, <code>created_at</code>, <code>url</code>, <code>counts</code> (posts, followers, following, likes) and <code>viewer</code> (following, followed_by).</p>
 
-<p class="dim" style="margin-top:40px">Posts made through the API show "Xitter API" as their app. What a token sees is what its account sees: blocks, protected accounts and suspensions apply.</p>
-<p><a href="/home">Back to ${name}</a></p>
-</main></body></html>`;
-	return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+<p class="dim">Posts made through the API show "Xitter API" as their app. What a token sees is what its account sees: blocks, protected accounts and suspensions apply.</p>
+`;
+	return accountPage({ req, title: "API", body, cache: "no-cache", referrer: null, back: { href: "/home", label: `Back to ${settings().instance_name}` }, css: DOCS_CSS });
 }

@@ -1,24 +1,13 @@
 // Two-factor sign-in with an authenticator app. Set-up lives on /account/2fa
 // (the settings page links to it); the code is asked for in the sign-in dialog.
 import { createHash, randomInt } from "node:crypto";
+import { accountPage, esc } from "./account-page";
 import { sql } from "./db";
 import { settings } from "./settings";
 import { newSecret, otpauthUrl, verifyCode } from "./totp";
 import type { Viewer } from "./auth";
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
-
-const page = (body: string, status = 200) =>
-	new Response(
-		`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Two-factor authentication</title>
-<style>body{margin:0;background:#000;color:#e7e9ea;font:16px/1.45 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-main{width:min(460px,92vw);padding:24px 0}h1{font-size:26px;margin:0 0 12px}input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:8px;font:inherit;margin:6px 0}
-input{background:#000;border:1px solid #333;color:inherit}button{background:#eff3f4;color:#0f1419;border:0;font-weight:700;cursor:pointer}button.danger{background:#f4212e;color:#fff}
-.err{color:#f4212e}.box{background:#16181c;border-radius:8px;padding:12px 14px;word-break:break-all;font-family:ui-monospace,monospace}a{color:#1d9bf0}</style></head>
-<body><main>${body}</main></body></html>`,
-		{ status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } },
-	);
 
 async function state(userId: string) {
 	const [u] = await sql`select totp_enabled, totp_pending, password_hash from users where id = ${userId}::bigint`;
@@ -72,22 +61,30 @@ export async function answerChallenge(token: string, code: string): Promise<{ us
 	return { userId: c.user_id };
 }
 
-const status = (enabled: boolean, error = "") =>
+const page = (req: Request, viewer: Viewer, body: string) => accountPage({ req, viewer, title: "Two-factor authentication", body });
+
+const status = (req: Request, viewer: Viewer, enabled: boolean, error = "") =>
 	page(
+		req,
+		viewer,
 		enabled
-			? `<h1>Two-factor authentication</h1><p>Signing in asks for a code from your authenticator app.</p>${error ? `<p class="err">${esc(error)}</p>` : ""}
+			? `<h1>Two-factor authentication</h1><p>Signing in asks for a code from your authenticator app.</p>${error ? `<p class="error">${esc(error)}</p>` : ""}
 <form method="post" action="/account/2fa/disable"><input type="password" name="password" placeholder="Your password" autocomplete="current-password" required>
 <input name="code" placeholder="Code from the app, or a backup code" autocomplete="one-time-code" required><button class="danger" type="submit">Turn off</button></form>`
 			: `<h1>Two-factor authentication</h1><p>Use an authenticator app (Aegis, Google Authenticator, 1Password, ...) to get a code each time you sign in.</p>
 <form method="post" action="/account/2fa/start"><button type="submit">Set up an authenticator app</button></form>`,
 	);
 
-const setup = (secret: string, viewer: Viewer, error = "") =>
-	page(`<h1>Set up your app</h1><p>Add a new time-based account in your authenticator app with this key (or open the link on a phone):</p>
-<div class="box">${secret.replace(/(.{4})/g, "$1 ").trim()}</div>
+const setup = (req: Request, secret: string, viewer: Viewer, error = "") =>
+	page(
+		req,
+		viewer,
+		`<h1>Set up your app</h1><p>Add a new time-based account in your authenticator app with this key (or open the link on a phone):</p>
+<div class="box code">${secret.replace(/(.{4})/g, "$1 ").trim()}</div>
 <p><a href="${esc(otpauthUrl(secret, viewer.screen_name, settings().instance_name))}">Open in my authenticator app</a></p>
-${error ? `<p class="err">${esc(error)}</p>` : ""}
-<form method="post" action="/account/2fa/confirm"><input name="code" placeholder="6-digit code from the app" inputmode="numeric" autocomplete="one-time-code" required><button type="submit">Turn on</button></form>`);
+${error ? `<p class="error">${esc(error)}</p>` : ""}
+<form method="post" action="/account/2fa/confirm"><input name="code" placeholder="6-digit code from the app" inputmode="numeric" autocomplete="one-time-code" required><button type="submit">Turn on</button></form>`,
+	);
 
 export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Promise<Response> {
 	const u = await state(viewer.id);
@@ -98,21 +95,25 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 	if (req.method === "POST" && sub === "/start" && !u.totp_enabled) {
 		const secret = newSecret();
 		await sql`update users set totp_pending = ${secret} where id = ${viewer.id}::bigint`;
-		return setup(secret, viewer);
+		return setup(req, secret, viewer);
 	}
 	if (req.method === "POST" && sub === "/confirm" && !u.totp_enabled && u.totp_pending) {
-		if (!verifyCode(u.totp_pending, field("code"))) return setup(u.totp_pending, viewer, "That code isn't right. Try the next one your app shows.");
+		if (!verifyCode(u.totp_pending, field("code"))) return setup(req, u.totp_pending, viewer, "That code isn't right. Try the next one your app shows.");
 		const backups = Array.from({ length: 8 }, () => String(randomInt(0, 1_000_000)).padStart(6, "0"));
 		await sql`update users set totp_enabled = true, totp_secret = totp_pending, totp_pending = null,
 			totp_backup = ${JSON.stringify(backups.map(sha))}::text::jsonb where id = ${viewer.id}::bigint`;
-		return page(`<h1>Two-factor is on</h1><p>Save these backup codes somewhere safe. Each works once if you lose your app. They are shown only now.</p>
-<div class="box">${backups.join("<br>")}</div><p><a href="/settings/account/login_verification">Back to settings</a></p>`);
+		return page(
+			req,
+			viewer,
+			`<h1>Two-factor is on</h1><p>Save these backup codes somewhere safe. Each works once if you lose your app. They are shown only now.</p>
+<div class="box code">${backups.join("<br>")}</div><p><a href="/settings/account/login_verification">Back to settings</a></p>`,
+		);
 	}
 	if (req.method === "POST" && sub === "/disable" && u.totp_enabled) {
 		const ok = await Bun.password.verify(field("password"), u.password_hash).catch(() => false);
-		if (!ok || !(await codeAccepted(viewer.id, field("code")))) return status(true, "The password or the code isn't right.");
+		if (!ok || !(await codeAccepted(viewer.id, field("code")))) return status(req, viewer, true, "The password or the code isn't right.");
 		await sql`update users set totp_enabled = false, totp_secret = null, totp_pending = null, totp_backup = '[]'::jsonb where id = ${viewer.id}::bigint`;
-		return status(false);
+		return status(req, viewer, false);
 	}
-	return status(u.totp_enabled);
+	return status(req, viewer, u.totp_enabled);
 }

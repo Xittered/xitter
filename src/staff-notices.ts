@@ -5,12 +5,12 @@
 
 import { hit, used } from "./ratelimit";
 import { randomBytes } from "node:crypto";
+import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { SECURE } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
-import { esc, html, layout } from "./login";
 import { settings } from "./settings";
 
 const KIND = { message: "Message", warning: "Warning", strike: "Strike" } as Record<string, string>;
@@ -55,35 +55,32 @@ export async function noticesApi(req: Request, v: Viewer) {
 	}
 }
 
-export async function noticesPage(v: Viewer) {
+export async function noticesPage(req: Request, v: Viewer) {
 	const [messages, appeals] = await Promise.all([messagesOf(v.id), appealsOf(v.id)]);
 	// opening the page reads them
 	await sql`update staff_messages set read_at = now() where user_id = ${v.id}::bigint and read_at is null`;
 	const open = appeals.some((a: any) => a.status === "open");
 	const list = messages.length
-		? messages.map((m: any) => `<div class="item ${esc(m.kind)}">
+		? messages.map((m: any) => `<div class="card ${esc(m.kind)}">
 		<div class="meta">${esc(KIND[m.kind] ?? m.kind)}${m.revoked_at ? " · withdrawn by staff" : ""} · ${esc(date(m.created_at))}</div>
 		<p>${esc(m.body)}</p>
-		${m.kind !== "message" && !m.revoked_at && !open ? `<button class="ghost" type="button" data-appeal="${m.id}">Appeal</button>` : ""}
+		${m.kind !== "message" && !m.revoked_at && !open ? `<button class="secondary small" type="button" data-appeal="${m.id}">Appeal</button>` : ""}
 	</div>`).join("")
-		: `<p class="alt">Nothing from staff.</p>`;
-	const appealList = appeals.map((a: any) => `<div class="item">
+		: `<p class="dim">Nothing from staff.</p>`;
+	const appealList = appeals.map((a: any) => `<div class="card">
 		<div class="meta">${esc(OUTCOME[a.status] ?? a.status)} · ${esc(date(a.created_at))}</div>
 		<p>${esc(a.body)}</p>
 		${a.staff_reply ? `<div class="meta">Staff replied</div><p>${esc(a.staff_reply)}</p>` : ""}
 	</div>`).join("");
-	const body = `<main style="width:min(560px,calc(100vw - 32px));display:grid;gap:12px;padding:32px 0 64px">
-	<p><a href="/notifications">← Back</a></p>
-	<h1>From the ${esc(settings().instance_name)} team</h1>
+	const body = `<h1>From the ${esc(settings().instance_name)} team</h1>
 	${list}
 	${appealList ? `<h2>Your appeals</h2>${appealList}` : ""}
-	${open ? "" : `<form id="appeal" hidden style="padding:0">
+	${open ? "" : `<form id="appeal" hidden>
 		<label for="appeal-body">Why should staff reconsider?</label>
 		<textarea id="appeal-body" maxlength="2000" required></textarea>
 		<p class="error" id="appeal-error" role="alert"></p>
 		<button type="submit">Send appeal</button>
 	</form>`}
-</main>
 <script>
 (function(){
 	var csrf=(document.cookie.match(/(?:^|;\\s*)ct0=([^;]+)/)||[])[1]||"",form=document.getElementById("appeal"),message;
@@ -97,7 +94,7 @@ export async function noticesPage(v: Viewer) {
 	};
 })();
 </script>`;
-	return html(layout("From staff", body));
+	return accountPage({ req, viewer: v, title: "From staff", body, referrer: null, back: { href: "/notifications", label: "Back" } });
 }
 
 // failed attempts per address, so the password field can't be guessed at
@@ -105,22 +102,22 @@ const dummyHash = Bun.password.hash(randomBytes(32).toString("hex"));
 const attempts = new Map<string, { count: number; until: number }>();
 
 const appealForm = (csrf: string, error = "") => `<form method="post" action="/appeal">
-	<img class="logo" src="/public/logo-dark.png" alt="${esc(settings().instance_name)}">
+	<div class="logo" role="img" aria-label="${esc(settings().instance_name)}"></div>
 	<h1>Appeal a decision</h1>
-	<p class="alt" style="margin:0">If your account was suspended, sign in here to ask staff to look again.</p>
+	<p class="dim">If your account was suspended, sign in here to ask staff to look again.</p>
 	<input type="hidden" name="csrf" value="${csrf}">
 	<label for="handle">Handle</label><input id="handle" name="username" autocomplete="username" required maxlength="15">
 	<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 	<label for="body">Why should staff reconsider?</label><textarea id="body" name="body" maxlength="2000" required></textarea>
 	${error ? `<p class="error" role="alert">${esc(error)}</p>` : ""}
 	<button type="submit">Send appeal</button>
-	<p class="alt"><a href="/">Back</a></p>
+	<p class="dim"><a href="/">Back</a></p>
 </form>`;
 
 export async function appealRoute(req: Request, address: string) {
-	const page = (error = "", status = 200) => {
+	const page = async (error = "", status = 200) => {
 		const csrf = randomBytes(24).toString("hex");
-		const res = html(layout("Appeal", appealForm(csrf, error)), status);
+		const res = await accountPage({ req, title: "Appeal", body: appealForm(csrf, error), status, referrer: null });
 		res.headers.set("set-cookie", `appeal_csrf=${csrf}; Path=/appeal; Max-Age=1800; HttpOnly; SameSite=Lax${SECURE}`);
 		return res;
 	};
@@ -153,10 +150,15 @@ export async function appealRoute(req: Request, address: string) {
 	} catch (e) {
 		return page((e as Error).message, 400);
 	}
-	return html(layout("Appeal sent", `<form>
-	<img class="logo" src="/public/logo-dark.png" alt="${esc(settings().instance_name)}">
+	return accountPage({
+		req,
+		title: "Appeal sent",
+		referrer: null,
+		body: `<form>
+	<div class="logo" role="img" aria-label="${esc(settings().instance_name)}"></div>
 	<h1>Appeal sent</h1>
-	<p class="alt" style="margin:0">Staff will look at it. If they lift the suspension, you can sign in again.</p>
-	<p class="alt"><a href="/">Back</a></p>
-</form>`));
+	<p class="dim">Staff will look at it. If they lift the suspension, you can sign in again.</p>
+	<p class="dim"><a href="/">Back</a></p>
+</form>`,
+	});
 }

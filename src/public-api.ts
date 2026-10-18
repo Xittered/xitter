@@ -5,6 +5,7 @@
 // (blocks, protected accounts, suspensions). The rate limits are the
 // client's. /api is the documentation.
 
+import { accountPage, esc } from "./account-page";
 import { type User, type Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
@@ -334,58 +335,49 @@ function withCors(res: Response) {
 
 // ---- /account/api: the account's tokens
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
-const accountPage = (body: string, status = 200) =>
-	new Response(
-		`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>API tokens · ${esc(settings().instance_name)}</title>
-<style>body{margin:0;background:#000;color:#e7e9ea;font:16px/1.45 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-main{width:min(560px,92vw);padding:24px 0}h1{font-size:26px;margin:0 0 12px}button,input,select{box-sizing:border-box;font:inherit;border-radius:8px}
-button{padding:12px 16px;margin:6px 0;background:#eff3f4;color:#0f1419;border:0;font-weight:700;cursor:pointer}button.del{background:none;color:#f4212e;border:1px solid #67070f;padding:6px 12px;margin:0}
-input,select{width:100%;padding:12px;margin:6px 0;background:#000;color:inherit;border:1px solid #333639}
-.err{color:#f4212e}.dim{color:#71767b;font-size:14px}a{color:#1d9bf0}
-.tok{display:flex;gap:12px;align-items:center;background:#16181c;border-radius:8px;padding:12px 14px;margin:8px 0}.tok div{flex:1}
-.new{background:#0b2a17;border:1px solid #00ba7c;border-radius:8px;padding:12px 14px;margin:12px 0}.code{font-family:ui-monospace,monospace;word-break:break-all;user-select:all}</style></head>
-<body><main>${body}<p><a href="/api">API documentation</a> · <a href="/home">Back to ${esc(settings().instance_name)}</a></p></main></body></html>`,
-		// same-origin, not no-referrer: under no-referrer the form posts with "Origin: null"
-		{ status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "same-origin" } },
-	);
-
-async function tokensView(v: Viewer, fresh = "", error = "") {
+async function tokensView(req: Request, v: Viewer, fresh = "", error = "") {
 	const tokens = await sql`select id::text, name, scope, created_at, last_used_at from api_tokens where user_id = ${v.id}::bigint order by created_at desc`;
 	const when = (d: Date | null) => (d ? new Date(d).toUTCString().replace(/:\d\d GMT$/, " UTC") : "never");
-	return accountPage(`<h1>API tokens</h1>
+	return accountPage({
+		req,
+		viewer: v,
+		title: "API tokens",
+		// same-origin, not no-referrer: under no-referrer the form posts with "Origin: null"
+		referrer: "same-origin",
+		body: `<h1>API tokens</h1>
 <p>A token lets a script or bot use your account through the <a href="/api">API</a>. Anyone holding it can act as you, so keep it secret and delete it when you stop using it.</p>
-${fresh ? `<div class="new"><b>Your new token.</b> Copy it now; it won't be shown again.<p class="code">${esc(fresh)}</p></div>` : ""}
-${error ? `<p class="err">${esc(error)}</p>` : ""}
+${fresh ? `<div class="card success"><b>Your new token.</b> Copy it now; it won't be shown again.<p class="code">${esc(fresh)}</p></div>` : ""}
+${error ? `<p class="error">${esc(error)}</p>` : ""}
 <form method="post"><input type="hidden" name="do" value="create">
 <input name="name" placeholder="What it's for, e.g. my weather bot" maxlength="40" required>
 <select name="scope"><option value="read">Read only</option><option value="write">Read and write (post, like, follow...)</option></select>
 <button type="submit">Make a token</button></form>
 ${tokens.length
-	? tokens.map((t: any) => `<div class="tok"><div><b>${esc(t.name)}</b><div class="dim">${t.scope === "write" ? "read and write" : "read only"} · made ${esc(when(t.created_at))} · last used ${esc(when(t.last_used_at))}</div></div>
-<form method="post"><input type="hidden" name="do" value="delete"><input type="hidden" name="id" value="${esc(t.id)}"><button class="del" type="submit">Delete</button></form></div>`).join("")
-	: `<p class="dim">No tokens yet.</p>`}`);
+	? tokens.map((t: any) => `<div class="card split"><div><b>${esc(t.name)}</b><div class="dim">${t.scope === "write" ? "read and write" : "read only"} · made ${esc(when(t.created_at))} · last used ${esc(when(t.last_used_at))}</div></div>
+<form method="post"><input type="hidden" name="do" value="delete"><input type="hidden" name="id" value="${esc(t.id)}"><button class="small danger" type="submit">Delete</button></form></div>`).join("")
+	: `<p class="dim">No tokens yet.</p>`}
+<p><a href="/api">API documentation</a></p>`,
+	});
 }
 
 export async function apiTokensRoute(req: Request, v: Viewer): Promise<Response> {
-	if (req.method !== "POST") return tokensView(v);
+	if (req.method !== "POST") return tokensView(req, v);
 	// a plain form post from this page only
 	const origin = req.headers.get("origin");
-	if (origin && origin !== PUBLIC_ORIGIN) return tokensView(v, "", "That request didn't come from this page.");
+	if (origin && origin !== PUBLIC_ORIGIN) return tokensView(req, v, "", "That request didn't come from this page.");
 	const f = await req.formData().catch(() => new FormData());
 	if (f.get("do") === "delete") {
 		const id = String(f.get("id") ?? "");
 		if (isId(id)) await sql`delete from api_tokens where id = ${id}::bigint and user_id = ${v.id}::bigint`;
-		return tokensView(v);
+		return tokensView(req, v);
 	}
 	const name = String(f.get("name") ?? "").trim();
-	if (!name || [...name].length > 40) return tokensView(v, "", "Name the token (up to 40 characters).");
+	if (!name || [...name].length > 40) return tokensView(req, v, "", "Name the token (up to 40 characters).");
 	const scope = f.get("scope") === "write" ? "write" : "read";
 	try {
-		return tokensView(v, await createToken(v.id, name, scope));
+		return tokensView(req, v, await createToken(v.id, name, scope));
 	} catch (e) {
-		if (e instanceof ApiError) return tokensView(v, "", e.message);
+		if (e instanceof ApiError) return tokensView(req, v, "", e.message);
 		throw e;
 	}
 }

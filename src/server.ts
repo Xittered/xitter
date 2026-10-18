@@ -278,7 +278,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	}
 	// the public API signs in with its own tokens, never cookies
 	if (p.startsWith("/api/v1/") || p === "/api/v1") return publicApi(req, url);
-	if (p === "/api" || p === "/api/") return apiDocsPage();
+	if (p === "/api" || p === "/api/") return apiDocsPage(req);
 	if (req.method === "OPTIONS") return new Response(null, { status: 204 });
 	if (p === "/login" && req.method === "POST") {
 		const h = hit("auth", requestIp(req) ?? "unknown");
@@ -338,7 +338,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	}
 	if (p === "/account/email" || p === "/account/email/confirm") return emailRoute(req, url, viewer);
 	if (p.startsWith("/account/2fa") && viewer) return twoFactorRoute(req, url, viewer);
-	if (p === "/account/notices" && viewer) return noticesPage(viewer);
+	if (p === "/account/notices" && viewer) return noticesPage(req, viewer);
 	if (p === "/account/invites" && viewer) return memberInvitesRoute(req, viewer);
 	if (p === "/account/api" && viewer) return apiTokensRoute(req, viewer);
 	if (p === "/account/automation" && viewer) return automationRoute(req, viewer);
