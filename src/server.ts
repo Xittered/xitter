@@ -43,6 +43,7 @@ import { hashflagAsset } from "./hashflags";
 import { startMailDigests } from "./mail-digest";
 import { SERVICE_WORKER, startPush } from "./push";
 import { emailRoute } from "./email-address";
+import { embedImage, linkPreview, oembed } from "./embeds";
 
 const MIME: Record<string, string> = {
 	js: "text/javascript; charset=utf-8",
@@ -344,6 +345,9 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/account/automation" && viewer) return automationRoute(req, viewer);
 	if (p === "/account/organisation" && viewer) return orgRoute(req, viewer);
 	if (p.startsWith("/i/ton/data/xchat_media/")) return chatMediaRoute(req, viewer, url);
+	// pictures and oEmbed for previews of public posts in other apps (embeds.ts)
+	if (p.startsWith("/embed/")) return embedImage(p);
+	if (p === "/oembed") return oembed(url);
 	// uploads stay inside the instance: only signed-in users get them
 	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p) : new Response("not found", { status: 404 });
 	// the admin panel: staff only; everyone else gets the client's not-found page
@@ -369,6 +373,11 @@ async function route(req: Request): Promise<Response | undefined> {
 		return serveApi(req, url, viewer);
 	}
 
+	// signed out: a public post or profile gives other apps' link fetchers its preview
+	if (!viewer && req.method === "GET") {
+		const preview = await linkPreview(p);
+		if (preview) return preview;
+	}
 	// signed out: X's own home page with its sign-in form, and the dialog
 	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding")) return Response.redirect("/", 302);
 	const inCommunity = viewer ? (await sql`select 1 from community_members where user_id = ${viewer.id}::bigint limit 1`).length > 0 : false;

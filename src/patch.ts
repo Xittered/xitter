@@ -50,6 +50,15 @@ const RULES: [RegExp, string][] = [
 		/(\{cropData:\w+,maxDimension:(\w+)=\w+,maxFileSize:(\w+)=\w+,targetQuality:\w+=\w+\}=\w+\|\|\{\},(\w+)=\w+\((\w+),\w+\);[^{}]*?)if\(\5\.isGif\)(return Promise\.reject\(new [\w.]+\("Gifs cannot be processed\.",\w+\.GIF_IS_TOO_LARGE\)\);)/g,
 		'$1if($5.isGif){if($5.size>$3||$5.width>$2||$5.height>$2)$6return Promise.resolve(new File([$5.fileHandle,"xitter-crop:"+[$4.left,$4.top,$4.width,$4.height].map(Math.round)],"image.gif",{type:"image/gif"}))}',
 	],
+	// Downloading a video is for Premium subscribers, and nothing is paid for
+	// here: both the share menu's item and the media viewer's button download
+	// for everyone instead of opening the "Download videos with Plus" sheet
+	[/(\w+)=\w+\.isAnyPremiumSubscriber\(\)(,\w+=\w+\.useMemo\(\(\)=>\1\?\{downloadLink:)/g, "$1=!0$2"],
+	[/(\w+)=\w+\.isAnyPremiumSubscriber\(\);(if\(this\._scribeAction\("download"\))/g, "$1=!0;$2"],
+	[/(\w+)=\w+\.isAnyPremiumSubscriber,(\(\(\{handleDownloadVideo:)/g, "$1=!0,$2"],
+	// the router's profile addresses: staff can give a handle any characters up
+	// to 50 (invites.ts STAFF_HANDLE), which the address carries percent-encoded
+	[/screenName:"\[a-zA-Z0-9_\]\{1,26\}"/g, 'screenName:"[^/]{1,200}"'],
 	// Analytics hides its charts below 50 followers, which on a small instance
 	// is nearly everyone
 	[/(\w+)=(\w+)\.followerCount>=50,/g, "$1=$2.followerCount>=0,"],

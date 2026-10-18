@@ -14,9 +14,12 @@ import { recordSignIn } from "./login-history";
 import { SECURE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies } from "./auth";
 import { sql } from "./db";
 import { avatarUrl } from "./model";
+import { settings } from "./settings";
 
-// X keeps five accounts at most
-const MAX = 5;
+// X keeps five accounts at most; an admin can raise the client's limit
+// (responsive_web_multiple_account_limit), and the cookie follows it. Every
+// token shares one cookie, so it stops at 50.
+const max = () => Math.min(Math.max(Math.trunc(Number(settings().switch_overrides.responsive_web_multiple_account_limit)) || 5, 1), 50);
 
 type Session = { token: string; csrf: string; userId: string };
 
@@ -48,7 +51,7 @@ export async function signInCookies(req: Request, session: Session): Promise<str
 	await recordSignIn(req, session);
 	const before = parseCookies(req).auth_token;
 	const others = await live([...(before ? [before] : []), ...multiTokens(req)], session.userId);
-	return [...sessionCookies(session), multiCookie(others.slice(0, MAX - 1).map((s) => s.token))];
+	return [...sessionCookies(session), multiCookie(others.slice(0, max() - 1).map((s) => s.token))];
 }
 
 function withCookies(body: unknown, cookies: string[]): Response {

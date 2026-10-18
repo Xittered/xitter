@@ -18,6 +18,7 @@ export const userCols = (viewerId: string) => sql`
 		from affiliations af join users o on o.id = af.org_id where af.user_id = u.id) as a_org,
 	(select count(*)::int from affiliations af where af.org_id = u.id) as a_affiliates,
 	(select m.screen_name from users m where m.id = u.automated_by) as a_automated_by, u.parody_label as a_parody_label,
+	(select json_build_object('text', l.text, 'badge_id', l.badge_id::text, 'url', l.url) from account_labels l where l.id = u.label_id) as a_label,
 	(select count(distinct m.post_id)::int from media m join posts x on x.id = m.post_id where x.user_id = u.id) as a_media_posts,
 	(select count(*)::int from likes x where x.user_id = u.id) as a_likes,
 	(select count(*)::int from highlights x where x.user_id = u.id) as a_highlights,
@@ -55,6 +56,7 @@ export function toUser(r: any): User {
 		affiliates: r.a_affiliates,
 		automated_by: r.a_automated_by ?? null,
 		parody_label: r.a_parody_label ?? "None",
+		label: r.a_label ?? null,
 		created_at: r.a_created_at,
 		stats: {
 			posts: r.a_posts,
@@ -132,7 +134,8 @@ export async function setProtected(userId: string, on: boolean): Promise<void> {
 }
 
 // accounts `userId` follows, or accounts following `userId`
-export async function followList(viewerId: string, userId: string, kind: "following" | "followers", limit = 200): Promise<User[]> {
+// verified_followers: followers with any check, for the Verified Followers tab
+export async function followList(viewerId: string, userId: string, kind: "following" | "followers" | "verified_followers", limit = 200): Promise<User[]> {
 	// a protected account's lists are for itself and its followers
 	if (userId !== viewerId) {
 		const [hidden] = await sql`select 1 from users u where u.id = ${userId}::bigint and u.protected
@@ -145,7 +148,8 @@ export async function followList(viewerId: string, userId: string, kind: "follow
 			? await sql`select ${userCols(viewerId)} from follows f join users u on u.id = f.followee_id
 				where f.follower_id = ${userId}::bigint and u.id not in ${outOfView(viewerId)} order by f.created_at desc limit ${limit}`
 			: await sql`select ${userCols(viewerId)} from follows f join users u on u.id = f.follower_id
-				where f.followee_id = ${userId}::bigint and u.id not in ${outOfView(viewerId)} order by f.created_at desc limit ${limit}`;
+				where f.followee_id = ${userId}::bigint and u.id not in ${outOfView(viewerId)}
+				${kind === "verified_followers" ? sql`and u.verified_type is not null` : sql``} order by f.created_at desc limit ${limit}`;
 	return rows.map(toUser);
 }
 

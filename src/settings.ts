@@ -23,6 +23,8 @@ export const FEATURES = {
 	creator_studio: "Creator Studio and monetization",
 	spaces: "Spaces",
 	business: "Business sign-up",
+	notes_everyone: "Anyone can write Community Notes (off: only accounts given access on their admin page)",
+	link_previews: "Previews of public posts and profiles when their links are shared in other apps",
 } as const;
 export type Feature = keyof typeof FEATURES;
 
@@ -44,6 +46,8 @@ const DEFAULTS = {
 		creator_studio: false,
 		spaces: false,
 		business: false,
+		notes_everyone: true,
+		link_previews: true,
 	} as Record<Feature, boolean>,
 	limits: { image_mb: 5, video_mb: Number(process.env.MAX_VIDEO_MB ?? 200), video_seconds: Number(process.env.MAX_VIDEO_SECONDS ?? 600) },
 	// per account per 15 minutes (ratelimit.ts); sign-in and mail limits are fixed

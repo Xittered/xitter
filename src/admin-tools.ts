@@ -90,6 +90,51 @@ export const toolActions: Record<string, Action> = {
 			return {};
 		},
 	},
+	// profile labels: text where X shows "Parody account", with a badge as the icon
+	labels: { role: "support", run: async () => ({ labels: await sql`select l.id::text, l.text, l.badge_id::text, l.url, l.created_at,
+		(select count(*)::int from users u where u.label_id = l.id) as users
+		from account_labels l order by l.text` }) },
+	createLabel: {
+		role: "admin",
+		run: async (a, b) => {
+			const text = textOf(b.text, 40);
+			const badge = b.badgeId ? idOf(b.badgeId, "badge") : null;
+			await badgeExists(badge);
+			const url = optionalText(b.url, 500);
+			if (url && !/^https?:\/\/\S+$/.test(url)) throw new AdminError("The link must be an http or https address.");
+			const id = newId();
+			await sql`insert into account_labels (id, text, badge_id, url) values (${id}::bigint, ${text}, ${badge}::bigint, ${url || null})`;
+			await audit(a, "create_label", id, { text });
+			return { id };
+		},
+	},
+	deleteLabel: {
+		role: "admin",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			await sql`delete from account_labels where id = ${id}::bigint`;
+			await audit(a, "delete_label", id);
+			return {};
+		},
+	},
+	// an account's profile label: X's Parody, Commentary or Fan, a staff-made one, or None
+	setProfileLabel: {
+		role: "admin",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			await guard(a, id);
+			const pick = typeof b.label === "string" ? b.label : "None";
+			if (["None", "Parody", "Commentary", "Fan"].includes(pick)) {
+				await sql`update users set parody_label = ${pick}, label_id = null where id = ${id}::bigint`;
+			} else {
+				const labelId = idOf(pick, "label");
+				if (!(await sql`select 1 from account_labels where id = ${labelId}::bigint`).length) throw new AdminError("No such label.");
+				await sql`update users set parody_label = 'None', label_id = ${labelId}::bigint where id = ${id}::bigint`;
+			}
+			await audit(a, "set_profile_label", id, { label: pick });
+			return {};
+		},
+	},
 	// an account's custom badges, in the order they show
 	setBadges: {
 		role: "admin",

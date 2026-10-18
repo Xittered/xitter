@@ -388,7 +388,7 @@ const RENDER = {
 	},
 
 	async badges(main) {
-		const { badges } = await api("badges");
+		const [{ badges }, { labels }] = await Promise.all([api("badges"), api("labels")]);
 		main.innerHTML = "<h1>Badges</h1>" +
 			'<p class="dim">A custom badge is a small image after an account\'s name, in the slot where X shows an organisation\'s badge. Give one to an account on its page. An organisation can also use one for its affiliates instead of its profile picture.</p>' +
 			(can("admin") ? '<div class="box" style="margin-bottom:16px"><h2>New badge</h2><div class="row"><input id="bn" placeholder="Name, shown on hover" maxlength="60" style="flex:1;min-width:180px">' +
@@ -398,7 +398,21 @@ const RENDER = {
 				? '<table class="table"><tr><th></th><th>Name</th><th>Accounts</th><th>Made</th><th></th></tr>' +
 					badges.map((b) => '<tr><td style="width:44px"><img alt="" src="/public/badge-' + esc(b.id) + '.png" width="24" height="24" style="border-radius:4px;vertical-align:middle"></td><td>' + esc(b.name) + "</td><td>" + b.users +
 						'</td><td class="small dim">' + esc(when(b.created_at)) + "</td><td>" + (can("admin") ? '<button class="btn danger" data-del="' + esc(b.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
-				: '<div class="empty">No custom badges yet.</div>') + "</div>";
+				: '<div class="empty">No custom badges yet.</div>') + "</div>" +
+			'<h1 style="margin-top:32px">Profile labels</h1><p class="dim">Text under an account\'s name, where X shows "Parody account", with a badge as its icon (the parody mask without one). Give one to an account on its page; it replaces a parody, commentary or fan label, and the account can\'t change it.</p>' +
+			(can("admin") ? '<div class="box" style="margin-bottom:16px"><h2>New label</h2><div class="row"><input id="ln" placeholder="Text, e.g. State-affiliated media" maxlength="40" style="flex:1;min-width:180px">' +
+				'<select id="lb"><option value="">parody mask</option>' + badges.map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("") + "</select>" +
+				'<input id="lu" placeholder="Link (optional)" maxlength="500" style="flex:1;min-width:160px"><button class="btn primary" id="lc">Create</button></div></div>' : "") +
+			'<div class="scroll">' + (labels.length
+				? '<table class="table"><tr><th></th><th>Text</th><th>Link</th><th>Accounts</th><th></th></tr>' +
+					labels.map((l) => '<tr><td style="width:44px">' + (l.badge_id ? '<img alt="" src="/public/badge-' + esc(l.badge_id) + '.png" width="20" height="20" style="border-radius:3px;vertical-align:middle">' : '<span class="icon">theater_comedy</span>') + "</td><td>" + esc(l.text) +
+						'</td><td class="small dim">' + esc(l.url || "") + "</td><td>" + l.users + "</td><td>" + (can("admin") ? '<button class="btn danger" data-dellabel="' + esc(l.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
+				: '<div class="empty">No profile labels yet.</div>') + "</div>";
+		if ($("#lc")) $("#lc").onclick = () => act(() => api("createLabel", { text: $("#ln").value, badgeId: $("#lb").value, url: $("#lu").value }), "Label created").then(route);
+		main.querySelectorAll("[data-dellabel]").forEach((b) => b.onclick = async () => {
+			if (!(await ask("Delete this label? Accounts wearing it lose it."))) return;
+			act(() => api("deleteLabel", { id: b.dataset.dellabel }), "Label deleted").then(route);
+		});
 		if ($("#bf")) $("#bf").onchange = () => $("#bfname").textContent = $("#bf").files[0]?.name || "";
 		if ($("#bc")) $("#bc").onclick = () => act(async () => {
 			const file = $("#bf").files[0];
@@ -1098,9 +1112,10 @@ function userTable(users, orgs = false, pick = false) {
 async function renderUser(main, id) {
 	const { user: u, invited, log, alts, strikes, next_step } = await api("user", { id });
 	const isOrg = u.verified_type === "business" || u.verified_type === "government";
-	const [affiliates, { badges }, { notes }, { messages }, sessions, handles] = await Promise.all([
+	const [affiliates, { badges }, { labels }, { notes }, { messages }, sessions, handles] = await Promise.all([
 		isOrg ? api("affiliates", { orgId: id }).then((r) => r.affiliates) : [],
 		api("badges"),
+		api("labels"),
 		api("staffNotes", { id }),
 		api("staffMessages", { id }),
 		// staff at the viewer's level or above keep their sessions to themselves
@@ -1130,6 +1145,8 @@ async function renderUser(main, id) {
 		[["", "none"], ["blue", "blue"], ["business", "gold (organisation)"], ["government", "grey (government organisation)"], ["government_individual", "grey (government official)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.verified_type ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
 		'</select></div><div class="field"><label>Translator badge (a globe after the verification badge)</label><select id="translator"' + (can("admin") ? "" : " disabled") + ">" +
 		[["", "none"], ["translator", "blue (translator)"], ["moderator", "gold (translator moderator)"], ["approver", "yellow (approver)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.translator ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
+		'</select></div><div class="field"><label>Profile label (under the name, where X shows "Parody account"; <a href="#badges">make one</a>)</label><select id="plabel"' + (can("admin") ? "" : " disabled") + ">" +
+		[["None", "none"], ["Parody", "Parody account"], ["Commentary", "Commentary account"], ["Fan", "Fan account"]].concat(labels.map((l) => [l.id, l.text])).map(([v, l]) => '<option value="' + esc(v) + '"' + ((u.label_id || u.parody_label || "None") === v ? " selected" : "") + ">" + esc(l) + "</option>").join("") +
 		'</select></div><div class="field"><label>Pride flag</label><div class="flags" id="flags">' +
 		[{ id: "", name: "none" }].concat(flags).map((f) => '<button type="button" title="' + esc(f.name) + '" data-flag="' + esc(f.id) + '" class="' + ((u.flag ?? "") === f.id ? "on" : "") + '"' + (can("admin") ? "" : " disabled") + ">" +
 			(f.id ? '<img alt="" src="/public/flag-' + esc(f.id) + '.svg">' : "none") + "</button>").join("") + "</div></div>" +
@@ -1190,6 +1207,7 @@ async function renderUser(main, id) {
 		act(() => api("updateUser", body), "Profile saved").then(again);
 	};
 	if ($("#badge")) $("#badge").onchange = () => act(() => api("setBadge", { id, badge: $("#badge").value }), "Badge set").then(again);
+	if ($("#plabel")) $("#plabel").onchange = () => act(() => api("setProfileLabel", { id, label: $("#plabel").value }), "Label set").then(again);
 	if ($("#translator")) $("#translator").onchange = () => act(() => api("setTranslator", { id, translator: $("#translator").value }), "Translator badge set").then(again);
 	main.querySelectorAll("[data-flag]").forEach((b) => b.onclick = () => act(() => api("setFlag", { id, flag: b.dataset.flag }), "Flag set").then(again));
 	main.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {

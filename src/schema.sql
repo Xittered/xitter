@@ -940,3 +940,16 @@ create table if not exists retired_identities (
 	created_at timestamptz not null default now(),
 	primary key (kind, value)
 );
+
+-- Profile labels staff make in the admin panel, worn where X shows "Parody
+-- account": the text, a custom badge as its icon (the parody mask without
+-- one) and an optional link. An account wears one label at most, and none
+-- with a parody, commentary or fan label.
+create table if not exists account_labels (
+	id bigint primary key,
+	text text not null check (char_length(text) between 1 and 40),
+	badge_id bigint references custom_badges(id) on delete set null,
+	url text,
+	created_at timestamptz not null default now()
+);
+alter table users add column if not exists label_id bigint references account_labels(id) on delete set null;

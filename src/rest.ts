@@ -18,6 +18,7 @@ import { placeById, searchPlaces } from "./places";
 import { reportFlow } from "./reports";
 import { settingsFor } from "./shell";
 import { hashtagsLike, searchUsers } from "./search";
+import { STAFF_HANDLE } from "./invites";
 import { accountSettingsRoute, changeUsername, revokeSessionsRoute } from "./account-settings";
 import { dataExportRoute } from "./data-export";
 import { addressBook, deleteContacts, uploadContacts } from "./contacts";
@@ -264,7 +265,7 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 	if (path === "/1.1/users/lookup.json" && (method === "GET" || method === "POST")) {
 		const params = method === "GET" ? new URL(req.url).searchParams : new URLSearchParams(String(await req.text().catch(() => "")));
 		const ids = (params.get("user_id") ?? "").split(",").map((x) => x.trim()).filter(isId).slice(0, 100);
-		const names = (params.get("screen_name") ?? "").split(",").map((x) => x.trim().replace(/^@/, "")).filter((x) => /^\w{1,15}$/.test(x)).slice(0, 100);
+		const names = (params.get("screen_name") ?? "").split(",").map((x) => x.trim().replace(/^@/, "")).filter((x) => STAFF_HANDLE.test(x)).slice(0, 100);
 		const found = await Promise.all([...ids.map((id) => userById(viewer.id, id)), ...names.map((n) => userByName(viewer.id, n))]);
 		const users = found.filter((u) => u && u.status !== "suspended");
 		if (!users.length) return Response.json({ errors: [{ code: 17, message: "No user matches for specified terms." }] }, { status: 404 });

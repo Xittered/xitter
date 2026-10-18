@@ -4,6 +4,7 @@ import { isId, newId } from "./ids";
 import { blockedFor, isBlockedEitherWay, outOfView } from "./blocks";
 import { getPost, postsByIds, PostError, refuseHate } from "./posts";
 import { noteText, tweetEntry, tweetResult } from "./model";
+import { feature } from "./settings";
 
 function id(value: unknown): string {
 	if (!isId(value)) throw new PostError("Invalid note or post id.", 144);
@@ -19,7 +20,7 @@ async function visible(v: Viewer, postId: string, write = false) {
 
 async function membership(v: Viewer) {
 	const [user] = await sql`select notes_writer from users where id = ${v.id}::bigint`;
-	return !!user?.notes_writer && v.status === "active";
+	return (!!user?.notes_writer || feature("notes_everyone")) && v.status === "active";
 }
 
 async function profile(v: Viewer, alias?: string) {
@@ -31,7 +32,7 @@ async function profile(v: Viewer, alias?: string) {
 		select n.id, count(voter.id) as ratings, count(voter.id) filter(where r.rating = 'Helpful') as helpful, count(voter.id) filter(where r.rating = 'NotHelpful') as not_helpful
 		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active'
 		where n.author_id = ${user.id}::bigint group by n.id) scores`;
-	return { alias: user.notes_alias, can_write_notes: !!user.notes_writer && v.status === "active", user_enrollment: { enrollment_state: user.notes_writer ? "EarnedIn" : "NewUser", writing_impact: 0, rating_impact: 0 },
+	return { alias: user.notes_alias, can_write_notes: (!!user.notes_writer || feature("notes_everyone")) && v.status === "active", user_enrollment: { enrollment_state: user.notes_writer || feature("notes_everyone") ? "EarnedIn" : "NewUser", writing_impact: 0, rating_impact: 0 },
 		notes_count: { ...counts, last_updated_at: Date.now() }, ratings_count: { last_updated_at: Date.now(), successful: {}, unsuccessful: {} },
 		notification_settings: { needs_your_help_frequency: "Never" }, user_settings: { show_in_app_navigation: true }, is_top_writer: false, is_api_contributor: false,
 	};

@@ -19,13 +19,44 @@ export function normalizeName(text: string): string {
 	return foldGlyphs(text).replace(/[^\p{L}0-9!|@$+]/gu, "");
 }
 
-// "nigger" -> n+[i1!|]+[g96]{2,}[e3]+r+
-function wordPattern(word: string): RegExp {
+// "nigger" -> n+ [i1!|]+ [g96]{2,} [e3]+ r+, matched anywhere in a text.
+// Not a RegExp: neighbouring letters share look-alikes (i and l both take 1
+// and |), and a backtracking engine tries every split of a run of them, so a
+// long run took minutes and froze the server. This walks the text once,
+// keeping every place in the word a match could be at.
+type Segment = { chars: Set<string>; min: number };
+type WordPattern = { test(text: string): boolean };
+
+function wordPattern(word: string): WordPattern {
 	const letters = word.replace(/[^\p{L}]/gu, "");
-	return new RegExp(letters.replace(/(\p{L})\1*/gu, (run, c) => {
-		const cls = LOOKALIKE[c] ? `[${c}${LOOKALIKE[c].replace(/[|$+]/g, "\\$&")}]` : c;
-		return run.length > 1 ? `${cls}{${run.length},}` : `${cls}+`;
-	}), "u");
+	const segments: Segment[] = [...letters.matchAll(/(\p{L})\1*/gu)].map(([run, c]) => ({ chars: new Set([c, ...(LOOKALIKE[c] ?? "")]), min: [...run].length }));
+	return {
+		test(text: string) {
+			if (!segments.length) return false;
+			const last = segments.length - 1;
+			// state: segment index * 1000 + how many it has taken so far (capped at its min)
+			let states = new Set<number>();
+			for (const ch of text) {
+				const next = new Set<number>();
+				const step = (k: number, n: number) => {
+					if (!segments[k].chars.has(ch)) return false;
+					const taken = Math.min(n + 1, segments[k].min);
+					if (k === last && taken === segments[k].min) return true;
+					next.add(k * 1000 + taken);
+					return false;
+				};
+				// a match may start at any character
+				if (step(0, 0)) return true;
+				for (const s of states) {
+					const k = Math.floor(s / 1000), n = s % 1000;
+					if (step(k, n)) return true;
+					if (n === segments[k].min && k < last && step(k + 1, 0)) return true;
+				}
+				states = next;
+			}
+			return false;
+		},
+	};
 }
 
 // the first blocked word the text contains, if any

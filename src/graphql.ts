@@ -94,6 +94,9 @@ async function setParodyLabel(userId: string, label: unknown) {
 	const now = await parodySettings(userId);
 	if (now.parody_commentary_fan_label === label) return;
 	if (now.is_label_update_disabled) throw new PostError(now.update_disabled_reason!, 214);
+	// a label staff gave the account stays: the client would show this one over it
+	const [staffLabel] = await sql`select 1 from users where id = ${userId}::bigint and label_id is not null`;
+	if (staffLabel) throw new PostError("Your profile label was set by this instance's staff.", 214);
 	await sql`update users set parody_label = ${label}, parody_label_at = now() where id = ${userId}::bigint`;
 }
 
@@ -411,7 +414,7 @@ const likes: Handler = async (viewer, vars) => {
 };
 
 const follows =
-	(kind: "following" | "followers"): Handler =>
+	(kind: "following" | "followers" | "verified_followers"): Handler =>
 	async (viewer, vars) => {
 		const users = vars.cursor ? [] : await followList(viewer.id, userId(vars), kind);
 		const base = BigInt(newId());
@@ -733,6 +736,7 @@ const handlers: Record<string, Handler> = {
 	Favoriters: reactors("likes", "favoriters_timeline"),
 	Following: follows("following"),
 	Followers: follows("followers"),
+	BlueVerifiedFollowers: follows("verified_followers"),
 	UserMedia: userMedia("any"),
 	UserPhotoTimeline: userMedia("photo"),
 	UserVideoTimeline: userMedia("video"),

@@ -1,8 +1,11 @@
 // Builds the objects the client expects. Field sets follow the captured
 // responses; fields for features we do not have are constants.
 
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { urlEntities as linkEntities } from "./links";
 import type { User } from "./auth";
+import { CLIENT_DIR } from "./client-cache";
 import { PUBLIC_ORIGIN } from "./config";
 import type { ArticleEntity } from "./articles";
 import { FLAGS } from "./flags";
@@ -108,9 +111,42 @@ export function badgeList(u: User): Badge[] {
 	return out;
 }
 
-// X's one label slot: "Automated by @owner" for a bot, else the first badge.
-// A bot's badges then all go through the page script (badges.ts).
-export const labelTakesSlot = (u: User) => !!u.automated_by;
+// X's one label slot: "Automated by @owner" for a bot, a profile label, else
+// the first badge. The client puts a parody, commentary or fan label there
+// before anything we send. When a label has it, every badge goes through the
+// page script (badges.ts).
+const hasParodyLabel = (u: User) => !!u.parody_label && u.parody_label !== "None";
+export const labelTakesSlot = (u: User) => !!u.automated_by || hasParodyLabel(u) || !!u.label;
+
+// the client's own mask icon, for a staff-made label without a badge; its
+// file name changes with each client build
+let mask: string | undefined;
+function parodyMask(): string {
+	if (mask === undefined) {
+		const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
+		const file = (() => {
+			try {
+				return readdirSync(dir).find((f) => /^parody-mask\.\w+\.svg$/.test(f));
+			} catch {
+				return undefined;
+			}
+		})();
+		mask = file ? `${PUBLIC_ORIGIN}/abs/responsive-web/client-web/${file}` : "";
+	}
+	return mask;
+}
+
+// a staff-made label, in the shape the client gives its parody label
+function profileLabel(l: NonNullable<User["label"]>) {
+	const icon = l.badge_id ? `${PUBLIC_ORIGIN}/public/badge-${l.badge_id}.png` : parodyMask();
+	return {
+		label: {
+			...(icon ? { badge: { url: icon } } : {}),
+			description: l.text,
+			...(l.url ? { url: { url: l.url, urlType: "ExternalUrl" } } : {}),
+		},
+	};
+}
 
 function automatedLabel(owner: string) {
 	const text = `Automated by @${owner}`;
@@ -126,6 +162,8 @@ function automatedLabel(owner: string) {
 
 function badgeLabel(u: User) {
 	if (u.automated_by) return automatedLabel(u.automated_by);
+	if (hasParodyLabel(u)) return {};
+	if (u.label) return profileLabel(u.label);
 	const [first] = badgeList(u);
 	if (!first) return {};
 	return {

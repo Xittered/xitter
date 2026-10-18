@@ -36,6 +36,8 @@ export type User = {
 	automated_by?: string | null;
 	// X's profile label: Parody, Commentary or Fan account (or None)
 	parody_label?: string;
+	// a profile label staff made (account_labels), in the same place
+	label?: { text: string; badge_id: string | null; url: string | null } | null;
 	// posts only for approved followers
 	protected?: boolean;
 	language?: string;

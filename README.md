@@ -55,6 +55,9 @@ copy during setup, and it stays on that machine.
   hashtags): for a set time, liking a post with the hashtag plays a custom
   Lottie animation, and the hashtag shows an emoji (optionally with hashfetti)
 - Polls with a photo on each choice
+- Previews when a public post or profile is shared in other apps (Discord,
+  Slack, iMessage…): OpenGraph and Twitter card tags and oEmbed, for active,
+  unprotected accounts only. Admin > Settings > Features switches them off
 - Staff labels under posts, as X shows them: Visibility limited (also kept out
   of For you and search), Misleading, Stay informed, Get the latest, Legally
   required notice; staff can also set the counts a post or profile shows
