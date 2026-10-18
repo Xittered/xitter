@@ -153,11 +153,9 @@ async function readOperationTypes() {
 
         try {
                 const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
-                const files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
-
-                if (files.length === 0) {
-                        throw new Error("No JavaScript client bundle files found.");
-                }
+				const files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
+				
+				if (files.length === 0) return;
 
                 const nextScanned = new Map<string, OperationFile>();
 
