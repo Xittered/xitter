@@ -94,7 +94,10 @@ export async function login(screenName: string, password: string): Promise<{ tok
 	const ok = await Bun.password.verify(password, u?.password_hash ?? DUMMY_HASH).catch(() => false);
 	if (!u || !ok) return undefined;
 	// signing in within 30 days of deactivating brings the account back
-	if (u.deactivated_at) await sql`update users set status = 'active', deactivated_at = null where id = ${u.id}::bigint`;
+	if (u.deactivated_at) {
+		const back = await sql`update users set status = 'active', deactivated_at = null where id = ${u.id}::bigint and deactivated_at > now() - interval '30 days' returning id`;
+		if (!back.length) return undefined;
+	} else if ((await sql`select status from users where id = ${u.id}::bigint`)[0]?.status === "suspended") return undefined;
 	const token = randomHex(20);
 	const csrf = randomHex(32);
 	await sql`insert into sessions (token, user_id, csrf) values (${token}, ${u.id}::bigint, ${csrf})`;
@@ -106,7 +109,8 @@ export async function login(screenName: string, password: string): Promise<{ tok
 export async function startSession(userId: string): Promise<{ token: string; csrf: string; userId: string }> {
 	const token = randomHex(20);
 	const csrf = randomHex(32);
-	await sql`insert into sessions (token, user_id, csrf) values (${token}, ${userId}::bigint, ${csrf})`;
+	const made = await sql`insert into sessions (token, user_id, csrf) select ${token}, id, ${csrf} from users where id = ${userId}::bigint and status <> 'suspended' returning token`;
+	if (!made.length) throw new Error("account suspended");
 	await sql`update users set last_seen_at = now() where id = ${userId}::bigint`;
 	return { token, csrf, userId };
 }

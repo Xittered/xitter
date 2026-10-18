@@ -282,7 +282,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			const p = held.pending;
 			let userId: string;
 			try {
-				userId = await signUp({ code: s.code, screenName: p.screenName, name: p.name, email: p.email, passwordHash: p.passwordHash, emailVerified: true, source: p.source, country: p.country });
+				userId = await signUp({ code: s.code, screenName: p.screenName, name: p.name, email: p.email, passwordHash: p.passwordHash, emailVerified: true, source: p.source, country: p.country, ip: requestIp(req) ?? p.ip });
 			} catch (e) {
 				if (e instanceof SignupError) return respond(fieldError("code", e.message));
 				throw e;
@@ -307,7 +307,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 		const fieldOf = (e: Error) => (/email/i.test(e.message) ? "email" : /password/i.test(e.message) ? "password" : /name/i.test(e.message) && !/user/i.test(e.message) ? "name" : "username");
 		// with mail set up, the address is proven first: the checked form waits for the code
 		if (mailEnabled()) {
-			const given = { code: s.code, screenName: String(f.username ?? s.username), name: String(f.name ?? ""), password: String(f.password ?? ""), email: String(f.email ?? "") };
+			const given = { code: s.code, screenName: String(f.username ?? s.username), name: String(f.name ?? ""), password: String(f.password ?? ""), email: String(f.email ?? ""), ip: requestIp(req) };
 			let checked: Awaited<ReturnType<typeof checkSignup>>;
 			try {
 				checked = await checkSignup(given);
@@ -315,7 +315,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 				if (!(e instanceof SignupError)) throw e;
 				return respond(fieldError(fieldOf(e), e.message));
 			}
-			const held = { ...checked, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: countryFromHeader(req.headers.get("cf-ipcountry")) ?? null };
+			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: countryFromHeader(req.headers.get("cf-ipcountry")) ?? null };
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb where token = ${token}::uuid`;
 			if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("email", "Too many codes sent from here. Wait an hour."));
 			try {
@@ -332,6 +332,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 				name: String(f.name ?? ""),
 				password: String(f.password ?? ""),
 				email: String(f.email ?? ""),
+				ip: requestIp(req),
 				source: await platformSource(req),
 				country: countryFromHeader(req.headers.get("cf-ipcountry")) ?? null,
 			});

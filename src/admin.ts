@@ -11,7 +11,7 @@ import { sql } from "./db";
 import { isFlag } from "./flags";
 import { isId, newId } from "./ids";
 import { createInvite } from "./invites";
-import { activeStrikes } from "./moderation";
+import { activeStrikes, signOutEverywhere } from "./moderation";
 import { REASONS } from "./reports";
 import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
@@ -240,7 +240,11 @@ const ACTIONS: Record<string, Action> = {
 				left join users a on a.id = l.actor_id where l.target = ${id} order by l.id desc limit 50`;
 			const strikes = await activeStrikes(id);
 			const ladder = settings().automod.ladder;
-			return { user: u, invited, log, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
+			const alts = await sql`select distinct u.id::text as id, u.screen_name, u.status from login_events mine
+				join login_events other on other.ip = mine.ip and other.user_id <> mine.user_id and other.created_at > now() - interval '90 days'
+				join users u on u.id = other.user_id
+				where mine.user_id = ${id}::bigint and mine.ip is not null and mine.created_at > now() - interval '90 days' limit 20`;
+			return { user: u, invited, log, alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
 		},
 	},
 
@@ -329,7 +333,7 @@ const ACTIONS: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't change your own standing.");
 			await guard(a, id);
 			await sql`update users set status = ${status}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
-			if (status === "suspended") await sql`delete from sessions where user_id = ${id}::bigint`;
+			if (status === "suspended") await signOutEverywhere(id);
 			await audit(a, "set_status", id, { status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
 		},

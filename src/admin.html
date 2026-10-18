@@ -176,6 +176,7 @@ const PAGES = {
 	users: { icon: "group", title: "Users" },
 	orgs: { icon: "domain", title: "Organisations" },
 	posts: { icon: "chat", title: "Posts" },
+	automod: { icon: "shield", title: "Automod" },
 	articles: { icon: "article", title: "Articles" },
 	media: { icon: "photo_library", title: "Media" },
 	invites: { icon: "confirmation_number", title: "Invites" },
@@ -1014,6 +1015,39 @@ const RENDER = {
 		main.querySelectorAll("[data-reset]").forEach((b) => b.onclick = () => act(() => api("resetBranding", { slot: b.dataset.reset }), "Back to the default").then(route));
 	},
 
+	async automod(main) {
+		main.innerHTML = '<h1>Automod</h1><p class="dim">New posts and profiles are checked as they\'re written. This looks through what was there before: visible posts, newest first, and every profile. Nothing happens to what it finds until you act. Settings &gt; Automod holds the strike ladder.</p>' +
+			'<div class="bar"><button class="btn primary" id="scan">Scan</button><span class="dim small" id="scanState"></span></div><div id="hits"></div>';
+		const found = [];
+		let next = null, scanned = 0;
+		const draw = () => {
+			$("#hits").innerHTML = found.length
+				? '<div class="scroll"><table class="table"><tr><th>What</th><th>Who</th><th>Matched</th><th></th></tr>' + found.map((h, i) =>
+					'<tr><td style="max-width:420px;white-space:pre-wrap">' + esc(h.text) + '<div class="dim small">' + (h.kind === "post" ? '<a href="/' + esc(h.screen_name) + "/status/" + esc(h.id) + '" target="_blank">open post</a>' : "profile") + "</div></td>" +
+					'<td><a href="#user/' + esc(h.user_id) + '">@' + esc(h.screen_name) + "</a>" + (h.status !== "active" ? ' <span class="pill ' + esc(h.status) + '">' + esc(h.status) + "</span>" : "") + "</td>" +
+					'<td><span class="pill">' + esc(h.category) + '</span> <span class="small dim code">' + esc(h.term) + "</span></td><td>" +
+					(h.kind === "post" && !h.done ? '<button class="btn" data-hide="' + i + '">Hide</button>' : h.done ? '<span class="dim small">hidden</span>' : "") + "</td></tr>").join("") + "</table></div>"
+				: scanned ? '<div class="empty">Nothing found so far.</div>' : "";
+			$("#hits").querySelectorAll("[data-hide]").forEach((b) => b.onclick = () => {
+				const h = found[Number(b.dataset.hide)];
+				act(() => api("setPostVisibility", { id: h.id, hidden: true, sensitive: !!h.sensitive }), "Post hidden").then(() => { h.done = true; draw(); });
+			});
+		};
+		$("#scan").onclick = () => act(async () => {
+			if (!next) {
+				found.length = 0;
+				scanned = 0;
+			}
+			const r = await api("automodScan", next ? { before: next } : {});
+			found.push(...r.hits);
+			scanned += r.scanned;
+			next = r.next;
+			$("#scanState").textContent = scanned + (scanned === 1 ? " post" : " posts") + " scanned, " + found.length + " found" + (next ? "" : ", that's everything");
+			$("#scan").textContent = next ? "Scan older posts" : "Scan again";
+			draw();
+		});
+	},
+
 	async audit(main, filter = {}) {
 		const { entries } = await api("audit", filter);
 		main.innerHTML = '<h1>Audit log</h1><div class="bar"><input id="auditWho" placeholder="@handle" value="' + esc(filter.target || "") + '">' +
@@ -1049,7 +1083,7 @@ function userTable(users, orgs = false, pick = false) {
 }
 
 async function renderUser(main, id) {
-	const { user: u, invited, log, strikes, next_step } = await api("user", { id });
+	const { user: u, invited, log, alts, strikes, next_step } = await api("user", { id });
 	const isOrg = u.verified_type === "business" || u.verified_type === "government";
 	const [affiliates, { badges }, { notes }, { messages }, sessions, handles] = await Promise.all([
 		isOrg ? api("affiliates", { orgId: id }).then((r) => r.affiliates) : [],
@@ -1131,6 +1165,7 @@ async function renderUser(main, id) {
 		// organisation
 		(isOrg ? '<h2>Affiliates</h2>' + (can("admin") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : "") +
 			(affiliates.length ? '<div class="scroll"><table class="table">' + affiliates.map((a) => '<tr><td>' + person(a) + "</td><td>" + (can("admin") ? '<button class="btn danger" data-unaff="' + esc(a.id) + '">Remove</button>' : "") + "</td></tr>").join("") + "</table></div>" : '<div class="empty">No affiliates yet.</div>') : "") +
+		(alts.length ? '<h2>Seen from the same addresses</h2><p class="dim small">Accounts that signed in from an address this one used in the last 90 days. Shared networks put strangers here too.</p><p>' + alts.map((a) => '<a href="#user/' + esc(a.id) + '">@' + esc(a.screen_name) + "</a>" + (a.status !== "active" ? ' <span class="pill ' + esc(a.status) + '">' + esc(a.status) + "</span>" : "")).join(", ") + "</p>" : "") +
 		(invited.length ? "<h2>Invited</h2><p>" + invited.map((i) => '<a href="#user/' + esc(i.id) + '">@' + esc(i.screen_name) + "</a>").join(", ") + "</p>" : "") +
 		"<h2>History</h2>" + (log.length ? '<table class="table">' + log.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>" + (e.automatic ? "automod" : "@" + esc(e.actor ?? "?")) + " " + esc(e.action.replace(/_/g, " ")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</table>" : '<div class="empty">No staff actions yet.</div>');
 

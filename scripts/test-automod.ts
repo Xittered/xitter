@@ -38,16 +38,16 @@ const ageStrikes = (id: string) => sql`update staff_messages set created_at = cr
 const tweet = (s: Awaited<ReturnType<typeof session>>, text: string) => s.gql("CreateTweet", { tweet_text: text });
 const created: string[] = [];
 const name = (p: string) => `${p}${Date.now().toString().slice(-8)}`;
-const before = structuredClone(settings().automod);
 await loadSettings();
 const saved = structuredClone(settings().automod);
 
+let admin: Awaited<ReturnType<typeof session>> | undefined;
 try {
 	const adminName = name("am_adm");
 	const adminId = await createUser(adminName, adminName, password);
 	created.push(adminId);
 	await sql`update users set role = 'admin' where id = ${adminId}::bigint`;
-	const admin = await session(adminName);
+	admin = await session(adminName);
 	check(admin.ok, "admin signs in");
 	check((await admin.admin("saveAutomod", { enabled: true, strike_days: 365, ladder: [0, 24, 168, -1] })).status === 200, "ladder saved: warning, 1 day, 1 week, permanent");
 	await loadSettings();
@@ -136,6 +136,50 @@ try {
 	check((await r.form("/1.1/account/deactivate.json", { password })).status >= 400, "or deactivate its way out of the sanction");
 	await sql`update users set status = 'active' where id = ${rId}::bigint`;
 
+	const pName = name("am_api");
+	const pId = await createUser(pName, pName, password);
+	created.push(pId);
+	await sql`update users set email = 'evader.test@gmail.com' where id = ${pId}::bigint`;
+	const p = await session(pName);
+	const { createToken } = await import("../src/public-api");
+	const apiToken = await createToken(pId, "test", "write");
+	const me = () => fetch(`${origin}/api/v1/me`, { headers: { authorization: `Bearer ${apiToken}` } });
+	check((await me()).status === 200, "an API token works before the suspension");
+	const chatToken = (await p.gql("GenerateXChatTokenMutation", {})).data.data.user_get_x_chat_auth_token.token;
+	check((await fetch(`${origin}/xchat/ws?token=${chatToken}`)).status === 400, "its chat token opens a socket before the suspension");
+	await sql`insert into login_events (id, user_id, ip, app) values (${Date.now()}::bigint, ${pId}::bigint, '203.0.113.77', 'test')`;
+	check((await admin.admin("setStatus", { id: pId, status: "suspended", reason: "test" })).status === 200, "staff suspend the account");
+	check((await me()).status === 401, "an API token issued before the suspension stops working");
+	check((await fetch(`${origin}/xchat/ws?token=${chatToken}`)).status === 403, "and so does a chat token");
+	check((await p.gql("CreateTweet", { tweet_text: "still here?" })).status === 401, "and the old session");
+	check((await sql`select 1 from sessions where user_id = ${pId}::bigint`).length === 0, "every session is gone");
+	const { checkSignup, SignupError } = await import("../src/invites");
+	const signup = async (email: string, ip: string | null) => {
+		try {
+			await checkSignup({ code: "", screenName: name("am_new"), name: "new", password: "longenough1", email, ip });
+			return "ok";
+		} catch (e) {
+			return e instanceof SignupError ? e.message : String(e);
+		}
+	};
+	check((await signup("someone.else@example.com", "203.0.113.77")).includes("isn't available"), "a sign-up from the suspended account's address is refused");
+	check((await signup("e.v.a.d.e.r.test+alt@googlemail.com", "198.51.100.9")).includes("isn't available"), "a sign-up with the same gmail behind dots and a +tag is refused");
+	check((await signup("someone.else@example.com", "198.51.100.9")) === "ok", "an unrelated sign-up goes through");
+	check((await sql`select 1 from audit_log where action = 'evasion_signup_refused' and target = ${pId}`).length === 2, "refused evasions are in the audit log");
+	check((await admin.admin("user", { id: pId })).status === 200, "the admin view loads with its address matches");
+
+	const oldName = name("am_old");
+	const oldId = await createUser(oldName, oldName, password);
+	created.push(oldId);
+	const oldPost = String(Date.now());
+	await sql`insert into posts (id, user_id, text, conversation_id) values (${oldPost}::bigint, ${oldId}::bigint, 'written before the automod: gas the jews', ${oldPost}::bigint)`;
+	await sql`update users set bio = 'k1ke hater' where id = ${oldId}::bigint`;
+	const scan = await admin.admin("automodScan", {});
+	check(scan.data.hits.some((h: any) => h.kind === "post" && h.id === oldPost && h.category === "hate"), "the scan finds an older hateful post");
+	check(scan.data.hits.some((h: any) => h.kind === "profile" && h.id === oldId), "and an older hateful bio");
+	check((await standing(oldId)).status === "active" && (await strikes(oldId)) === 0, "scanning alone sanctions nobody");
+	check(!scan.data.hits.some((h: any) => h.text?.includes("yuri account")), "the pro-trans post isn't flagged");
+
 	const huge = await fetch(`${origin}/i/api/graphql/q/CreateTweet`, { method: "POST", headers: { ...r.headers, "content-type": "application/json" }, body: "x".repeat(3 * 1024 * 1024) });
 	check(huge.status === 413, "a 3 MB request body is refused");
 	let deep: any = "x";
@@ -149,10 +193,13 @@ try {
 
 	console.log(`all passed (${checks})`);
 } finally {
-	await setSetting("automod", saved.enabled === undefined ? before : saved);
+	if (admin) await admin.admin("saveAutomod", saved);
+	else await setSetting("automod", saved);
 	for (const id of created) {
 		await sql`delete from audit_log where target = ${id}`;
 		await sql`delete from scheduled_posts where user_id = ${id}::bigint`;
+		await sql`delete from login_events where user_id = ${id}::bigint`;
+		await sql`delete from posts where user_id = ${id}::bigint`;
 		await sql`delete from users where id = ${id}::bigint`;
 	}
 	await sql.end();

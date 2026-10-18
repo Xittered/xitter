@@ -57,7 +57,23 @@ export async function usernameState(raw: string): Promise<"available" | "taken" 
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-type SignupForm = { code: string; screenName: string; name: string; password: string; email: string; flag?: string };
+type SignupForm = { code: string; screenName: string; name: string; password: string; email: string; flag?: string; ip?: string | null };
+
+const CANONICAL_EMAIL = (column: ReturnType<typeof sql>) => sql`case when split_part(lower(${column}), '@', 2) in ('gmail.com', 'googlemail.com')
+	then replace(regexp_replace(split_part(lower(${column}), '@', 1), '[+].*$', ''), '.', '') || '@gmail.com'
+	else regexp_replace(split_part(lower(${column}), '@', 1), '[+].*$', '') || '@' || split_part(lower(${column}), '@', 2) end`;
+
+const SUSPENDED_MEMBER = sql`u.status = 'suspended' and u.deactivated_at is null and u.role is null`;
+
+export async function evadedSuspension(email: string, ip: string | null | undefined): Promise<{ user: string; by: "email" | "address" } | undefined> {
+	const [byEmail] = await sql`select u.id::text from users u where ${SUSPENDED_MEMBER} and u.email is not null
+		and ${CANONICAL_EMAIL(sql`u.email`)} = ${CANONICAL_EMAIL(sql`${email}::text`)} limit 1`;
+	if (byEmail) return { user: byEmail.id, by: "email" };
+	if (!ip) return undefined;
+	const [byIp] = await sql`select u.id::text from login_events e join users u on u.id = e.user_id
+		where e.ip = ${ip} and e.created_at > now() - interval '30 days' and ${SUSPENDED_MEMBER} limit 1`;
+	return byIp ? { user: byIp.id, by: "address" } : undefined;
+}
 
 // The checks sign-up makes before anything is stored, so the emailed-code step
 // (onboarding.ts) can refuse a bad form before sending a code.
@@ -77,6 +93,12 @@ export async function checkSignup(f: SignupForm) {
 	if ((await getSetting("signup_mode")) === "closed") throw new SignupError("Sign-up is closed on this instance.");
 	if ((await sql`select 1 from users where lower(screen_name) = lower(${screenName})`).length) throw new SignupError("That username is taken.");
 	if ((await sql`select 1 from users where lower(email) = ${email}`).length) throw new SignupError("That email is already used by another account.");
+	const evaded = await evadedSuspension(email, f.ip);
+	if (evaded) {
+		await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'evasion_signup_refused', ${evaded.user},
+			${JSON.stringify({ by: evaded.by, screen_name: screenName, ip: f.ip ?? null })}::text::jsonb)`;
+		throw new SignupError("Sign-up isn't available for you right now. If you think this is a mistake, contact this instance's staff.");
+	}
 	return { email, screenName, name };
 }
 

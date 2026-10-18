@@ -14,6 +14,16 @@ export async function expireSanctions() {
 	});
 }
 
+export async function signOutEverywhere(...userIds: string[]) {
+	if (!userIds.length) return;
+	const ids = sql.array(userIds, "INT8");
+	await sql`delete from sessions where user_id = any(${ids})`;
+	await sql`delete from login_challenges where user_id = any(${ids})`;
+	await sql`delete from push_subscriptions where user_id = any(${ids})`;
+	const chat = await import("./chat");
+	for (const id of userIds) chat.closeSockets(id);
+}
+
 export type Escalation = { strikes: number; outcome: "warning" | "suspended" | "permanent" | "staff"; hours?: number };
 
 export async function activeStrikes(userId: string): Promise<number> {
@@ -45,10 +55,7 @@ export async function escalate(userId: string, actorId: string | null, reason: s
 		}
 		result = { strikes, outcome: permanent ? "permanent" : "suspended", hours: step };
 	}
-	if (result.outcome !== "warning") {
-		await sql`delete from sessions where user_id = ${userId}::bigint`;
-		void import("./chat").then((chat) => chat.closeSockets(userId));
-	}
+	if (result.outcome !== "warning") await signOutEverywhere(userId);
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, ${actorId}::bigint, 'escalate', ${userId},
 		${JSON.stringify({ ...result, reason: reason.slice(0, 500) })}::text::jsonb)`;
 	return result;

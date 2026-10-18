@@ -128,6 +128,7 @@ const cursorOf = (url: URL) => {
 
 async function body(req: Request): Promise<Record<string, any>> {
 	const type = req.headers.get("content-type") ?? "";
+	if (Number(req.headers.get("content-length") ?? 0) > 2 * 1024 * 1024) throw new ApiError(413, "That request is too large.");
 	if (type.includes("application/json")) return (await req.json().catch(() => ({}))) ?? {};
 	if (type.includes("form")) return Object.fromEntries((await req.formData().catch(() => new FormData())).entries());
 	return {};

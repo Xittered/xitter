@@ -1,7 +1,7 @@
 // Settings > Your account: password, deactivation. Username and language go
 // through account/settings.json (rest.ts) and use the helpers here.
 import { hateInName } from "./hate";
-import { automodStrike } from "./moderation";
+import { automodStrike, signOutEverywhere } from "./moderation";
 import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { sql } from "./db";
@@ -96,7 +96,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		const [standing] = await sql`select status, status_until from users where id = ${viewer.id}::bigint`;
 		if (standing?.status !== "active" || standing.status_until) return error(214, "Your account can't be deactivated while a sanction is in effect.");
 		await sql`update users set status = 'suspended', deactivated_at = now() where id = ${viewer.id}::bigint`;
-		await sql`delete from sessions where user_id = ${viewer.id}::bigint`;
+		await signOutEverywhere(viewer.id);
 		const headers = new Headers();
 		for (const n of ["auth_token", "ct0"]) headers.append("set-cookie", `${n}=; Path=/; Max-Age=0`);
 		return Response.json({ status: "ok" }, { headers });

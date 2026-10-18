@@ -3,6 +3,7 @@
 // here. A suspended account can't sign in, so /appeal also takes the
 // handle and password.
 
+import { hit, used } from "./ratelimit";
 import { randomBytes } from "node:crypto";
 import type { Viewer } from "./auth";
 import { SECURE } from "./auth";
@@ -139,9 +140,14 @@ export async function appealRoute(req: Request, address: string) {
 	const form = new URLSearchParams(raw);
 	const cookie = /(?:^|;\s*)appeal_csrf=([^;]+)/.exec(req.headers.get("cookie") ?? "")?.[1];
 	if (!cookie || form.get("csrf") !== cookie) return page("The form expired. Try again.", 403);
-	const [user] = await sql`select id::text, password_hash from users where lower(screen_name) = lower(${form.get("username") ?? ""})`;
-	const valid = await Bun.password.verify(form.get("password") ?? "", user?.password_hash ?? (await dummyHash)).catch(() => false);
-	if (!user || !valid) return page("Wrong handle or password.", 400);
+	const handle = String(form.get("username") ?? "").trim().replace(/^@/, "").toLowerCase().slice(0, 15);
+	if (used("password", handle)) return page("Too many tries for that account. Wait 15 minutes.", 429);
+	const [user] = await sql`select id::text, password_hash from users where lower(screen_name) = ${handle}`;
+	const valid = await Bun.password.verify(String(form.get("password") ?? "").slice(0, 1024), user?.password_hash ?? (await dummyHash)).catch(() => false);
+	if (!user || !valid) {
+		hit("password", handle);
+		return page("Wrong handle or password.", 400);
+	}
 	try {
 		await submitAppeal(user.id, form.get("body"));
 	} catch (e) {

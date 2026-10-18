@@ -43,7 +43,8 @@ export async function codeAccepted(userId: string, input: string): Promise<boole
 // 15 minute, five-guess challenge the code screen answers.
 export async function startChallenge(screenName: string, password: string): Promise<string | undefined> {
 	if (password.length > 1024 || screenName.length > 64) return undefined;
-	const [u] = await sql`select id::text, password_hash, totp_enabled from users where lower(screen_name) = lower(${screenName}) and status <> 'suspended'`;
+	const [u] = await sql`select id::text, password_hash, totp_enabled from users where lower(screen_name) = lower(${screenName})
+		and (status <> 'suspended' or deactivated_at > now() - interval '30 days')`;
 	if (!u?.totp_enabled) return undefined;
 	if (!(await Bun.password.verify(password, u.password_hash).catch(() => false))) return undefined;
 	const token = crypto.randomUUID();
@@ -65,6 +66,9 @@ export async function answerChallenge(token: string, code: string): Promise<{ us
 		return { error: "That code isn't right. Check your authenticator app and try again." };
 	}
 	await sql`delete from login_challenges where token = ${token}::uuid`;
+	const [u] = await sql`select status, deactivated_at > now() - interval '30 days' as returning from users where id = ${c.user_id}::bigint`;
+	if (u?.returning) await sql`update users set status = 'active', deactivated_at = null where id = ${c.user_id}::bigint`;
+	else if (!u || u.status === "suspended") return { error: "This account is suspended." };
 	return { userId: c.user_id };
 }
 
