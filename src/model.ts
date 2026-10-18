@@ -136,6 +136,8 @@ function parodyMask(): string {
 	return mask;
 }
 
+const PCF_TEXT: Record<string, string> = { Parody: "Parody account", Commentary: "Commentary account", Fan: "Fan account" };
+
 // a staff-made label, in the shape the client gives its parody label
 function profileLabel(l: NonNullable<User["label"]>) {
 	const icon = l.badge_id ? `${PUBLIC_ORIGIN}/public/badge-${l.badge_id}.png` : parodyMask();
@@ -162,7 +164,9 @@ function automatedLabel(owner: string) {
 
 function badgeLabel(u: User) {
 	if (u.automated_by) return automatedLabel(u.automated_by);
-	if (hasParodyLabel(u)) return {};
+	// the profile reads parody_commentary_fan_label, but search results, lists
+	// and other user cells only ask for this slot: the label goes in both
+	if (hasParodyLabel(u)) return profileLabel({ text: PCF_TEXT[u.parody_label!] ?? `${u.parody_label} account`, badge_id: null, url: `${PUBLIC_ORIGIN}/rules` });
 	if (u.label) return profileLabel(u.label);
 	const [first] = badgeList(u);
 	if (!first) return {};
@@ -193,7 +197,9 @@ export function userResult(u: User) {
 		location: { location: u.location },
 		media_permissions: { can_media_tag: true },
 		notifications_settings: { notifications_enabled: !!u.stats?.notifying },
-		parody_commentary_fan_label: u.parody_label ?? "None",
+		// "None": the label travels in affiliates_highlighted_label (badgeLabel),
+		// which user cells in search and lists show and this field's label isn't
+		parody_commentary_fan_label: "None",
 		pinned_items: u.pinned_post_id ? { tweet_ids_str: [u.pinned_post_id] } : {},
 		possibly_sensitive: false,
 		privacy: { protected: !!u.protected },
@@ -275,7 +281,9 @@ export function legacyUser(u: User) {
 		muting: u.stats?.muting ?? false,
 		has_graduated_access: true,
 		created_at: u.created_at.toISOString(),
-		parody_commentary_fan_label: u.parody_label ?? "None",
+		// "None": the label travels in affiliates_highlighted_label (badgeLabel),
+		// which user cells in search and lists show and this field's label isn't
+		parody_commentary_fan_label: "None",
 		can_dm: false,
 	};
 }
@@ -490,11 +498,10 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 			...(placeById(p.place_id) ? { place: placeById(p.place_id) } : {}),
 			source: (p.source ?? webSource()).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!),
 			id_str: p.id,
-			...(p.reply_to_id && p.reply_user_id
+			...(p.reply_to_id
 				? {
-						in_reply_to_screen_name: p.reply_screen_name,
 						in_reply_to_status_id_str: p.reply_to_id,
-						in_reply_to_user_id_str: p.reply_user_id,
+						...(p.reply_user_id ? { in_reply_to_screen_name: p.reply_screen_name, in_reply_to_user_id_str: p.reply_user_id } : {}),
 					}
 				: {}),
 			is_quote_status: !!p.quote_id,
@@ -596,6 +603,8 @@ const communityContext = (p: PostRow): SocialContext | undefined => {
 	return name ? { type: "TimelineGeneralContext", contextType: "Community", text: name, landingUrl: { url: `/i/communities/${p.community_id}`, urlType: "ExternalUrl" } } : undefined;
 };
 
+export const tombstoneEntry = (id: string, text: string, sortIndex: string) =>
+	itemEntry(id, { __typename: "TweetTombstone", tombstone: { __typename: "TextTombstone", text: { rtl: false, text, entities: [] } } }, sortIndex);
 export const tweetEntry = (p: PostRow, sortIndex: string) => itemEntry(p.id, tweetResult(p), sortIndex, communityContext(p));
 
 // the client lifts an entry to the top of a profile only when it carries this label

@@ -32,16 +32,35 @@ export const bytes = (v: Value | undefined) => (v?.t === 11 ? v.v : undefined);
 export const fields = (v: Value | undefined) => (v?.t === 12 ? v.v : undefined);
 export const int = (v: Value | undefined) => (v?.t === 10 ? v.v : v?.t === 8 || v?.t === 6 || v?.t === 3 ? BigInt(v.v) : undefined);
 
+// Everything here comes from clients. A negative length once moved the cursor
+// backwards, so one 7-byte message looped forever and hung the server: lengths
+// and counts must be non-negative and fit in what is left (every element takes
+// at least a byte), and nesting stops at MAX_DEPTH.
+const MAX_DEPTH = 64;
+
 class Reader {
 	pos = 0;
+	depth = 0;
 	view: DataView;
 	constructor(public buf: Uint8Array) {
 		this.view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 	}
 	need(n: number) {
-		if (this.pos + n > this.buf.length) throw new Error("thrift: truncated");
+		if (!Number.isInteger(n) || n < 0 || this.pos + n > this.buf.length) throw new Error("thrift: truncated");
+	}
+	count(n: number) {
+		if (n < 0 || n > this.buf.length - this.pos) throw new Error("thrift: bad count");
+		return n;
 	}
 	value(t: number): Value {
+		if (++this.depth > MAX_DEPTH) throw new Error("thrift: nested too deep");
+		try {
+			return this.read(t);
+		} finally {
+			this.depth--;
+		}
+	}
+	read(t: number): Value {
 		const v = this.view;
 		switch (t) {
 			case 2:
@@ -75,6 +94,7 @@ class Reader {
 				const k = this.buf[this.pos], e = this.buf[this.pos + 1];
 				const n = v.getInt32(this.pos + 2);
 				this.pos += 6;
+				this.count(n);
 				const out: [Value, Value][] = [];
 				for (let i = 0; i < n; i++) out.push([this.value(k), this.value(e)]);
 				return { t, k, e, v: out };
@@ -85,6 +105,7 @@ class Reader {
 				const e = this.buf[this.pos];
 				const n = v.getInt32(this.pos + 1);
 				this.pos += 5;
+				this.count(n);
 				const out: Value[] = [];
 				for (let i = 0; i < n; i++) out.push(this.value(e));
 				return { t, e, v: out };

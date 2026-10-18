@@ -205,15 +205,12 @@ try {
 	await author.gql("CreateTweet", { tweet_text: "a reply from soon gone", reply: { in_reply_to_tweet_id: fanPost } });
 	const homeOf = async (s: Awaited<ReturnType<typeof session>>) => JSON.stringify((await s.gql("HomeLatestTimeline", { count: 40 })).data);
 	check((await homeOf(fan)).includes("soon gone"), "a followed account's post is on the home timeline");
-	const { trendingHashtags } = await import("../src/search");
-	check((await trendingHashtags(1, 200)).some((t) => t.tag === `#${tag}`), "and its hashtag trends");
 	check((await admin.admin("setStatus", { id: sId, status: "suspended", reason: "test" })).status === 200, "staff suspend the followed account");
 	check(!(await homeOf(fan)).includes("soon gone"), "its posts and their reposts leave the follower's home timeline");
 	check(!(await homeOf(admin)).includes("soon gone"), "and staff's home timeline too");
 	check(!JSON.stringify((await fan.gql("UserTweets", { userId: fId, count: 40 })).data).includes("soon gone"), "the follower's repost of it leaves their profile");
 	check(!JSON.stringify((await fan.gql("TweetDetail", { focalTweetId: fanPost })).data).includes("a reply from soon gone"), "its replies leave threads");
 	check(!JSON.stringify((await fan.gql("SearchTimeline", { rawQuery: tag, product: "Latest", count: 20 })).data).includes("soon gone"), "and search");
-	check(!(await trendingHashtags(1, 200)).some((t) => t.tag === `#${tag}`), "and its hashtags stop trending");
 	check(JSON.stringify((await admin.gql("TweetDetail", { focalTweetId: sPost })).data).includes("soon gone"), "staff can still open the post itself");
 
 	const oldName = name("am_old");

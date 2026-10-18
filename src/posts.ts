@@ -49,7 +49,7 @@ const select = (viewerId: string) => sql`
 	join users u on u.id = p.user_id and (not p.hidden or exists (select 1 from users staff where staff.id = ${viewerId}::bigint and staff.role is not null))
 		and u.id not in ${protectedFor(viewerId)} and u.id not in ${suspendedFor(viewerId)}
 	left join posts rp on rp.id = p.reply_to_id
-	left join users ru on ru.id = rp.user_id`;
+	left join users ru on ru.id = coalesce(rp.user_id, p.reply_to_user_id)`;
 
 function toRow(r: any): PostRow {
 	return {
@@ -109,7 +109,7 @@ async function hydrate(viewerId: string, posts: PostRow[], quotes = true): Promi
 			if (poll) p.poll = pollCard(poll);
 		}
 	}
-	const linkOf = (p: PostRow) => (p.poll || p.quote_id || p.article_id || p.media?.length ? undefined : linksIn(p.text).find((l) => previewable(l.url))?.url);
+	const linkOf = (p: PostRow) => (p.poll || p.quote_id || p.article_id || p.media?.length ? undefined : linksIn(p.text).filter((l) => previewable(l.url)).at(-1)?.url);
 	const previews = await previewsFor(posts.map(linkOf).filter((u): u is string => !!u));
 	for (const p of posts) {
 		const preview = previews.get(linkOf(p) ?? "");
@@ -396,11 +396,13 @@ export async function createPost(userId: string, text: string, opts: { replyToId
 	await checkLength(userId, text);
 	const id = newId();
 	let conversationId = id;
+	let replyToUserId: string | null = null;
 	if (opts.replyToId) {
 		const [parent] = await sql`select conversation_id, user_id from posts where id = ${opts.replyToId}::bigint`;
 		if (!parent) throw new PostError("The post you are replying to no longer exists.", 385);
 		if (await isBlockedEitherWay(userId, String(parent.user_id))) throw new PostError("You can't reply to this post.", 433);
 		conversationId = parent.conversation_id;
+		replyToUserId = String(parent.user_id);
 		const [limited] = await sql`select exists (select 1 from posts r where r.id = ${conversationId}::bigint and r.reply_policy is not null and r.user_id <> ${userId}::bigint and not (
 				(r.reply_policy = 'Community' and exists (select 1 from follows f where f.follower_id = r.user_id and f.followee_id = ${userId}::bigint))
 				or (r.reply_policy = 'ByInvitation' and exists (select 1 from post_mentions m where m.post_id = r.id and m.user_id = ${userId}::bigint))
@@ -418,13 +420,13 @@ export async function createPost(userId: string, text: string, opts: { replyToId
 		const [m] = await sql`select 1 from community_members where community_id = ${opts.communityId}::bigint and user_id = ${userId}::bigint`;
 		if (!m) throw new PostError("Only members can post in this community.", 187);
 	}
-	await sql`insert into posts (id, user_id, text, reply_to_id, conversation_id, quote_id, article_id, source, community_id, place_id, reply_policy)
-		values (${id}::bigint, ${userId}::bigint, ${text}, ${opts.replyToId ?? null}::bigint, ${conversationId}::bigint, ${opts.quoteId ?? null}::bigint, ${opts.articleId ?? null}::bigint, ${opts.source ?? webSource()}, ${opts.communityId ?? null}::bigint, ${opts.placeId ?? null}, ${opts.replyToId ? null : opts.replyPolicy ?? null})`;
+	await sql`insert into posts (id, user_id, text, reply_to_id, reply_to_user_id, conversation_id, quote_id, article_id, source, community_id, place_id, reply_policy)
+		values (${id}::bigint, ${userId}::bigint, ${text}, ${opts.replyToId ?? null}::bigint, ${replyToUserId}::bigint, ${conversationId}::bigint, ${opts.quoteId ?? null}::bigint, ${opts.articleId ?? null}::bigint, ${opts.source ?? webSource()}, ${opts.communityId ?? null}::bigint, ${opts.placeId ?? null}, ${opts.replyToId ? null : opts.replyPolicy ?? null})`;
 	const names = [...new Set([...text.matchAll(MENTION)].map((m) => m[1].toLowerCase()))].slice(0, 20);
 	if (names.length)
 		await sql`insert into post_mentions (post_id, user_id)
 			select ${id}::bigint, u.id from users u where lower(u.screen_name) = any(${sql.array(names, "TEXT")}) on conflict do nothing`;
-	const link = opts.quoteId || opts.articleId ? undefined : linksIn(text).find((l) => previewable(l.url));
+	const link = opts.quoteId || opts.articleId ? undefined : linksIn(text).filter((l) => previewable(l.url)).at(-1);
 	if (link && !(await sql`select 1 from link_previews where url = ${link.url}`).length) await Promise.race([fetchPreview(link.url), Bun.sleep(4000)]);
 	return id;
 }

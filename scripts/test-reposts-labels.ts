@@ -68,7 +68,8 @@ try {
 	r = await other.gql("AccountParodyScreenImplV2ParodyLabelMutation", { parodyProfileLabel: "Fan" });
 	check(r.data?.update_parody_label?.parody_commentary_fan_label === "Fan", "the label is set", r);
 	r = await author.get("UserByScreenName", { screen_name: otherName });
-	check(r.data?.user?.result?.parody_commentary_fan_label === "Fan", "the profile carries it", r.data?.user?.result?.parody_commentary_fan_label);
+	// the label travels in the slot user cells read too (model.ts badgeLabel)
+	check(r.data?.user?.result?.affiliates_highlighted_label?.label?.description === "Fan account", "the profile carries it", r.data?.user?.result?.affiliates_highlighted_label);
 	r = await other.get("AccountParodyScreenImplV2ParodyLabelSettingQuery");
 	check(r.data?.get_parody_label_settings?.is_label_update_disabled === true, "then it's locked for 48 hours", r);
 	r = await other.gql("AccountParodyScreenImplV2ParodyLabelMutation", { parodyProfileLabel: "Parody" });

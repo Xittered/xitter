@@ -29,6 +29,8 @@ create table if not exists posts (
 	created_at timestamptz not null default now()
 );
 create index if not exists posts_reply_to_idx on posts (reply_to_id);
+alter table posts drop constraint if exists posts_reply_to_id_fkey;
+alter table posts add column if not exists reply_to_user_id bigint;
 create index if not exists posts_user_idx on posts (user_id, id desc);
 
 create table if not exists custom_badges (
@@ -904,9 +906,18 @@ create table if not exists delegation_members (
 );
 create index if not exists delegation_members_member_idx on delegation_members (member_id);
 -- who may invite this account into theirs: Nobody, Everyone or OnlyFollowing
--- (people it follows), as the client names them
-alter table users add column if not exists delegation_invites text not null default 'Nobody'
+-- (people it follows), as the client names them. Everyone by default: an
+-- invite still needs accepting, and with Nobody every invite failed with the
+-- client's bare "Something went wrong". Accounts from before that are moved
+-- over once, while the old default is still on the column.
+alter table users add column if not exists delegation_invites text not null default 'Everyone'
 	check (delegation_invites in ('Nobody', 'Everyone', 'OnlyFollowing'));
+do $$ begin
+	if (select column_default from information_schema.columns where table_name = 'users' and column_name = 'delegation_invites') = '''Nobody''::text' then
+		update users set delegation_invites = 'Everyone' where delegation_invites = 'Nobody';
+		alter table users alter column delegation_invites set default 'Everyone';
+	end if;
+end $$;
 -- X's automated account label: the account that runs this one
 alter table users add column if not exists automated_by bigint references users (id) on delete set null;
 
@@ -953,3 +964,10 @@ create table if not exists account_labels (
 	created_at timestamptz not null default now()
 );
 alter table users add column if not exists label_id bigint references account_labels(id) on delete set null;
+
+update posts p set reply_to_user_id = r.user_id from posts r where r.id = p.reply_to_id and p.reply_to_user_id is null;
+update posts set reply_to_id = conversation_id where reply_to_id is null and conversation_id <> id;
+
+alter table users add column if not exists role_granted_by bigint;
+update users u set role_granted_by = (select a.actor_id from audit_log a where a.action = 'set_role' and a.target = u.id::text order by a.created_at desc limit 1)
+	where u.role is not null and u.role_granted_by is null;

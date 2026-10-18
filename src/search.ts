@@ -144,17 +144,24 @@ export async function hashtagsLike(prefix: string, limit: number): Promise<strin
 	return rows.map((r: any) => `#${r.tag}`);
 }
 
+const TREND_MIN_PEOPLE = 3;
+const TREND_MIN_ACCOUNT_AGE = "3 days";
+
 // hashtags of the last days with how many posts used them, for Explore
 // `country`: only posts by accounts based there. `followedBy`: posts by accounts
 // that viewer follows count twice (personalized trends).
 export async function trendingHashtags(days: number, limit: number, scope: { country?: string | null; followedBy?: string } = {}): Promise<{ tag: string; posts: number }[]> {
-	const rows = await sql`select tag, count(distinct id)::int as n, sum(w)::int as score from (
-			select p.id, lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag,
-				${scope.followedBy ? sql`case when p.user_id in (select followee_id from follows where follower_id = ${scope.followedBy}::bigint) then 2 else 1 end` : sql`1`} as w
-			from posts p
-			where p.created_at > now() - make_interval(days => ${days}) and not p.hidden and p.user_id not in ${outOfView("0")}
-				${scope.country ? sql`and p.user_id in (select id from users where country = ${scope.country})` : sql``}) t
-		group by tag order by score desc, n desc, tag limit ${limit}`;
+	const rows = await sql`select tag, sum(posts)::int as n, sum(w)::int as score from (
+			select tag, who, count(distinct id) as posts, max(w) as w from (
+				select p.id, lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag,
+					coalesce((select e.ip from login_events e where e.user_id = p.user_id and e.ip is not null order by e.created_at desc limit 1), p.user_id::text) as who,
+					${scope.followedBy ? sql`case when p.user_id in (select followee_id from follows where follower_id = ${scope.followedBy}::bigint) then 2 else 1 end` : sql`1`} as w
+				from posts p join users u on u.id = p.user_id
+				where p.created_at > now() - make_interval(days => ${days}) and not p.hidden and p.user_id not in ${outOfView("0")}
+					and u.status = 'active' and u.created_at < now() - ${TREND_MIN_ACCOUNT_AGE}::interval
+					${scope.country ? sql`and u.country = ${scope.country}` : sql``}) t
+			group by tag, who) people
+		group by tag having count(*) >= ${TREND_MIN_PEOPLE} order by score desc, n desc, tag limit ${limit}`;
 	// an admin can hide hashtags and put others first (Settings, Trends)
 	const { hidden_trends: hidden, promoted_trends: promoted } = settings().operations;
 	const found = rows.filter((r: any) => !hidden.includes(r.tag)).map((r: any) => ({ tag: `#${r.tag}`, posts: r.n }));

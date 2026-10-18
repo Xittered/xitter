@@ -171,7 +171,7 @@ export const delegationHandlers: Record<string, (v: Viewer, vars: Vars) => Promi
 			data: {
 				viewer_v2: {
 					id: globalId("Viewer", v.id),
-					user_results: { id: globalId("UserResults", v.id), result: { __typename: "User", id: globalId("User", v.id), rest_id: v.id, delegation_invitation_preferences: u?.delegation_invites ?? "Nobody" } },
+					user_results: { id: globalId("UserResults", v.id), result: { __typename: "User", id: globalId("User", v.id), rest_id: v.id, delegation_invitation_preferences: u?.delegation_invites ?? "Everyone" } },
 				},
 			},
 		};

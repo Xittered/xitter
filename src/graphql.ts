@@ -28,7 +28,7 @@ import { notificationsTimeline, unreadCount } from "./notifications";
 import { searchPosts, searchUsers, trendingHashtags } from "./search";
 import { isId, newId } from "./ids";
 import { attachMedia } from "./media";
-import { cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, replyEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
+import { cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, replyEntry, tombstoneEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
 import {
 	PostError,
 	ancestors,
@@ -213,6 +213,11 @@ const tweetDetail: Handler = async (viewer, vars) => {
 		if (at > 0) below.unshift(...below.splice(at, 1));
 		const canPin = !focal.reply_to_id && focal.author.id === viewer.id;
 		let sort = BigInt(newId());
+		const missing = (above[0] ?? focal).reply_to_id;
+		if (missing) {
+			const [still] = await sql`select 1 from posts where id = ${missing}::bigint`;
+			entries.push(tombstoneEntry(missing, still ? "This post is unavailable." : "This post was deleted by its author.", (sort--).toString()));
+		}
 		for (const p of above) entries.push(tweetEntry(p, (sort--).toString()));
 		const focalEntry = tweetEntry(focal, (sort--).toString());
 		// the "View hidden replies" link under a conversation's first post
