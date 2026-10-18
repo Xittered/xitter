@@ -127,49 +127,102 @@ const BACKGROUND_OPS = /^(viewer_context\.json|app_context\.json|p2)$/;
 // GraphQL reads the client sends as POST (HomeTimeline among them) aren't
 // writes. The bundle names each operation's type; chunks arrive lazily from
 // the CDN, so the folder is read again now and then.
-const queries = new Set<string>();
-const mutations = new Set<string>();
-const scanned = new Map<string, string>();
+type OperationFile = {
+        version: string;
+        queries: Set<string>;
+        mutations: Set<string>;
+};
+
+type OperationTypes = {
+        queries: Set<string>;
+        mutations: Set<string>;
+};
+
+let scanned = new Map<string, OperationFile>();
+let operationTypes: OperationTypes = {
+        queries: new Set<string>(),
+        mutations: new Set<string>(),
+};
+
 const operationPattern = /operationName:"(\w+)",operationType:"(query|mutation)"/g;
 let scanning = false;
+
 async function readOperationTypes() {
-	if (scanning) return;
-	scanning = true;
-	try {
-		const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
-		let files: string[] = [];
-		try {
-			files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
-		} catch {
-			return;
-		}
-		const current = new Set(files.map((f) => join(dir, f)));
-		for (const path of scanned.keys()) if (!current.has(path)) scanned.delete(path);
-		for (const f of files) {
-			const path = join(dir, f);
-			const info = await stat(path).catch(() => undefined);
-			if (!info) continue;
-			const version = `${info.size}:${info.mtimeMs}`;
-			if (scanned.get(path) === version) continue;
-			let tail = "";
-			const decoder = new TextDecoder();
-			try {
-				for await (const chunk of createReadStream(path, { highWaterMark: 64 * 1024 })) {
-					const text = tail + decoder.decode(chunk, { stream: true });
-					for (const m of text.matchAll(operationPattern)) (m[2] === "query" ? queries : mutations).add(m[1]);
-					tail = text.slice(-512);
-				}
-				for (const m of (tail + decoder.decode()).matchAll(operationPattern)) (m[2] === "query" ? queries : mutations).add(m[1]);
-				scanned.set(path, version);
-			} catch {}
-		}
-	} finally {
-		scanning = false;
-	}
+        if (scanning) return;
+        scanning = true;
+
+        try {
+                const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
+                const files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
+
+                if (files.length === 0) {
+                        throw new Error("No JavaScript client bundle files found.");
+                }
+
+                const nextScanned = new Map<string, OperationFile>();
+
+                for (const file of files) {
+                        const path = join(dir, file);
+                        const info = await stat(path);
+                        const version = `${info.size}:${info.mtimeMs}`;
+                        const cached = scanned.get(path);
+
+                        if (cached?.version === version) {
+                                nextScanned.set(path, cached);
+                                continue;
+                        }
+
+                        const queries = new Set<string>();
+                        const mutations = new Set<string>();
+                        const decoder = new TextDecoder();
+                        let tail = "";
+
+                        for await (const chunk of createReadStream(path, { highWaterMark: 64 * 1024 })) {
+                                const text = tail + decoder.decode(chunk, { stream: true });
+
+                                for (const match of text.matchAll(operationPattern)) {
+                                        (match[2] === "query" ? queries : mutations).add(match[1]);
+                                }
+
+                                tail = text.slice(-512);
+                        }
+
+                        const remaining = tail + decoder.decode();
+
+                        for (const match of remaining.matchAll(operationPattern)) {
+                                (match[2] === "query" ? queries : mutations).add(match[1]);
+                        }
+
+                        nextScanned.set(path, { version, queries, mutations });
+                }
+
+                const nextQueries = new Set<string>();
+                const nextMutations = new Set<string>();
+
+                for (const file of nextScanned.values()) {
+                        for (const operation of file.queries) nextQueries.add(operation);
+                        for (const operation of file.mutations) nextMutations.add(operation);
+                }
+
+                scanned = nextScanned;
+                operationTypes = {
+                        queries: nextQueries,
+                        mutations: nextMutations,
+                };
+        } catch (error) {
+                console.error("Failed to refresh GraphQL operation types:", error);
+        } finally {
+                scanning = false;
+        }
 }
-readOperationTypes();
-export const isMutation = (operation: string) => mutations.has(operation) || (/Mutation$/.test(operation) && !queries.has(operation));
-setInterval(readOperationTypes, 10 * MIN).unref();
+
+void readOperationTypes();
+
+export const isMutation = (operation: string) =>
+        operationTypes.mutations.has(operation) ||
+        (/Mutation$/.test(operation) && !operationTypes.queries.has(operation));
+
+setInterval(() => void readOperationTypes(), 10 * MIN).unref();
 
 // what the client calls an endpoint for limits: the GraphQL operation, or the
 // REST path with its ids folded so one user's calls share a window
@@ -187,7 +240,7 @@ export function bucketsFor(method: string, path: string, operation: string | und
 		if (POST_OPS.test(operation)) return ["read", "post"];
 		if (ENGAGE_OPS.test(operation)) return ["read", "engage"];
 		if (DM_OPS.test(operation)) return method === "GET" ? ["read"] : ["read", "dm"];
-		return method === "GET" || queries.has(operation) ? ["read"] : ["read", "write"];
+		return method === "GET" || (operationTypes.queries.has(operation) && !operationTypes.mutations.has(operation)) ? ["read"] : ["read", "write"];
 	}
 	if (ENGAGE_REST.test(path)) return ["read", "engage"];
 	return method === "GET" ? ["read"] : ["read", "write"];
