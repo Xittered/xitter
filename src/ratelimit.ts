@@ -126,24 +126,61 @@ const BACKGROUND_OPS = /^(viewer_context\.json|app_context\.json|p2)$/;
 // GraphQL reads the client sends as POST (HomeTimeline among them) aren't
 // writes. The bundle names each operation's type; chunks arrive lazily from
 // the CDN, so the folder is read again now and then.
-const queries = new Set<string>();
-const mutations = new Set<string>();
+type OperationTypes = {
+        queries: Set<string>;
+        mutations: Set<string>;
+};
+
+let operationTypes: OperationTypes = {
+        queries: new Set<string>(),
+        mutations: new Set<string>(),
+};
+
+let refreshingOperationTypes = false;
+
 async function readOperationTypes() {
-	const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
-	let files: string[] = [];
-	try {
-		files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
-	} catch {
-		return;
-	}
-	for (const f of files) {
-		const text = await readFile(join(dir, f), "utf8").catch(() => "");
-		for (const m of text.matchAll(/operationName:"(\w+)",operationType:"(query|mutation)"/g)) (m[2] === "query" ? queries : mutations).add(m[1]);
-	}
+        if (refreshingOperationTypes) return;
+        refreshingOperationTypes = true;
+
+        try {
+                const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
+                const files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
+
+                if (files.length === 0) {
+                        throw new Error("No JavaScript client bundle files found.");
+                }
+
+                const nextQueries = new Set<string>();
+                const nextMutations = new Set<string>();
+
+                for (const file of files) {
+                        const text = await readFile(join(dir, file), "utf8");
+
+                        for (const match of text.matchAll(
+                                /operationName:"(\w+)",operationType:"(query|mutation)"/g,
+                        )) {
+                                (match[2] === "query" ? nextQueries : nextMutations).add(match[1]);
+                        }
+                }
+
+                operationTypes = {
+                        queries: nextQueries,
+                        mutations: nextMutations,
+                };
+        } catch (error) {
+                console.error("Failed to refresh GraphQL operation types:", error);
+        } finally {
+                refreshingOperationTypes = false;
+        }
 }
-readOperationTypes();
-export const isMutation = (operation: string) => mutations.has(operation) || (/Mutation$/.test(operation) && !queries.has(operation));
-setInterval(readOperationTypes, 10 * MIN).unref();
+
+void readOperationTypes();
+
+export const isMutation = (operation: string) =>
+        operationTypes.mutations.has(operation) ||
+        (/Mutation$/.test(operation) && !operationTypes.queries.has(operation));
+
+setInterval(() => void readOperationTypes(), 10 * MIN).unref();
 
 // what the client calls an endpoint for limits: the GraphQL operation, or the
 // REST path with its ids folded so one user's calls share a window
@@ -161,7 +198,7 @@ export function bucketsFor(method: string, path: string, operation: string | und
 		if (POST_OPS.test(operation)) return ["read", "post"];
 		if (ENGAGE_OPS.test(operation)) return ["read", "engage"];
 		if (DM_OPS.test(operation)) return method === "GET" ? ["read"] : ["read", "dm"];
-		return method === "GET" || queries.has(operation) ? ["read"] : ["read", "write"];
+		return method === "GET" || (operationTypes.queries.has(operation) && !operationTypes.mutations.has(operation)) ? ["read"] : ["read", "write"];
 	}
 	if (ENGAGE_REST.test(path)) return ["read", "engage"];
 	return method === "GET" ? ["read"] : ["read", "write"];
