@@ -12,11 +12,11 @@ RUN bun install --frozen-lockfile --production
 COPY src src
 COPY public public
 COPY scripts scripts
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/entrypoint
 # volumes mount here; created now so they belong to the bun user
 RUN mkdir -p client media data && chown bun:bun client media data
 USER bun
 ENV PORT=3000
 EXPOSE 3000
-ENTRYPOINT ["entrypoint"]
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["bun", "src/server.ts"]
