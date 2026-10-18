@@ -56,7 +56,7 @@ const slice = (data: { results?: any[]; next?: string }) => ({
 });
 
 const count = (vars: Vars) => String(Math.min(Math.max(Number(vars.count) || 20, 1), 50));
-const cursor = (vars: Vars) => (typeof vars.cursor === "string" && vars.cursor ? { pos: vars.cursor } : {});
+const cursor = (vars: Vars): Record<string, string> => (typeof vars.cursor === "string" && vars.cursor ? { pos: vars.cursor } : {});
 
 export const gifHandlers = {
 	GifSearch: async (_v: Viewer, vars: Vars) => {
