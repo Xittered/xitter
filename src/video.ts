@@ -18,6 +18,7 @@ const FFPROBE = process.env.FFPROBE ?? "ffprobe";
 // progress of running jobs, in percent
 export const progress = new Map<string, number>();
 const errors = new Map<string, string>();
+const MAX_VIDEO_ERRORS = 256;
 export const videoError = (id: string) => errors.get(id) ?? "The video could not be processed.";
 
 export const sourceFile = (dir: string, id: string) => join(dir, `${id}.upload`);
@@ -76,6 +77,7 @@ async function convert(dir: string, id: string) {
 	const src = sourceFile(dir, id);
 	const tmp = join(dir, `${id}.tmp.mp4`);
 	const fail = async (message: string) => {
+		if (errors.size >= MAX_VIDEO_ERRORS) errors.delete(errors.keys().next().value!);
 		errors.set(id, message);
 		await sql`update media set state = 'failed' where id = ${id}::bigint`;
 	};

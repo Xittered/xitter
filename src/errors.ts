@@ -35,8 +35,13 @@ export async function recordError(source: Source, error: unknown, at: { path?: s
 // What the page's script reports (shell.ts ERROR_SCRIPT). Bounded per account,
 // since a broken page reports on every render.
 const budget = new Map<string, { left: number; until: number }>();
+let nextBudgetSweep = 0;
 export async function clientError(req: Request, viewer: Viewer): Promise<Response> {
 	const now = Date.now();
+	if (now >= nextBudgetSweep) {
+		for (const [id, entry] of budget) if (entry.until < now) budget.delete(id);
+		nextBudgetSweep = now + 60_000;
+	}
 	let b = budget.get(viewer.id);
 	if (!b || b.until < now) budget.set(viewer.id, (b = { left: 60, until: now + 3600e3 }));
 	if (b.left-- > 0) {

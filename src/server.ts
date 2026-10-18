@@ -1,5 +1,5 @@
 import { type Viewer, getViewer, parseCookies } from "./auth";
-import { getClientFile } from "./client-cache";
+import { getClientFile, getClientFilePath } from "./client-cache";
 import { PORT, PUBLIC_ORIGIN } from "./config";
 import { migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
@@ -10,7 +10,7 @@ import { loadSettings, settings } from "./settings";
 import { flagPickerData } from "./flag-picker";
 import { flagSvg } from "./flags";
 import { onboarding } from "./onboarding";
-import { patchFile, patchText } from "./patch";
+import { cachedPatch, patchFile, patchText } from "./patch";
 import { clientError, recordError } from "./errors";
 import { staffGate } from "./staff-access";
 import { backupPath, startBackups } from "./backups";
@@ -92,6 +92,7 @@ async function servePublic(p: string): Promise<Response> {
 const API_PREFIX = /^\/(i\/api\/|i\/jfapi\/|i\/media\/|1\.1\/|2\/|graphql\/|fleets\/|live_pipeline\/)/;
 // calls no handler exists for yet, most frequent first
 const unknown = new Map<string, number>();
+const MAX_UNKNOWN_PATHS = 1000;
 
 const apiError = (status: number, code: number, message: string) => Response.json({ errors: [{ code, message }] }, { status });
 
@@ -117,16 +118,22 @@ function staffBlockedPage(reason: string) {
 
 async function serveClient(req: Request, pathname: string): Promise<Response> {
 	const cdnPath = pathname.slice("/abs".length);
-	const raw = await getClientFile(cdnPath);
-	if (!raw) return new Response("not found", { status: 404 });
 	const ext = cdnPath.split(".").pop() ?? "";
 	const type = MIME[ext] ?? "application/octet-stream";
-	if (ext !== "js" && ext !== "css")
-		return new Response(new Uint8Array(raw), { headers: { "content-type": type, "cache-control": "public, max-age=31536000, immutable" } });
+	if (ext !== "js" && ext !== "css") {
+		const file = await getClientFilePath(cdnPath);
+		if (!file) return new Response("not found", { status: 404 });
+		return new Response(Bun.file(file), { headers: { "content-type": type, "cache-control": "public, max-age=31536000, immutable" } });
+	}
 
 	// The file name stays the same when our patches change, so patched files are
 	// revalidated against a hash of what we actually serve.
-	const body = patchFile(cdnPath, raw);
+	let body = cachedPatch(cdnPath);
+	if (!body) {
+		const raw = await getClientFile(cdnPath);
+		if (!raw) return new Response("not found", { status: 404 });
+		body = patchFile(cdnPath, raw);
+	}
 	let etag = etags.get(body);
 	if (!etag) {
 		etag = `"${Bun.hash(body).toString(36)}"`;
@@ -224,7 +231,9 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 	if (rest) return rest;
 
 	const key = `${req.method} ${gql >= 0 ? `graphql:${parts[parts.length - 1]}` : path}`;
-	unknown.set(key, (unknown.get(key) ?? 0) + 1);
+	if (unknown.has(key)) unknown.set(key, unknown.get(key)! + 1);
+	else if (unknown.size < MAX_UNKNOWN_PATHS) unknown.set(key, 1);
+	else unknown.set("(other paths)", (unknown.get("(other paths)") ?? 0) + 1);
 	console.log(`unhandled ${key}`);
 	return Response.json(gql >= 0 ? { data: {} } : {});
 }
