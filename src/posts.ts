@@ -9,6 +9,7 @@ import { blockedFor, hasMutedWord, isBlockedEitherWay, mutedFor, outOfView, prot
 import { mediaForPosts } from "./media";
 import { communityObjects } from "./community-model";
 import { webSource } from "./platforms";
+import { cardsForPosts, prepareCard } from "./link-cards";
 import { pollCard, pollsByIds } from "./polls";
 import { toUser, userCols, usersByIds } from "./users";
 
@@ -106,6 +107,9 @@ async function hydrate(viewerId: string, posts: PostRow[], quotes = true): Promi
 			if (poll) p.poll = pollCard(poll);
 		}
 	}
+	// a link card only where X shows one: no photos, video, poll, quote or article
+	const cards = await cardsForPosts(posts.filter((p) => !p.media?.length && !p.poll_id && !p.quote_id && !p.article_id));
+	for (const p of posts) p.linkCard = cards.get(p.id);
 	const editedIds = posts.filter((p) => p.edit_count).map((p) => p.id);
 	if (editedIds.length) {
 		const versions = await sql`select post_id::text, version_id::text from post_versions where post_id = any(${sql.array(editedIds, "INT8")}) order by seq`;
@@ -172,6 +176,7 @@ export async function editPost(userId: string, postId: string, text: string): Pr
 	if (Date.now() > new Date(post.created_at).getTime() + EDIT_WINDOW_MS) throw new PostError("This post can't be edited anymore.", 214);
 	if (post.edit_count >= MAX_EDITS) throw new PostError("This post has reached its edit limit.", 214);
 	if (text === post.text) throw new PostError("There's nothing new to save.", 214);
+	await prepareCard(text);
 	await sql`insert into post_versions (version_id, post_id, seq, text, created_at)
 		values (${newId()}::bigint, ${postId}::bigint, ${post.edit_count}, ${post.text}, ${post.edited_at ?? post.created_at})`;
 	await sql`update posts set text = ${text}, edit_count = edit_count + 1, edited_at = now() where id = ${postId}::bigint`;
@@ -376,6 +381,7 @@ export async function createPost(userId: string, text: string, opts: { replyToId
 	const [author] = await sql`select status from users where id = ${userId}::bigint`;
 	if (author?.status === "restricted") throw new PostError("Your account can't post right now.", 326);
 	await checkLength(userId, text);
+	await prepareCard(text);
 	const id = newId();
 	let conversationId = id;
 	if (opts.replyToId) {

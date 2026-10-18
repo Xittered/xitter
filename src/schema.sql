@@ -916,3 +916,19 @@ alter table users add column if not exists parody_label text not null default 'N
 	check (parody_label in ('None', 'Parody', 'Commentary', 'Fan'));
 -- when it last changed: the client warns further changes wait 48 hours
 alter table users add column if not exists parody_label_at timestamptz;
+
+-- Link cards (link-cards.ts): what a linked page says about itself, fetched
+-- once by the server. ok is false when the page had nothing to show or
+-- couldn't be reached. image is a file in MEDIA_DIR/cards.
+create table if not exists link_cards (
+	url text primary key,
+	ok boolean not null,
+	kind text check (kind in ('summary', 'summary_large_image')),
+	title text,
+	description text,
+	domain text,
+	image text,
+	image_width int,
+	image_height int,
+	fetched_at timestamptz not null default now()
+);

@@ -6,6 +6,7 @@ import { PUBLIC_ORIGIN } from "./config";
 import type { ArticleEntity } from "./articles";
 import { FLAGS } from "./flags";
 import { type MediaRow, absolute, mediaEntity } from "./media";
+import { linkEntities } from "./link-cards";
 import { placeById } from "./places";
 import { webSource } from "./platforms";
 import { settings } from "./settings";
@@ -284,6 +285,8 @@ export type PostRow = {
 	staleEditOf?: string;
 	// the poll card this post carries, as pollCard builds it
 	poll?: Record<string, unknown>;
+	// the card for the last link in the text, as cardsForPosts builds it
+	linkCard?: Record<string, unknown>;
 	// the community this post belongs to, as communityObjects builds it
 	community?: Record<string, unknown>;
 	// accounts named with @ in the text
@@ -399,6 +402,8 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 	const allTags = hashtags(p.text);
 	const mentions = allMentions.filter((m: any) => m.indices[1] <= textLength);
 	const tags = allTags.filter((t: any) => t.indices[1] <= textLength);
+	const allUrls = linkEntities(p.text);
+	const urls = allUrls.filter((u) => u.indices[1] <= textLength);
 	const media = (p.media ?? []).map((m, i) => mediaEntity(m, p.id, p.author.screen_name, i, textLength));
 	const quoteLink = p.quoted && permalink(p.quoted);
 	return {
@@ -413,11 +418,11 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 		...(p.quoted ? { quoted_status_result: { result: tweetResult(p.quoted) } } : {}),
 		...(p.article ? { article: { article_results: { result: p.article } } } : {}),
 		...(p.community ? { community_results: { result: p.community } } : {}),
-		...(p.poll ? { card: p.poll } : {}),
+		...(p.poll ? { card: p.poll } : p.linkCard ? { card: p.linkCard } : {}),
 		...(long ? { note_tweet: { is_expandable: true, note_tweet_results: { result: {
 			id: globalId("NoteTweet", p.id),
 			text: p.text,
-			entity_set: { hashtags: allTags, user_mentions: allMentions, urls: [], symbols: [] },
+			entity_set: { hashtags: allTags, user_mentions: allMentions, urls: allUrls, symbols: [] },
 		} } } } : {}),
 		cashtag_attachments: [],
 		core: { user_results: { result: userResult(p.author) } },
@@ -439,6 +444,7 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 				...(media.length ? { media } : {}),
 				...(mentions.length ? { user_mentions: mentions } : {}),
 				...(tags.length ? { hashtags: tags } : {}),
+				...(urls.length ? { urls } : {}),
 			},
 			...(media.length ? { extended_entities: { media } } : {}),
 			favorite_count: p.like_count,
