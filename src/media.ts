@@ -11,6 +11,7 @@ import { PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { settings } from "./settings";
+import { gifProxy } from "./gifs";
 import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, videoError, videoSupported } from "./video";
 
 export const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
@@ -119,7 +120,7 @@ async function croppedGif(id: string, data: Buffer, image: Image): Promise<{ dat
 async function finalize(id: string, p: Pending): Promise<Response> {
 	pending.delete(id);
 	const parts = [...p.chunks].sort((a, b) => a[0] - b[0]).map((c) => c[1]);
-	let data = Buffer.concat(parts);
+	let data: Buffer<ArrayBufferLike> = Buffer.concat(parts);
 	if (data.length !== p.total) return uploadError("File size does not match the size announced at INIT.");
 	if (p.video) {
 		mkdirSync(MEDIA_DIR, { recursive: true });
@@ -154,6 +155,59 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 
 	switch (fields.command) {
 		case "INIT": {
+			if (fields.source_url) {
+				let source: URL;
+				try {
+					source = new URL(fields.source_url, PUBLIC_ORIGIN);
+				} catch {
+					return uploadError("Invalid GIF source URL.");
+				}
+				let ownOrigin: string;
+				try {
+					ownOrigin = new URL(PUBLIC_ORIGIN).origin;
+				} catch {
+					return uploadError("Server public origin is not configured correctly.", 500);
+				}
+				if (source.origin !== ownOrigin || source.pathname !== "/i/api/xitter/gif" || !source.searchParams.get("u")) {
+					return uploadError("GIF uploads must use this instance's GIF proxy.", 403);
+				}
+				const response = await gifProxy(source);
+				if (!response.ok || !response.body) return uploadError("Could not download the selected GIF.");
+				const announcedSize = Number(response.headers.get("content-length"));
+				if (Number.isFinite(announcedSize) && announcedSize > MAX_GIF) {
+					await response.body.cancel();
+					return uploadError("File is too large.");
+				}
+				const reader = response.body.getReader();
+				const chunks: Buffer[] = [];
+				let size = 0;
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						size += value.byteLength;
+						if (size > MAX_GIF) {
+							await reader.cancel();
+							return uploadError("File is too large.");
+						}
+						chunks.push(Buffer.from(value));
+					}
+				} finally {
+					reader.releaseLock();
+				}
+				const data = Buffer.concat(chunks, size);
+				const image = sniffImage(data);
+				if (!image || image.mime !== "image/gif") return uploadError("The selected source is not a valid GIF.");
+				const newMedia = newId();
+				return finalize(newMedia, {
+					userId: viewer.id,
+					total: data.length,
+					category: fields.media_category ?? "tweet_gif",
+					video: false,
+					chunks: new Map([[0, data]]),
+					started: Date.now(),
+				});
+			}
 			const total = Number(fields.total_bytes);
 			const video = /^video\//.test(fields.media_type ?? "") || /video/.test(fields.media_category ?? "");
 			if (video && !(await videoSupported())) return uploadError("Video uploads are not available on this server.");
