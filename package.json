@@ -10,9 +10,12 @@
 		"client:fetch": "bun scripts/fetch-client.ts"
 	},
 	"devDependencies": {
-		"@types/bun": "latest"
+		"@types/bun": "latest",
+		"@types/sanitize-html": "^2.16.2"
 	},
 	"dependencies": {
-		"emusks": "^2.3.19"
+		"emusks": "^2.3.19",
+		"marked": "^18.1.1",
+		"sanitize-html": "^2.18.1"
 	}
 }

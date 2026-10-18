@@ -4,6 +4,8 @@
 import { recordSignIn } from "./login-history";
 import { login, sessionCookies } from "./auth";
 import { settings } from "./settings";
+import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -20,7 +22,22 @@ export const layout = (title: string, body: string) => `<!doctype html>
 	form { width: min(560px, calc(100vw - 32px)); display: grid; gap: 12px; padding: 32px 0; }
 	h1 { margin: 0 0 8px; font-size: 28px; }
 	.alt { margin: 8px 0 0; color: #71767b; }
-	.rules { margin: 0 0 4px; white-space: pre-wrap; line-height: 1.45; }
+	.rules { line-height: 1.5; overflow-wrap: anywhere; }
+        .rules p { margin: 0 0 12px; }
+        .rules h1, .rules h2, .rules h3, .rules h4, .rules h5, .rules h6 { line-height: 1.25; margin: 20px 0 10px; }
+        .rules h1 { font-size: 24px; }
+        .rules h2 { font-size: 21px; }
+        .rules h3 { font-size: 18px; }
+        .rules ul, .rules ol { padding-left: 24px; margin: 8px 0 16px; }
+        .rules li { margin: 4px 0; }
+        .rules blockquote { border-left: 3px solid #536471; margin: 12px 0; padding-left: 12px; color: #aab8c2; }
+        .rules pre, .rules code { background: #16181c; border-radius: 4px; }
+        .rules code { padding: 2px 4px; }
+        .rules pre { padding: 12px; overflow-x: auto; }
+        .rules pre code { padding: 0; }
+        .rules hr { border: 0; border-top: 1px solid #333639; margin: 16px 0; }
+        .rules > :first-child { margin-top: 0; }
+        .rules > :last-child { margin-bottom: 0; }
 	a { color: #1d9bf0; text-decoration: none; }
 	label { color: #71767b; font-size: 13px; }
 	input, textarea { padding: 12px; border: 1px solid #333639; border-radius: 4px; background: #000; color: inherit; font: inherit; }
@@ -89,17 +106,36 @@ export function maintenancePage(): Response {
 
 // the instance's rules, as written in the admin panel: blank lines split paragraphs
 export function rulesPage(): Response {
-	const rules = settings().rules.trim();
-	const body = rules ? rules.split(/\n\s*\n/).map((p) => `<p class="rules">${esc(p)}</p>`).join("") : `<p class="alt">This instance hasn't written any rules yet.</p>`;
-	return html(
-		layout(
-			"Rules",
-			`<form>
-	<img class="logo" src="/public/logo-dark.png" alt="${esc(settings().instance_name)}">
-	<h1>Rules</h1>
-	${body}
-	<p class="alt"><a href="/">Sign in or create an account</a></p>
+        const rules = settings().rules.trim();
+        const renderedRules = rules
+                ? sanitizeHtml(marked.parse(rules, { async: false }), {
+                        allowedTags: [
+                                "h1", "h2", "h3", "h4", "h5", "h6",
+                                "p", "br", "hr", "strong", "b", "em", "i", "del", "s",
+                                "ul", "ol", "li", "blockquote", "pre", "code",
+                                "a", "table", "thead", "tbody", "tr", "th", "td",
+                        ],
+                        allowedAttributes: {
+                                a: ["href", "title"],
+                        },
+                        allowedSchemes: ["http", "https", "mailto"],
+                        allowProtocolRelative: false,
+                })
+                : "";
+
+        const body = renderedRules
+                ? `<div class="rules">${renderedRules}</div>`
+                : `<p class="alt">This instance hasn't written any rules yet.</p>`;
+
+        return html(
+                layout(
+                        "Rules",
+                        `<form>
+        <img class="logo" src="/public/logo-dark.png" alt="${esc(settings().instance_name)}">
+        <h1>Rules</h1>
+        ${body}
+        <p class="alt"><a href="/">Sign in or create an account</a></p>
 </form>`,
-		),
-	);
+                ),
+        );
 }
