@@ -19,5 +19,6 @@ JUICEBOX_TENANT_SECRET=$(hex 32)
 #RESEND_API_KEY=
 #MAIL_FROM=Xitter <noreply@example.org>
 #KLIPY_API_KEY=
+#TENOR_API_KEY=
 ENV
 echo "Wrote .env."

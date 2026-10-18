@@ -1,7 +1,7 @@
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
-import { blockedFor, isBlockedEitherWay, outOfView } from "./blocks";
+import { blockedFor, isBlockedEitherWay, outOfView, protectedFor } from "./blocks";
 import { getPost, postsByIds, PostError, refuseHate } from "./posts";
 import { noteText, tweetEntry, tweetResult } from "./model";
 import { feature } from "./settings";
@@ -103,7 +103,7 @@ export const noteHandlers = {
 	XitterPostContext: async (v: Viewer, vars: any) => {
 		const ids = [...new Set((Array.isArray(vars.ids) ? vars.ids : []).filter(isId))].slice(0, 20) as string[];
 		if (!ids.length) return { data: { xitter_post_context: [] } };
-		const posts = await sql`select id::text, source from posts where id = any(${sql.array(ids, "INT8")}) and (not hidden or exists (select 1 from users staff where staff.id = ${v.id}::bigint and staff.role is not null)) and user_id not in ${blockedFor(v.id)} and user_id not in ${outOfView(v.id)}`;
+		const posts = await sql`select id::text, source from posts where id = any(${sql.array(ids, "INT8")}) and (not hidden or exists (select 1 from users staff where staff.id = ${v.id}::bigint and staff.role is not null)) and user_id not in ${blockedFor(v.id)} and user_id not in ${outOfView(v.id)} and user_id not in ${protectedFor(v.id)}`;
 		const visibleIds = posts.map((p: any) => p.id);
 		const notes = await notesMany(v, visibleIds);
 		const requests = visibleIds.length ? await sql`select post_id::text, count(*)::int as count, bool_or(user_id = ${v.id}::bigint) as own from community_note_requests where post_id = any(${sql.array(visibleIds, "INT8")}) group by post_id` : [];

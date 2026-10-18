@@ -3,6 +3,7 @@
 
 import { recordSignIn } from "./login-history";
 import { login, sessionCookies } from "./auth";
+import { hit, used } from "./ratelimit";
 import { settings } from "./settings";
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
@@ -83,8 +84,13 @@ export async function handleLogin(req: Request): Promise<Response> {
 	const f = await fields(req);
 	const username = (f.username ?? "").replace(/^@/, "").trim();
 	const password = f.password ?? "";
+	const account = username.toLowerCase();
+	if (username && used("password", account)) return new Response("Too many tries for this account. Wait 15 minutes.", { status: 429 });
 	const session = username && password ? await login(username, password) : undefined;
-	if (!session) return new Response("Wrong username or password.", { status: 401 });
+	if (!session) {
+		if (username) hit("password", account);
+		return new Response("Wrong username or password.", { status: 401 });
+	}
 	await recordSignIn(req, session);
 	return signedIn(session);
 }

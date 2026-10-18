@@ -48,6 +48,7 @@ const select = (viewerId: string) => sql`
 	from posts p
 	join users u on u.id = p.user_id and (not p.hidden or exists (select 1 from users staff where staff.id = ${viewerId}::bigint and staff.role is not null))
 		and u.id not in ${protectedFor(viewerId)} and u.id not in ${suspendedFor(viewerId)}
+		and u.id not in (select blocker_id from blocks where blocked_id = ${viewerId}::bigint)
 	left join posts rp on rp.id = p.reply_to_id
 	left join users ru on ru.id = coalesce(rp.user_id, p.reply_to_user_id)`;
 
@@ -172,7 +173,7 @@ export async function refuseHate(userId: string, text: string, where: Parameters
 	const hit = hateIn(text);
 	if (!hit) return;
 	await automodStrike(userId, hit, where, text);
-	throw new PostError("Your post contains a slur or hate speech this instance doesn't allow.", 186);
+	throw new PostError("Your post wasn't published: it contains a slur or hate speech this instance doesn't allow.", 186);
 }
 
 export async function editPost(userId: string, postId: string, text: string): Promise<void> {
@@ -326,6 +327,20 @@ export async function replies(viewerId: string, id: string, limit = 100): Promis
 	return hydrate(viewerId, rows.map(toRow));
 }
 
+export async function repliesBelow(viewerId: string, id: string, limit = 1000): Promise<PostRow[]> {
+	const rows = await sql`${select(viewerId)} where p.id in (
+			with recursive tree as (
+				select id, 1 as depth from posts where reply_to_id = ${id}::bigint
+				union all
+				select x.id, t.depth + 1 from posts x join tree t on x.reply_to_id = t.id where t.depth < 40
+			) select id from tree limit ${limit})
+		and p.reply_hidden_at is null and p.user_id not in ${blockedFor(viewerId)} and p.user_id not in ${outOfView(viewerId)}
+		and not ${hasMutedWord(viewerId, "tweet_replies", sql`p.id`)}`;
+	return rows.map(toRow);
+}
+
+export const hydratePosts = (viewerId: string, posts: PostRow[]) => hydrate(viewerId, posts);
+
 // Hide reply: only the author of the conversation's first post may hide a
 // reply in it, or show it again.
 export async function setReplyHidden(viewerId: string, replyId: string, hidden: boolean): Promise<void> {
@@ -382,6 +397,7 @@ export async function folderPosts(viewerId: string, folderId: string, limit = 10
 }
 
 export async function likedPosts(viewerId: string, userId: string, limit = 100): Promise<PostRow[]> {
+	if (userId !== viewerId && !(await sql`select 1 from users where id = ${viewerId}::bigint and role is not null`).length) return [];
 	const rows = await sql`${select(viewerId)}
 		join likes lk on lk.post_id = p.id and lk.user_id = ${userId}::bigint
 		order by lk.created_at desc limit ${limit}`;

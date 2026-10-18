@@ -127,6 +127,7 @@ const BACKGROUND_OPS = /^(viewer_context\.json|app_context\.json|p2)$/;
 // writes. The bundle names each operation's type; chunks arrive lazily from
 // the CDN, so the folder is read again now and then.
 const queries = new Set<string>();
+const mutations = new Set<string>();
 async function readOperationTypes() {
 	const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
 	let files: string[] = [];
@@ -137,10 +138,11 @@ async function readOperationTypes() {
 	}
 	for (const f of files) {
 		const text = await readFile(join(dir, f), "utf8").catch(() => "");
-		for (const m of text.matchAll(/operationName:"(\w+)",operationType:"query"/g)) queries.add(m[1]);
+		for (const m of text.matchAll(/operationName:"(\w+)",operationType:"(query|mutation)"/g)) (m[2] === "query" ? queries : mutations).add(m[1]);
 	}
 }
 readOperationTypes();
+export const isMutation = (operation: string) => mutations.has(operation) || (/Mutation$/.test(operation) && !queries.has(operation));
 setInterval(readOperationTypes, 10 * MIN).unref();
 
 // what the client calls an endpoint for limits: the GraphQL operation, or the

@@ -223,12 +223,16 @@ export const toolActions: Record<string, Action> = {
 		role: "moderator",
 		run: async (a, b) => {
 			const id = idOf(b.id);
-			const [ap] = await sql`select user_id::text from moderation_appeals where id = ${id}::bigint and status = 'open'`;
+			const [ap] = await sql`select user_id::text, message_id::text from moderation_appeals where id = ${id}::bigint and status = 'open'`;
 			if (!ap) throw new AdminError("No such open appeal.", 404);
 			await guard(a, ap.user_id);
 			if (!["accepted", "rejected"].includes(b.status)) throw new AdminError("Choose an outcome.");
 			await sql`update moderation_appeals set status = ${b.status}, staff_reply = ${textOf(b.reply)}, reviewer_id = ${a.id}::bigint, resolved_at = now() where id = ${id}::bigint`;
 			await audit(a, "resolve_appeal", ap.user_id, { appeal: id, status: b.status });
+			if (b.status === "accepted" && ap.message_id) {
+				const revoked = await sql`update staff_messages set revoked_at = now() where id = ${ap.message_id}::bigint and kind = 'strike' and revoked_at is null returning id`;
+				if (revoked.length) await audit(a, "revoke_strike", ap.user_id, { message: ap.message_id, appeal: id });
+			}
 			return {};
 		},
 	},
@@ -467,8 +471,10 @@ export const toolActions: Record<string, Action> = {
 			if (!Array.isArray(b.ladder) || !b.ladder.length || b.ladder.length > 10) throw new AdminError("Give 1–10 steps.");
 			const ladder = b.ladder.map(Number);
 			if (ladder.some((h: number) => !Number.isInteger(h) || h < -1 || h > 87_600)) throw new AdminError("Each step is 0 (a warning), hours of suspension, or -1 (permanent).");
-			await setSetting("automod", { enabled: b.enabled, strike_days: days, ladder });
-			await audit(a, "save_automod", null, { enabled: b.enabled, strike_days: days, ladder });
+			const chances = Number(b.second_chances ?? settings().automod.second_chances);
+			if (!Number.isInteger(chances) || chances < 0 || chances > 100) throw new AdminError("Second chances are 0–100 a week.");
+			await setSetting("automod", { enabled: b.enabled, strike_days: days, ladder, second_chances: chances });
+			await audit(a, "save_automod", null, { enabled: b.enabled, strike_days: days, ladder, second_chances: chances });
 			return {};
 		},
 	},
@@ -485,6 +491,8 @@ export const toolActions: Record<string, Action> = {
 				blocked_names: lines(b.blocked_names ?? [], "name"),
 				hidden_trends: lines(b.hidden_trends, "trend", true),
 				promoted_trends: lines(b.promoted_trends, "trend", true),
+				trend_min_people: Math.max(1, Math.min(Math.trunc(Number(b.trend_min_people ?? settings().operations.trend_min_people)) || 1, 1000)),
+				trend_min_account_days: Math.max(0, Math.min(Math.trunc(Number(b.trend_min_account_days ?? settings().operations.trend_min_account_days)) || 0, 365)),
 				global_pin: pin,
 			});
 			await audit(a, "save_operations", null, { maintenance: b.maintenance, pin });

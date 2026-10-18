@@ -28,7 +28,8 @@ import { notificationsTimeline, unreadCount } from "./notifications";
 import { searchPosts, searchUsers, trendingHashtags } from "./search";
 import { isId, newId } from "./ids";
 import { attachMedia } from "./media";
-import { cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, replyEntry, tombstoneEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
+import { type ThreadItem, cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, showMoreThreadsEntry, threadEntry, threadItems, tombstoneEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
+import { MORE_PER_PAGE, type Placed, THREADS_PER_PAGE, conversationThreads } from "./threads";
 import {
 	PostError,
 	ancestors,
@@ -43,7 +44,8 @@ import {
 	originalPostId,
 	likedPosts,
 	postsByIds,
-	replies,
+	repliesBelow,
+	hydratePosts,
 	hiddenReplies,
 	hasHiddenReplies,
 	setReplyHidden,
@@ -199,19 +201,48 @@ const home =
 
 const tweetDetail: Handler = async (viewer, vars) => {
 	const id = postId(vars, "focalTweetId");
+	const cursor = typeof vars.cursor === "string" ? vars.cursor : "";
 	const entries: unknown[] = [];
 	const feedbackActions: unknown[] = [];
-	// the whole conversation is returned at once, so a cursor request has nothing more
-	if (!vars.cursor) {
-		const focal = await getPost(viewer.id, id);
-		if (!focal) throw new PostError("No status found with that ID.", 144);
+	const focal = await getPost(viewer.id, id);
+	if (!focal) throw new PostError("No status found with that ID.", 144);
+	const pinned = focal.reply_to_id ? null : await pinnedReplyOf(id);
+	const canPin = !focal.reply_to_id && focal.author.id === viewer.id;
+	const { roots, thread } = conversationThreads(focal, await repliesBelow(viewer.id, id), pinned);
+	const labelled = (it: Placed): ThreadItem =>
+		it.parent ? it : { ...it, pinned: it.post.id === pinned, ...(canPin ? { feedbackKey: it.post.id === pinned ? PIN_KEYS.Pinned : PIN_KEYS.Pinnable } : {}) };
+	const threadsPage = async (offset: number, start: bigint) => {
+		let sort = start;
+		const threads = roots.slice(offset, offset + THREADS_PER_PAGE).map(thread);
+		await hydratePosts(viewer.id, threads.flatMap((t) => t.shown.map((s) => s.post)));
+		const page: unknown[] = threads.map((t) =>
+			threadEntry(t.root.id, t.shown.map(labelled), (sort--).toString(), t.rest.length ? { value: `thread:${t.root.id}:0`, after: t.shown[t.shown.length - 1].post.id } : undefined),
+		);
+		if (roots.length > offset + THREADS_PER_PAGE) page.push(showMoreThreadsEntry(`threads:${offset + THREADS_PER_PAGE}:${sort - 1n}`, (sort--).toString()));
+		return page;
+	};
+	const instructions: unknown[] = [];
+	const more = /^thread:(\d+):(\d+)$/.exec(cursor);
+	const nextThreads = /^threads:(\d+):(\d+)$/.exec(cursor);
+	if (more) {
+		const [, rootId, from] = more;
+		const offset = Number(from);
+		const root = roots.find((p) => p.id === rootId);
+		const rest = root ? thread(root).rest : [];
+		const items = rest.slice(offset, offset + MORE_PER_PAGE);
+		await hydratePosts(viewer.id, items.map((it) => it.post));
+		const after = items[items.length - 1]?.post.id;
+		if (after)
+			instructions.push({
+				type: "TimelineAddToModule",
+				moduleEntryId: `conversationthread-${rootId}`,
+				moduleItems: threadItems(rootId, items, rest.length > offset + MORE_PER_PAGE ? { value: `thread:${rootId}:${offset + MORE_PER_PAGE}`, after } : undefined),
+				prepend: false,
+			});
+	} else if (nextThreads) {
+		instructions.push({ type: "TimelineAddEntries", entries: await threadsPage(Number(nextThreads[1]), BigInt(nextThreads[2])) });
+	} else if (!cursor) {
 		const above = focal.reply_to_id ? await ancestors(viewer.id, focal.reply_to_id) : [];
-		const below = await replies(viewer.id, id);
-		// a pinned reply leads the replies to the first post of a conversation
-		const pinned = focal.reply_to_id ? null : await pinnedReplyOf(id);
-		const at = below.findIndex((p) => p.id === pinned);
-		if (at > 0) below.unshift(...below.splice(at, 1));
-		const canPin = !focal.reply_to_id && focal.author.id === viewer.id;
 		let sort = BigInt(newId());
 		const missing = (above[0] ?? focal).reply_to_id;
 		if (missing) {
@@ -223,18 +254,15 @@ const tweetDetail: Handler = async (viewer, vars) => {
 		// the "View hidden replies" link under a conversation's first post
 		if (!focal.reply_to_id && (await hasHiddenReplies(id))) Object.assign(focalEntry.content.itemContent, { hasModeratedReplies: true });
 		entries.push(focalEntry);
-		for (const p of below) {
-			const isPinned = p.id === pinned;
-			entries.push(replyEntry(p, (sort--).toString(), { pinned: isPinned, ...(canPin ? { feedbackKey: isPinned ? PIN_KEYS.Pinned : PIN_KEYS.Pinnable } : {}) }));
-		}
+		entries.push(...(await threadsPage(0, sort)));
 		if (canPin) feedbackActions.push(...pinActions());
-	}
+		instructions.push({ type: "TimelineClearCache" }, { type: "TimelineAddEntries", entries });
+	} else instructions.push({ type: "TimelineAddEntries", entries });
 	return {
 		data: {
 			threaded_conversation_with_injections_v2: {
 				instructions: [
-					...(vars.cursor ? [] : [{ type: "TimelineClearCache" }]),
-					{ type: "TimelineAddEntries", entries },
+					...instructions,
 					{ type: "TimelineTerminateTimeline", direction: "Top" },
 					{ type: "TimelineTerminateTimeline", direction: "Bottom" },
 				],

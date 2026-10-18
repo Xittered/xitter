@@ -33,7 +33,7 @@ import { startScheduler } from "./scheduled";
 import { gifProxy } from "./gifs";
 import { cardImage } from "./explore-cards";
 import { rememberIp, requestIp } from "./login-history";
-import { bucketsFor, hit, limitApi, limitedResponse } from "./ratelimit";
+import { bucketsFor, hit, isMutation, limitApi, limitedResponse } from "./ratelimit";
 import { actingViewer, delegateMay } from "./delegation";
 import { automationRoute } from "./automation";
 import { stickerImage, stickerPacks } from "./stickers";
@@ -168,13 +168,13 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 	const source = await platformSource(req);
 	if (source === null) return apiError(401, 32, "Invalid or revoked client token.");
 	viewer = { ...viewer, postSource: source };
-	if (req.method !== "GET" && req.headers.get("x-csrf-token") !== viewer.csrf)
-		return apiError(403, 353, "This request requires a matching csrf cookie and header.");
-
 	const path = url.pathname.replace(/^\/i\/(jf)?api/, "");
 	const parts = path.split("/").filter(Boolean);
 	const gql = parts.indexOf("graphql");
 	const operation = gql >= 0 ? parts[parts.length - 1] : undefined;
+	if ((req.method !== "GET" || operation) && req.headers.get("x-csrf-token") !== viewer.csrf)
+		return apiError(403, 353, "This request requires a matching csrf cookie and header.");
+	if (req.method === "GET" && operation && isMutation(operation)) return apiError(405, 144, "Use POST for this operation.");
 	// a delegate switched into another account (delegation.ts); the client sends
 	// this on every call while switched
 	const actAs = req.headers.get("x-act-as-user-id");
@@ -366,7 +366,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (blocked) return staffBlockedPage(blocked);
 		return new Response(await adminPage(), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 	}
-	if (p === "/_debug/unknown") return Response.json(Object.fromEntries([...unknown].sort((a, b) => b[1] - a[1])));
+	if (p === "/_debug/unknown" && viewer?.role === "admin") return Response.json(Object.fromEntries([...unknown].sort((a, b) => b[1] - a[1])));
 	if (API_PREFIX.test(p) || req.method !== "GET") {
 		// the event stream must outlive the default idle timeout
 		if (p.endsWith("/live_pipeline/events")) server.timeout(req, 0);

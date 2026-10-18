@@ -34,7 +34,10 @@ async function session(username: string) {
 }
 const standing = async (id: string) => (await sql`select status, status_until, status_restore from users where id = ${id}::bigint`)[0];
 const strikes = async (id: string) => (await sql`select count(*)::int as n from staff_messages where user_id = ${id}::bigint and kind = 'strike' and revoked_at is null`)[0].n;
-const ageStrikes = (id: string) => sql`update staff_messages set created_at = created_at - interval '10 minutes' where user_id = ${id}::bigint`;
+const ageStrikes = async (id: string) => {
+	await sql`update staff_messages set created_at = created_at - interval '10 minutes' where user_id = ${id}::bigint`;
+	await sql`update audit_log set created_at = created_at - interval '10 minutes' where target = ${id}`;
+};
 const tweet = (s: Awaited<ReturnType<typeof session>>, text: string) => s.gql("CreateTweet", { tweet_text: text });
 const created: string[] = [];
 const name = (p: string) => `${p}${Date.now().toString().slice(-8)}`;
@@ -49,7 +52,31 @@ try {
 	await sql`update users set role = 'admin' where id = ${adminId}::bigint`;
 	admin = await session(adminName);
 	check(admin.ok, "admin signs in");
-	check((await admin.admin("saveAutomod", { enabled: true, strike_days: 365, ladder: [0, 24, 168, -1] })).status === 200, "ladder saved: warning, 1 day, 1 week, permanent");
+	check((await admin.admin("saveAutomod", { enabled: true, strike_days: 365, ladder: [0, 24, 168, -1], second_chances: 2 })).status === 200, "two second chances a week");
+	const graceName = name("am_gc");
+	const graceId = await createUser(graceName, graceName, password);
+	created.push(graceId);
+	const grace = await session(graceName);
+	const unread = async () => (await sql`select kind, body from staff_messages where user_id = ${graceId}::bigint and read_at is null order by id desc`) as any[];
+	check((await tweet(grace, "kys")).data.errors?.[0]?.code === 186, "an abusive post is refused");
+	check((await strikes(graceId)) === 0, "but the first one is a second chance, not a strike");
+	let notes = await unread();
+	check(notes[0]?.kind === "warning" && notes[0].body.includes("you have 1 left"), "a notice says so and counts what's left");
+	await ageStrikes(graceId);
+	await tweet(grace, "kys");
+	notes = await unread();
+	check((await strikes(graceId)) === 0 && notes[0].body.includes("you have none left"), "the second one uses the last chance");
+	await ageStrikes(graceId);
+	await tweet(grace, "kys");
+	check((await strikes(graceId)) === 1, "with none left it's a strike");
+	check((await sql`select 1 from audit_log where action = 'automod_second_chance' and target = ${graceId}`).length === 2, "second chances are in the audit log");
+	const page = await fetch(`${origin}/home`, { headers: grace.headers });
+	check((await page.text()).includes("/i/api/xitter/moderation"), "the client gets the notice modal");
+	const first2 = (await (await fetch(`${origin}/i/api/xitter/moderation`, { headers: grace.headers })).json()) as any;
+	const oldest = first2.messages.filter((m: any) => !m.read_at).pop();
+	const read = await fetch(`${origin}/i/api/xitter/moderation`, { method: "POST", headers: { ...grace.headers, "content-type": "application/json" }, body: JSON.stringify({ action: "read", id: oldest.id }) });
+	check(read.ok && (await unread()).length === 2, "pressing Okay marks that notice read");
+	check((await admin.admin("saveAutomod", { enabled: true, strike_days: 365, ladder: [0, 24, 168, -1], second_chances: 0 })).status === 200, "ladder saved: warning, 1 day, 1 week, permanent, no second chances");
 	await loadSettings();
 
 	const userName = name("am_usr");

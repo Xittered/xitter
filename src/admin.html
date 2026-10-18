@@ -337,7 +337,7 @@ const RENDER = {
 				(ap.status === "open"
 					? '<div class="field"><textarea data-reply placeholder="Your answer, sent to the account" maxlength="2000"></textarea></div><div class="row">' +
 						'<button class="btn primary" data-do="accepted">Accept</button><button class="btn danger" data-do="rejected">Turn down</button>' +
-						'<a class="btn" href="#user/' + esc(ap.user_id) + '">Open account</a></div><p class="dim small">Accepting doesn\'t change the standing: lift a sanction on the account page.</p>'
+						'<a class="btn" href="#user/' + esc(ap.user_id) + '">Open account</a></div><p class="dim small">Accepting lifts the strike it's about. Lift other sanctions on the account page.</p>'
 					: '<p class="small"><b>' + (ap.status === "accepted" ? "Accepted" : "Turned down") + "</b>" + (ap.reviewer ? " by @" + esc(ap.reviewer) : "") + " · " + esc(when(ap.resolved_at)) + "</p>" +
 						(ap.staff_reply ? '<p class="dim" style="white-space:pre-wrap">' + esc(ap.staff_reply) + "</p>" : "")) +
 				"</div>").join("") : '<div class="empty">' + (status === "open" ? "No open appeals." : "Nothing here.") + "</div>");
@@ -951,9 +951,13 @@ const RENDER = {
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="amOn"' + (am.enabled ? " checked" : "") + dis + "> Strike accounts automatically</label>" +
 			'<div class="field"><label>Strikes count for (days)</label><input id="amDays" type="number" min="1" max="3650" value="' + esc(am.strike_days) + '"' + dis + "></div>" +
 			'<div class="field"><label>Steps, one per strike: 0 is a warning, a number is hours suspended, -1 is permanent</label><input id="amLadder" value="' + esc(am.ladder.join(", ")) + '"' + dis + "></div>" +
+			'<div class="field"><label>Second chances a week: refused content that doesn\'t count as a strike, 0 for none</label><input id="amChances" type="number" min="0" max="100" value="' + esc(am.second_chances ?? 5) + '"' + dis + "></div>" +
 			(admin ? '<button class="btn primary" id="saveAutomod">Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Trends</h2><div class="field"><label>Hidden hashtags, one per line</label><textarea id="hiddenTrends"' + dis + ">" + esc(o.hidden_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			'<div class="field"><label>Promoted hashtags, shown first</label><textarea id="promotedTrends"' + dis + ">" + esc(o.promoted_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
+			'<div class="row"><div class="field"><label>People needed before a hashtag trends</label><input id="trendPeople" type="number" min="1" max="1000" value="' + esc(String(o.trend_min_people ?? 3)) + '"' + dis + "></div>" +
+			'<div class="field"><label>Days an account must exist to count</label><input id="trendDays" type="number" min="0" max="365" value="' + esc(String(o.trend_min_account_days ?? 3)) + '"' + dis + "></div></div>" +
+			'<p class="dim small">Each person counts once per hashtag, and accounts that last signed in from the same address count as one person.</p>' +
 			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Pinned post</h2><p class="dim small">Shown at the top of everyone\'s home timeline. Paste a post\'s link or id; empty unpins.</p>' +
 			'<div class="field"><input id="pin" value="' + esc(o.global_pin || "") + '" placeholder="https://…/status/123"' + dis + "></div>" +
@@ -1007,7 +1011,7 @@ const RENDER = {
 				act(() => api("blockedNameAccounts", { suspend: true }), "Suspended").then(route);
 			};
 		});
-		if ($("#saveAutomod")) $("#saveAutomod").onclick = () => act(() => api("saveAutomod", { enabled: $("#amOn").checked, strike_days: Number($("#amDays").value), ladder: $("#amLadder").value.split(",").map((x) => Number(x.trim())) }), "Automod saved").then(route);
+		if ($("#saveAutomod")) $("#saveAutomod").onclick = () => act(() => api("saveAutomod", { enabled: $("#amOn").checked, strike_days: Number($("#amDays").value), ladder: $("#amLadder").value.split(",").map((x) => Number(x.trim())), second_chances: Number($("#amChances").value) }), "Automod saved").then(route);
 		main.querySelectorAll("[data-save-ops]").forEach((b) => b.onclick = () => act(() => api("saveOperations", {
 			maintenance: $("#maint").checked,
 			message: $("#maintMsg").value,
@@ -1015,6 +1019,8 @@ const RENDER = {
 			blocked_names: listOf("#blockedNames"),
 			hidden_trends: listOf("#hiddenTrends"),
 			promoted_trends: listOf("#promotedTrends"),
+			trend_min_people: Number($("#trendPeople").value),
+			trend_min_account_days: Number($("#trendDays").value),
 			global_pin: ((v) => (/\/status\/(\d{1,19})/.exec(v) || [])[1] || v || null)($("#pin").value.trim()),
 		}), "Saved").then(route));
 		main.querySelectorAll("[data-slot]").forEach((input) => input.onchange = () => {
@@ -1078,7 +1084,7 @@ const RENDER = {
 	async audit(main, filter = {}) {
 		const { entries } = await api("audit", filter);
 		main.innerHTML = '<h1>Audit log</h1><div class="bar"><input id="auditWho" placeholder="@handle" value="' + esc(filter.target || "") + '">' +
-			'<select id="auditAction"><option value="">Every action</option>' + ["automod_strike", "escalate", "expire_sanction", "auto_suspend_name", "temporary_status", "set_status", "bulk_status", "send_staff_message", "revoke_strike", "resolve_appeal", "save_automod"]
+			'<select id="auditAction"><option value="">Every action</option>' + ["automod_strike", "automod_second_chance", "escalate", "expire_sanction", "auto_suspend_name", "temporary_status", "set_status", "bulk_status", "send_staff_message", "revoke_strike", "resolve_appeal", "save_automod"]
 				.map((a) => '<option value="' + a + '"' + (filter.action === a ? " selected" : "") + ">" + a.replace(/_/g, " ") + "</option>").join("") + "</select>" +
 			'<label class="row"><input type="checkbox" id="auditAuto"' + (filter.automatic ? " checked" : "") + '> Automatic only</label><button class="btn" id="auditGo">Filter</button></div><div class="scroll">' + (entries.length
 			? '<table class="table"><tr><th>When</th><th>Who</th><th>Did</th><th>To</th><th>Details</th></tr>' +

@@ -971,3 +971,11 @@ update posts set reply_to_id = conversation_id where reply_to_id is null and con
 alter table users add column if not exists role_granted_by bigint;
 update users u set role_granted_by = (select a.actor_id from audit_log a where a.action = 'set_role' and a.target = u.id::text order by a.created_at desc limit 1)
 	where u.role is not null and u.role_granted_by is null;
+
+insert into chat_trust (user_id, trusted_id)
+	select distinct e.sender_id, m.user_id from chat_events e join chat_members m on m.conversation_id = e.conversation_id and m.user_id <> e.sender_id
+	where e.kind = 1 and e.conversation_id ~ '^[0-9]+[-:][0-9]+$'
+	on conflict do nothing;
+update chat_members m set accepted = true where not m.accepted and m.conversation_id ~ '^[0-9]+[-:][0-9]+$'
+	and exists (select 1 from chat_members peer join chat_trust t on t.user_id = m.user_id and t.trusted_id = peer.user_id
+		where peer.conversation_id = m.conversation_id and peer.user_id <> m.user_id);

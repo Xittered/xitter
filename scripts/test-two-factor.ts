@@ -42,7 +42,7 @@ try {
 		fetch(`${origin}/account/2fa${path}`, { method: "POST", body: new URLSearchParams(body), headers: { cookie: cookies } });
 
 	const start = await (await post("/start")).text();
-	const secret = /<div class="box">([A-Z2-7 ]+)<\/div>/.exec(start)?.[1].replace(/ /g, "");
+	const secret = /<div class="box code">([A-Z2-7 ]+)<\/div>/.exec(start)?.[1].replace(/ /g, "");
 	check("set-up shows a key", !!secret && secret.length === 32, secret);
 	const step0 = Math.floor(Date.now() / 30000);
 	check("a wrong code doesn't turn it on", (await (await post("/confirm", { code: "000000" })).text()).includes("isn't right"));

@@ -4,6 +4,7 @@
 // post carrying the article, which is how feeds, profiles and the reader see it.
 
 import type { User } from "./auth";
+import { protectedFor, suspendedFor } from "./blocks";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { type MediaRow, mediaUrl, posterUrl } from "./media";
@@ -178,6 +179,9 @@ export async function getArticle(viewerId: string, id: string, withContent = tru
 	if (!row || (row.state !== "Published" && String(row.user_id) !== viewerId)) return undefined;
 	// hidden by staff: only its author and staff see it
 	if (row.hidden && String(row.user_id) !== viewerId && !(await sql`select 1 from users where id = ${viewerId}::bigint and role is not null`).length) return undefined;
+	const [unseen] = await sql`select 1 where ${row.user_id}::bigint in ${protectedFor(viewerId)} or ${row.user_id}::bigint in ${suspendedFor(viewerId)}
+		or ${row.user_id}::bigint in (select blocker_id from blocks where blocked_id = ${viewerId}::bigint)`;
+	if (unseen) return undefined;
 	return entity(row, await userById(viewerId, String(row.user_id)), withContent);
 }
 

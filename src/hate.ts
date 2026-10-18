@@ -49,6 +49,7 @@ const compiled = TERMS.map((t) => ({
 	...t,
 	inside: new RegExp(core(t.word), "u"),
 	whole: new RegExp(`^${core(t.word)}(?:${t.anywhere ? "s|z|h|hs|az|as|ers|er|a" : t.suffix ?? "s"})?$`, "u"),
+	backward: new RegExp(`^${t.word.replace(/(\p{L})\1*/gu, (run, c) => (run.length > 1 ? `${c}{${run.length},}` : `${c}+`))}(?:${t.anywhere ? "s|z|h|hs|az|as|ers|er|a" : t.suffix ?? "s"})?$`, "u"),
 }));
 
 const FLIPPED: Record<string, string> = { ɐ: "a", q: "b", ɔ: "c", p: "d", ǝ: "e", ɟ: "f", ƃ: "g", ɥ: "h", ı: "i", ɾ: "j", ʞ: "k", ן: "l", ɯ: "m", u: "n", d: "p", b: "q", ɹ: "r", ʇ: "t", n: "u", ʌ: "v", ʍ: "w", ʎ: "y" };
@@ -95,11 +96,16 @@ function termIn(candidate: string, wholeOnly: boolean) {
 
 const reverse = (s: string) => [...s].reverse().join("");
 
+const backwardIn = (candidate: string) => {
+	const form = plain(reverse(candidate).replace(/^@+|!+$/g, ""));
+	return compiled.find((t) => t.backward.test(t.benign ? form.replace(t.benign, " ") : form));
+};
+
 function slurIn(tokens: string[]): HateHit | undefined {
 	const words = tokens.map(plain);
 	const found = (t: Term, at: number): HateHit | undefined => (!t.contextual || attacked(words, at) ? { category: "slur", term: t.word } : undefined);
 	for (const [i, token] of tokens.entries()) {
-		const t = termIn(token, false) ?? termIn(reverse(token), true);
+		const t = termIn(token, false) ?? backwardIn(token);
 		const hit = t && found(t, i);
 		if (hit) return hit;
 	}
@@ -109,7 +115,7 @@ function slurIn(tokens: string[]): HateHit | undefined {
 			if ([...tokens[j]].length > 5) break;
 			joined += tokens[j];
 			if (j === i) continue;
-			const t = termIn(joined, true) ?? termIn(reverse(joined), true);
+			const t = termIn(joined, true) ?? backwardIn(joined);
 			const hit = t && found(t, i);
 			if (hit) return hit;
 		}

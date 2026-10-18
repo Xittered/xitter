@@ -643,23 +643,59 @@ export const gridAppend = (posts: PostRow[], grid = GRID) => ({ type: "TimelineA
 
 // One reply shown as its own thread under the opened post. `feedbackKey` points
 // at a TweetDetail responseObjects feedback action (the pin/unpin menu item).
-export const replyEntry = (p: PostRow, sortIndex: string, opts: { pinned?: boolean; feedbackKey?: string } = {}) => ({
+export type ThreadItem = { post: PostRow; parent?: string; indent?: boolean; pinned?: boolean; feedbackKey?: string };
+export type ThreadMore = { value: string; after: string };
+const threadItemId = (root: string, id: string) => `conversationthread-${root}-tweet-${id}`;
+const treeDisplay = (root: string, parent: string | undefined, indent = false) =>
+	parent ? { treeDisplay: { parentModuleItemEntryId: threadItemId(root, parent), indentFromParent: indent } } : {};
+export const threadItems = (root: string, items: ThreadItem[], more?: ThreadMore) => [
+	...items.map((it) => ({
+		entryId: threadItemId(root, it.post.id),
+		item: {
+			itemContent: tweetItem(tweetResult(it.post), it.pinned ? { type: "TimelineGeneralContext", contextType: "ReplyPin", text: "Pinned" } : undefined),
+			...(it.feedbackKey ? { feedbackInfo: { feedbackKeys: [it.feedbackKey] } } : {}),
+		},
+		...treeDisplay(root, it.parent, it.indent),
+	})),
+	...(more
+		? [
+				{
+					entryId: `conversationthread-${root}-cursor-showmore-${more.after}`,
+					item: {
+						itemContent: {
+							__typename: "TimelineTimelineCursor",
+							itemType: "TimelineTimelineCursor",
+							cursorType: "ShowMore",
+							value: more.value,
+							displayTreatment: { actionText: "Show replies" },
+						},
+					},
+					...treeDisplay(root, more.after),
+				},
+			]
+		: []),
+];
+export const threadEntry = (root: string, items: ThreadItem[], sortIndex: string, more?: ThreadMore) => ({
 	content: {
 		__typename: "TimelineTimelineModule",
 		displayType: "VerticalConversation",
 		entryType: "TimelineTimelineModule",
-		items: [
-			{
-				entryId: `conversationthread-${p.id}-tweet-${p.id}`,
-				item: {
-					itemContent: tweetItem(tweetResult(p), opts.pinned ? { type: "TimelineGeneralContext", contextType: "ReplyPin", text: "Pinned" } : undefined),
-					...(opts.feedbackKey ? { feedbackInfo: { feedbackKeys: [opts.feedbackKey] } } : {}),
-				},
-			},
-		],
-		metadata: { conversationMetadata: { allTweetIds: [p.id], enableDeduplication: true } },
+		items: threadItems(root, items, more),
+		metadata: { conversationMetadata: { allTweetIds: items.map((it) => it.post.id), enableDeduplication: true } },
 	},
-	entryId: `conversationthread-${p.id}`,
+	entryId: `conversationthread-${root}`,
+	sortIndex,
+});
+
+export const showMoreThreadsEntry = (value: string, sortIndex: string) => ({
+	content: {
+		__typename: "TimelineTimelineCursor",
+		cursorType: "ShowMoreThreads",
+		entryType: "TimelineTimelineCursor",
+		value,
+		displayTreatment: { actionText: "Show more replies" },
+	},
+	entryId: `cursor-showmorethreads-${sortIndex}`,
 	sortIndex,
 });
 

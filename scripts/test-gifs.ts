@@ -1,6 +1,7 @@
 // Checks GIF search and the media proxy against a running server that was
-// started with KLIPY_API_KEY=test KLIPY_API_URL=http://localhost:39999/v2
-// (this script serves the fake Klipy there).
+// started with KLIPY_API_KEY=test KLIPY_API_URL=http://localhost:39999/v2, or
+// with TENOR_API_KEY and TENOR_API_URL and GIF_PROVIDER=tenor here
+// (this script serves the fake provider there).
 // usage: bun scripts/test-gifs.ts <user> <password>
 
 export {};
@@ -9,6 +10,7 @@ const origin = `http://localhost:${process.env.PORT ?? 3000}`;
 const [name, password] = process.argv.slice(2);
 if (!name || !password) throw new Error("usage: bun scripts/test-gifs.ts <user> <password>");
 
+const provider = process.env.GIF_PROVIDER ?? "klipy";
 const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0, 0x3b]);
 const seen: string[] = [];
 const klipy = Bun.serve({
@@ -53,11 +55,12 @@ function check(label: string, ok: boolean, detail: unknown = "") {
 	console.log(`${ok ? "ok  " : "FAIL"} ${label}${detail === "" ? "" : `: ${JSON.stringify(detail)}`}`);
 }
 
-const found = (await get("GifSearch", { rawQuery: "cat", count: 10 })).data?.gif_search_slice;
-check("search returns usable items only", found?.items?.length === 1 && found.items[0].id === "klipy_abc", found?.items?.length);
-check("items have the shape the client maps", found?.items?.[0]?.full_image?.still_image_url && found.items[0].thumbnail_images.length === 1 && found.items[0].provider.id === "klipy");
+const raw = await get("GifSearch", { rawQuery: "cat", count: 10 });
+const found = raw.data?.gif_search_slice;
+check("search returns usable items only", found?.items?.length === 1 && found.items[0].id === `${provider}_abc`, found?.items?.length);
+check("items have the shape the client maps", found?.items?.[0]?.full_image?.still_image_url && found.items[0].thumbnail_images.length === 1 && found.items[0].provider.id === provider);
 check("cursor passes through", found?.slice_info?.next_cursor === "page2");
-check("Klipy got the query and the key", seen.some((s) => s.includes("q=cat") && s.includes("key=test")));
+check("the provider got the query and the key", seen.some((s) => s.includes("q=cat") && s.includes("key=test")));
 
 const trending = (await get("GifEnumerateCategory", { category: "trending", count: 5 })).data?.gif_enumerate_category_slice;
 check("trending uses the featured feed", trending?.items?.length === 1 && seen.some((s) => s.startsWith("/v2/featured")));

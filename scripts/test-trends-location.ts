@@ -3,6 +3,7 @@
 // usage: bun scripts/test-trends-location.ts <viewer> <author A> <author B> <password>
 
 import { sql } from "../src/db";
+import { loosenTrends } from "./loose-trends";
 
 const origin = `http://localhost:${process.env.PORT ?? 3000}`;
 const [viewerName, aName, bName, password] = process.argv.slice(2);
@@ -44,6 +45,7 @@ const trends = async () => {
 };
 const names = async () => (await trends()).map((t) => t.name);
 
+const restoreTrends = await loosenTrends(origin);
 try {
 	await sql`update users set country = 'DE' where screen_name = ${aName}`;
 	await sql`update users set country = 'FR' where screen_name = ${bName}`;
@@ -74,6 +76,7 @@ try {
 	check("worldwide has both", list.includes(`#${de}`) && list.includes(`#${fr}`), list);
 	check("an unknown place is ignored", (await viewer.rest("/2/guide/set_explore_settings.json", { places: ["ZZ"] })).places[0].place_id === "1");
 } finally {
+	await restoreTrends();
 	for (const [s, id] of made) await s.gql("DeleteTweet", { tweet_id: id });
 	for (const name of [viewerName, aName, bName]) {
 		const r = was[name];

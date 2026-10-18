@@ -319,7 +319,6 @@ export const chatSocket = {
 	},
 	async message(ws: ServerWebSocket<SocketData>, data: string | Buffer) {
 		if (typeof data === "string") return;
-		if (!hit("endpoint", `${ws.data.userId}:chat-socket`).ok) return;
 		let frame: Struct;
 		try {
 			frame = thrift.decode(new Uint8Array(data));
@@ -328,6 +327,7 @@ export const chatSocket = {
 		}
 		// keep-alive: answered in kind
 		if (frame[2]) return ws.send(thrift.encode({ 2: struct({ 2: struct({}) }) }));
+		if (!hit("endpoint", `${ws.data.userId}:chat-socket`).ok) return;
 		// an event sent straight to the socket: typing and the like, passed on
 		// to the conversation's other members, not kept
 		const ev = thrift.fields(frame[1]);
@@ -865,6 +865,8 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const [request] = await sql`select 1 from chat_members where conversation_id = ${conversationId} and user_id <> ${v.id}::bigint and not accepted`;
 		mce[109] = bool(!!request);
 		await sql`update chat_members set accepted = true, archived = false where conversation_id = ${conversationId} and user_id = ${v.id}::bigint`;
+		const peer = directMembers(conversationId)?.find((id) => id !== v.id);
+		if (peer) await sql`insert into chat_trust (user_id, trusted_id) values (${v.id}::bigint, ${peer}::bigint) on conflict do nothing`;
 		const ev: Struct = {
 			2: str(String(vars.message_id ?? crypto.randomUUID())),
 			...(vars.conversation_token ? { 5: str(String(vars.conversation_token)) } : {}),

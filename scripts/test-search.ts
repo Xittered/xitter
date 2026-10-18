@@ -3,6 +3,7 @@
 // usage: bun scripts/test-search.ts <user A> <user B> <password of both> <image>
 
 import { readFileSync } from "node:fs";
+import { loosenTrends } from "./loose-trends";
 
 const origin = `http://localhost:${process.env.PORT ?? 3000}`;
 const [nameA, nameB, password, imagePath] = process.argv.slice(2);
@@ -94,7 +95,9 @@ check("typeahead suggests hashtags", tags.topics?.map((t: any) => t.topic).sort(
 check("the hashtag is an entity in the post", p1.legacy.entities.hashtags?.[0]?.text === `${w}tag`, p1.legacy.entities.hashtags);
 const ru = await post(a, "тест #привет");
 check("Cyrillic hashtags too", ru.legacy.entities.hashtags?.[0]?.text === "привет" && ru.legacy.entities.hashtags[0].indices.join() === "5,12", ru.legacy.entities.hashtags);
+const restoreTrends = await loosenTrends(origin);
 const explore = (await a.get("ExplorePage", {})).data.explore_page.body.timeline.instructions[0].entries.map((e: any) => e.content.itemContent.name);
+await restoreTrends();
 check("Explore lists the hashtags in use", explore.includes(`#${w}tag`) && explore.includes("#привет"), explore.slice(0, 8));
 
 await b.gql("UnfavoriteTweet", { tweet_id: p1.rest_id });

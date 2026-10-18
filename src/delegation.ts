@@ -52,11 +52,14 @@ export async function actingViewer(member: Viewer, ownerId: string): Promise<Vie
 // settings or delegation, and its messages (end-to-end keys are the owner's).
 const DELEGATE_DENIED_OPS = /XChat|DirectMessage|DmInbox|SendMessage|ConversationEvent|Preference|_settings_|Settings?Mutation|Password|Email|Phone|TwoFactor|Session|Deactivat|ScreenName|UserAccountLabel|AccountParody|Delegat/;
 const DELEGATE_DENIED_REST = /^\/(1\.1|2)\/(dm|direct_messages)\/|^\/1\.1\/account\/(?!settings\.json$|verify_credentials)|^\/1\.1\/strato\/column\/.*\/clients\//;
+const DELEGATE_PRIVATE_REST = /^\/(i\/)?account\/|^\/1\.1\/notifications\/settings\/|^\/1\.1\/users\/email_phone_info|^\/1\.1\/account\/(personalization|user_twitter_data)|^\/xitter\/(export|moderation)/;
+const DELEGATE_PRIVATE_READS = /XChat|DirectMessage|DmInbox|Session|Email|Phone|TwoFactor|Password|LoginHistory/;
 // Post analytics are for Admins (as the client's role screen says).
-const ANALYTICS_OPS = /^(accountOverviewDailyQuery|accountOverviewHourlyQuery|activeFollowersTileQuery|useFetchAnalyticsQuery|contentPageQuery|postDetailsProviderQuery)$/;
+const ANALYTICS_OPS = /^(accountOverview|activeFollowersTile|useFetchAnalytics|contentPage|postDetailsProvider|overviewData)\w*Query$/;
 export function delegateMay(role: Role, method: string, path: string, operation: string | undefined): boolean {
 	if (operation && role !== "Admin" && ANALYTICS_OPS.test(operation)) return false;
-	if (operation) return method === "GET" ? !/XChat|DirectMessage|DmInbox/.test(operation) : !DELEGATE_DENIED_OPS.test(operation);
+	if (operation) return method === "GET" ? !DELEGATE_PRIVATE_READS.test(operation) : !DELEGATE_DENIED_OPS.test(operation);
+	if (DELEGATE_PRIVATE_REST.test(path)) return false;
 	if (DELEGATE_DENIED_REST.test(path)) return method === "GET" && !/\/(dm|direct_messages)\//.test(path);
 	// reading settings is fine; changing them isn't
 	if (path === "/1.1/account/settings.json") return method === "GET";

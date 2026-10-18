@@ -109,6 +109,7 @@ const benign = [
 	"spice",
 	"spicy",
 	"spick and span",
+	"Get news, clips, and more news related to Slide-Asteroid's properties!",
 	"raccoon",
 	"my maine coon is fat",
 	"tycoon",

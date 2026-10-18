@@ -72,9 +72,11 @@ const DEFAULTS = {
 		blocked_names: [] as string[],
 		hidden_trends: [] as string[],
 		promoted_trends: [] as string[],
+		trend_min_people: 3,
+		trend_min_account_days: 3,
 		global_pin: null as string | null,
 	},
-	automod: { enabled: true, strike_days: 365, ladder: [0, 24, 168, 720, -1] as number[] },
+	automod: { enabled: true, strike_days: 365, ladder: [0, 24, 168, 720, -1] as number[], second_chances: 5 },
 	// the admin panel itself (admin.ts staffGate): staff must have two-factor on;
 	// only these addresses (IPs or CIDR ranges) reach it, none meaning any
 	security: { staff_2fa: false, admin_ips: [] as string[] },
@@ -104,7 +106,7 @@ export async function loadSettings() {
 
 export const settings = (): Settings => current;
 // GIF search needs a Klipy key; without one the button stays hidden
-export const feature = (f: Feature) => (f === "gifs" && !process.env.KLIPY_API_KEY ? false : current.features[f] !== false);
+export const feature = (f: Feature) => (f === "gifs" && !process.env.KLIPY_API_KEY && !process.env.TENOR_API_KEY ? false : current.features[f] !== false);
 // the admin's blocked phrases, in any case and through look-alike letters and
 // invisible characters (names.ts); spacing still counts, unlike names
 const phraseForm = (text: string) => foldGlyphs(text).replace(/\p{Cf}/gu, "");

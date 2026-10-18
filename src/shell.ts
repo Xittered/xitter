@@ -10,6 +10,7 @@ import { FORGOT_SCRIPT, FRESH_SCRIPT, type MenuLink, TIDY_SCRIPT, hideCss, tidyD
 import { POST_CONTEXT_SCRIPT } from "./post-context";
 import { ERROR_SCRIPT } from "./errors";
 import { BADGES_SCRIPT } from "./badges";
+import { NOTICE_SCRIPT } from "./automod-notice";
 import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-picker";
 import { PUBLIC_ORIGIN } from "./config";
 import { legacyUser } from "./model";
@@ -278,7 +279,8 @@ ${FORGOT_SCRIPT}
 ${FLAG_PICKER_SCRIPT}
 ${user ? STICKER_PICKER_SCRIPT : ""}
 ${POST_CONTEXT_SCRIPT}
-${BADGES_SCRIPT}</script>
+${BADGES_SCRIPT}
+${user ? NOTICE_SCRIPT : ""}</script>
 <script id="nonce-csp"></script>
 <script>${runtimePatched.text}</script>
 ${scripts}

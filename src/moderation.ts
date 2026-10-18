@@ -27,7 +27,7 @@ export async function shutOut(...userIds: string[]) {
 	for (const id of userIds) chat.closeSockets(id);
 }
 
-export type Escalation = { strikes: number; outcome: "warning" | "suspended" | "permanent" | "staff"; hours?: number };
+export type Escalation = { strikes: number; outcome: "warning" | "second_chance" | "suspended" | "permanent" | "staff"; hours?: number };
 
 export async function activeStrikes(userId: string): Promise<number> {
 	const days = Math.max(1, settings().automod.strike_days);
@@ -67,15 +67,34 @@ export async function escalate(userId: string, actorId: string | null, reason: s
 const PLACE: Record<string, string> = { post: "a post", profile: "your profile", name: "your name", list: "a list", community: "a community", poll: "a poll", alt: "an image description", article: "an article", note: "a note", other: "something you wrote" };
 const WHAT: Record<string, string> = { slur: "a slur", hate: "hate speech", transphobia: "transphobic content", abuse: "abuse aimed at someone" };
 
+export async function secondChancesLeft(userId: string): Promise<number> {
+	const per = settings().automod.second_chances;
+	if (!per) return 0;
+	const [row] = await sql`select count(*)::int as n from audit_log where action = 'automod_second_chance' and target = ${userId} and created_at > now() - interval '7 days'`;
+	return Math.max(0, per - row.n);
+}
+
 export async function automodStrike(userId: string, hit: HateHit, where: keyof typeof PLACE, sample: string): Promise<Escalation | undefined> {
 	if (!settings().automod.enabled) return undefined;
-	const [recent] = await sql`select 1 from staff_messages where user_id = ${userId}::bigint and kind = 'strike' and actor_id is null and created_at > now() - interval '2 minutes'`;
+	const [recent] = await sql`select 1 from audit_log where target = ${userId} and action in ('automod_strike', 'automod_second_chance') and created_at > now() - interval '2 minutes'`;
 	if (recent) return undefined;
-	const body = `Automatic strike: ${PLACE[where] ?? PLACE.other} contained ${WHAT[hit.category] ?? "content"} this instance doesn't allow. It wasn't published. Repeated strikes lead to suspension. If this was a mistake, you can appeal.`;
+	const what = `${PLACE[where] ?? PLACE.other} contained ${WHAT[hit.category] ?? "content"} this instance doesn't allow`;
+	const detail = { where, category: hit.category, term: hit.term, sample: [...sample].slice(0, 300).join("") };
+	const left = await secondChancesLeft(userId);
 	const message = newId();
+	if (left > 0) {
+		const per = settings().automod.second_chances;
+		const after = left - 1;
+		const body = `${what[0].toUpperCase()}${what.slice(1)}, so it wasn't published. This time it doesn't count as a strike: you get ${per} second chances a week, and you have ${after === 0 ? "none" : after} left. ${after === 0 ? "From now until the week is up, the next one is a strike, and strikes lead to suspension." : "Once they're used up, each one is a strike, and strikes lead to suspension."}`;
+		await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${message}::bigint, ${userId}::bigint, null, 'warning', ${body})`;
+		await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'automod_second_chance', ${userId},
+			${JSON.stringify({ message, left: after, ...detail })}::text::jsonb)`;
+		return { strikes: await activeStrikes(userId), outcome: "second_chance" };
+	}
+	const body = `Automatic strike: ${what}. It wasn't published, and you have no second chances left this week. Repeated strikes lead to suspension. If this was a mistake, you can appeal.`;
 	await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${message}::bigint, ${userId}::bigint, null, 'strike', ${body})`;
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'automod_strike', ${userId},
-		${JSON.stringify({ message, where, category: hit.category, term: hit.term, sample: [...sample].slice(0, 300).join("") })}::text::jsonb)`;
+		${JSON.stringify({ message, ...detail })}::text::jsonb)`;
 	return escalate(userId, null, `automod ${hit.category} in ${where}`);
 }
 

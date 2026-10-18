@@ -174,7 +174,8 @@ scripts/fetch-client.ts --latest` re-pins the build.
 | `MAX_CHAT_MEDIA_MB` | `200` | Maximum encrypted chat attachment size |
 | `RESEND_API_KEY` | unset | Resend key for password-reset and notification mail; without it nothing is sent |
 | `MAIL_FROM` | `Xitter <noreply@xit.chococat.lol>` | Sender of that mail (the domain must be verified in Resend) |
-| `KLIPY_API_KEY` | unset | GIF search through [Klipy](https://klipy.com) (see `src/gifs.ts`); without it the GIF button is hidden |
+| `KLIPY_API_KEY` | unset | GIF search through [Klipy](https://klipy.com) (see `src/gifs.ts`); without it or `TENOR_API_KEY` the GIF button is hidden |
+| `TENOR_API_KEY` | unset | GIF search through Tenor's v2 API instead, used when `KLIPY_API_KEY` isn't set |
 
 Everything else (name, sign-up mode, features, limits, announcement, rules,
 logos) is set in the admin panel.
@@ -261,14 +262,16 @@ It reads through look-alike letters from other alphabets, Unicode styles,
 leetspeak, invisible characters, accents, repeated letters, letters spelled
 out one by one and reversed or upside-down text. Reclaimed queer words pass
 unless the text attacks someone, and NSFW text isn't touched. DMs are end-to-end
-encrypted, so the server can't read them. Each refusal is an appealable
-strike, and strikes, from staff or automatic, follow a ladder set in
-Settings > Automod (by default a warning, a day, a week, 30 days, then
-permanent). `bun test ./scripts/test-hate.ts` checks evasions and false
+encrypted, so the server can't read them. The first refusals each week (5 by
+default) are second chances: the content isn't published, and the person gets a
+notice and a modal saying what was caught and how many chances are left. After
+that each refusal is an appealable strike, and strikes, from staff or
+automatic, follow a ladder set in Settings > Automod (by default a warning, a
+day, a week, 30 days, then permanent). `bun test ./scripts/test-hate.ts` checks evasions and false
 positives without a server; `bun scripts/test-automod.ts` checks the ladder,
 expiry, write paths and request limits against one.
 
-- `GET /_debug/unknown` lists the client calls no handler answers yet, most
+- `GET /_debug/unknown` (admins only) lists the client calls no handler answers yet, most
   frequent first. Start there when a screen is empty.
 - `scripts/test-*.ts` check each feature end to end against a running server,
   for example `bun scripts/test-posts.ts <user A> <user B> <password>`. Each
