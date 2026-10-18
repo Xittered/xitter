@@ -62,14 +62,22 @@ const TICKET = "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5V10a2 2 0 0 0 
 // Material Symbols "code"
 const CODE = "M320-240 80-480l240-240 57 57-184 184 183 183-56 56Zm320 0-57-57 184-184-183-183 56-56 240 240-240 240Z";
 const BUILDING = "M4 21V3h11v4h5v14H4zm2-2h3v-3h2v3h2V5H6v14zm9 0h3V9h-3v10zM8 7h3v2H8V7zm0 4h3v2H8v-2z";
-export type MenuLink = { href: string; text: string; icon: string; viewBox?: string };
+const SHIELD = "M12 1.5 3.5 5v6c0 5.2 3.6 10 8.5 11.5 4.9-1.5 8.5-6.3 8.5-11.5V5L12 1.5zm0 2.2 6.5 2.7V11c0 4.2-2.8 8.2-6.5 9.4-3.7-1.2-6.5-5.2-6.5-9.4V6.4L12 3.7zM11 7h2v6h-2V7zm0 8h2v2h-2v-2z";
+const ROBOT = "M11 2h2v3h5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5V2zM6 7v11h12V7H6zm3 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-6 5h6v1.5H9V15z";
+export type MenuLink = { href: string; text: string; description: string; icon: string; viewBox?: string; menuOnly?: boolean };
 export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	const links: MenuLink[] = [];
-	if (settings().invite_quota.enabled && settings().signup_mode === "invite") links.push({ href: "/account/invites", text: "Invites", icon: TICKET });
-	const [org] = await sql`select 1 from users u where u.id = ${userId}::bigint and (u.verified_type in ('business', 'government')
-		or exists (select 1 from affiliations where user_id = u.id) or exists (select 1 from affiliation_requests where user_id = u.id))`;
-	if (org) links.push({ href: "/account/organisation", text: "Organisation", icon: BUILDING });
-	links.push({ href: "/account/api", text: "API", icon: CODE, viewBox: "0 -960 960 960" });
+	const s = settings();
+	if (s.invite_quota.enabled && s.signup_mode === "invite")
+		links.push({ href: "/account/invites", text: "Invites", description: `Invite people you know to ${s.instance_name}.`, icon: TICKET });
+	const [u] = await sql`select coalesce(u.verified_type in ('business', 'government'), false)
+			or exists (select 1 from affiliations where user_id = u.id) or exists (select 1 from affiliation_requests where user_id = u.id) as org,
+		exists (select 1 from staff_messages where user_id = u.id and revoked_at is null) or exists (select 1 from moderation_appeals where user_id = u.id) as notices
+		from users u where u.id = ${userId}::bigint`;
+	if (u?.org) links.push({ href: "/account/organisation", text: "Organisation", description: "Manage affiliates, or answer an organisation that asked to add you.", icon: BUILDING });
+	links.push({ href: "/account/automation", text: "Automation", description: "Name the account that runs this one.", icon: ROBOT, menuOnly: true });
+	if (u?.notices) links.push({ href: "/account/notices", text: "Staff notices", description: `Messages, warnings and strikes from the ${s.instance_name} team, and your appeals.`, icon: SHIELD });
+	links.push({ href: "/account/api", text: "API", description: "Make tokens that let scripts and bots use your account.", icon: CODE, viewBox: "0 -960 960 960" });
 	return links;
 }
 
@@ -187,6 +195,24 @@ export const TIDY_SCRIPT = `(function(){
 	}
 	// the More menu's "Settings and privacy" copied for each of our pages; the
 	// copy has none of the client's handlers, so it is a plain link
+	function leave(a,href){
+		a.setAttribute("href",href);a.setAttribute("data-xitter-link","");
+		a.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();location.assign(href)},true);
+	}
+	function copy(a,l){
+		leave(a,l.href);a.removeAttribute("data-testid");
+		var text=[l.text,l.description];
+		[].filter.call(a.querySelectorAll("span"),function(n){return !n.childElementCount&&n.textContent.trim()}).forEach(function(n,i){if(text[i])n.textContent=text[i]});
+		var svg=a.querySelector("svg"),path=svg&&svg.querySelector("path");
+		if(path){[].slice.call(svg.querySelectorAll("path")).slice(1).forEach(function(p){p.remove()});path.removeAttribute("fill-rule");path.removeAttribute("clip-rule");path.setAttribute("d",l.icon);if(l.viewBox)svg.setAttribute("viewBox",l.viewBox)}
+		// the client hovers its entries from script, which the copy doesn't
+		// get: X's hover grey for the theme (light, dim, dark)
+		a.addEventListener("mouseenter",function(){
+			var bg=getComputedStyle(document.body).backgroundColor;
+			a.style.backgroundColor=bg==="rgb(255, 255, 255)"?"rgb(247, 249, 249)":bg==="rgb(21, 32, 43)"?"rgb(30, 39, 50)":"rgb(22, 24, 28)";
+		});
+		a.addEventListener("mouseleave",function(){a.style.backgroundColor=""});
+	}
 	function menuLinks(){
 		if(!T.links||!T.links.length)return;
 		// each entry sits alone in a row wrapper, so the copy takes the wrapper along
@@ -194,22 +220,32 @@ export const TIDY_SCRIPT = `(function(){
 		var row=s&&s.parentNode;
 		if(!row||row.parentNode.querySelector("[data-xitter-link]"))return;
 		T.links.forEach(function(l){
-			var box=row.cloneNode(true),a=box.querySelector('a[href="/settings"]');
-			a.setAttribute("href",l.href);a.setAttribute("data-xitter-link","");a.removeAttribute("data-testid");
-			var label=[].find.call(a.querySelectorAll("span"),function(n){return !n.childElementCount&&n.textContent.trim()});
-			if(label)label.textContent=l.text;
-			var path=a.querySelector("svg path");
-			if(path){[].slice.call(a.querySelectorAll("svg path")).slice(1).forEach(function(p){p.remove()});path.setAttribute("d",l.icon);if(l.viewBox)a.querySelector("svg").setAttribute("viewBox",l.viewBox)}
-			a.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();location.assign(l.href)},true);
-			// the client hovers its entries from script, which the copy doesn't
-			// get: X's hover grey for the theme (light, dim, dark)
-			a.addEventListener("mouseenter",function(){
-				var bg=getComputedStyle(document.body).backgroundColor;
-				a.style.backgroundColor=bg==="rgb(255, 255, 255)"?"rgb(247, 249, 249)":bg==="rgb(21, 32, 43)"?"rgb(30, 39, 50)":"rgb(22, 24, 28)";
-			});
-			a.addEventListener("mouseleave",function(){a.style.backgroundColor=""});
+			var box=row.cloneNode(true);
+			copy(box.querySelector('a[href="/settings"]'),l);
 			row.parentNode.insertBefore(box,row);
 		});
+	}
+	function accountRows(){
+		var rows=(T.links||[]).filter(function(l){return !l.menuOnly});
+		var screen=document.querySelector('[data-testid="accountScreen"]');
+		if(!rows.length||!screen||screen.querySelector("[data-xitter-link]"))return;
+		var last=screen.querySelector('a[href="/settings/deactivate"]');
+		var all=screen.querySelectorAll('a[data-testid="pivot"]');
+		var row=(last||all[all.length-1]||{}).parentNode;
+		if(!row)return;
+		var next=last?row:row.nextSibling;
+		rows.forEach(function(l){
+			var box=row.cloneNode(true);
+			copy(box.querySelector("a"),l);
+			row.parentNode.insertBefore(box,next);
+		});
+	}
+	function twoFactorRow(){
+		var a=document.querySelector('a[href="/settings/account/login_verification"]');
+		if(!a)return;
+		leave(a,"/account/2fa");
+		var about=a.nextElementSibling&&a.nextElementSibling.querySelector("span");
+		if(about&&about.textContent.indexOf("You can choose a text message")>=0)about.textContent="Help protect your account from unauthorized access by asking for a code from an authentication app when you log in, as well as your password.";
 	}
 	// the client opens links outside x.com in a new tab; our own pages outside
 	// the app (messages from staff) open in this one
@@ -261,6 +297,8 @@ export const TIDY_SCRIPT = `(function(){
 		ownScreens();
 		footer();
 		menuLinks();
+		accountRows();
+		twoFactorRow();
 		navWidth();
 		announce();
 		if(!T.imageGen)document.querySelectorAll('[role="dialog"] button').forEach(function(b){

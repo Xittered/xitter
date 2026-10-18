@@ -35,7 +35,14 @@ try {
 	check((await context()).data.xitter_post_context[0].requests === 1, "requests deduplicated");
 	await b.gql("BirdwatchDeleteBatSignal", { tweet_id: postId });
 	check((await context()).data.xitter_post_context[0].requests === 0, "withdraw request");
+	// with "Anyone can write Community Notes" off, writing needs the admin's grant
+	const features = (await a.admin("settings")).body.settings.features;
+	await a.admin("saveSettings", { features: { ...features, notes_everyone: false } });
+	check((await b.gql("BirdwatchFetchAuthenticatedUserProfile", {})).data.authenticated_user_birdwatch_profile.can_write_notes === false, "closed: profile says no writing");
 	check(!!(await b.gql("BirdwatchCreateNote", { tweet_id: postId, data_v1: { summary: "unauthorized" } })).errors, "nonmember cannot write notes");
+	await a.admin("saveSettings", { features: { ...features, notes_everyone: true } });
+	check((await b.gql("BirdwatchFetchAuthenticatedUserProfile", {})).data.authenticated_user_birdwatch_profile.can_write_notes === true, "open: anyone may write");
+	await a.admin("saveSettings", { features });
 	check((await b.admin("setNotesAccess", { id: author.id, enabled: true })).status === 403, "only admin grants membership");
 	check((await a.admin("setNotesAccess", { id: author.id, enabled: true })).status === 200, "grant writing membership");
 	check(!!(await a.gql("BirdwatchCreateNote", { tweet_id: postId, data_v1: { summary: "" } })).errors, "empty note rejected");

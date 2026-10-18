@@ -2,8 +2,9 @@ import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { blockedFor, isBlockedEitherWay, outOfView } from "./blocks";
-import { getPost, postsByIds, PostError } from "./posts";
+import { getPost, postsByIds, PostError, refuseHate } from "./posts";
 import { noteText, tweetEntry, tweetResult } from "./model";
+import { feature } from "./settings";
 
 function id(value: unknown): string {
 	if (!isId(value)) throw new PostError("Invalid note or post id.", 144);
@@ -19,7 +20,7 @@ async function visible(v: Viewer, postId: string, write = false) {
 
 async function membership(v: Viewer) {
 	const [user] = await sql`select notes_writer from users where id = ${v.id}::bigint`;
-	return !!user?.notes_writer && v.status === "active";
+	return (!!user?.notes_writer || feature("notes_everyone")) && v.status === "active";
 }
 
 async function profile(v: Viewer, alias?: string) {
@@ -31,7 +32,7 @@ async function profile(v: Viewer, alias?: string) {
 		select n.id, count(voter.id) as ratings, count(voter.id) filter(where r.rating = 'Helpful') as helpful, count(voter.id) filter(where r.rating = 'NotHelpful') as not_helpful
 		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active'
 		where n.author_id = ${user.id}::bigint group by n.id) scores`;
-	return { alias: user.notes_alias, can_write_notes: !!user.notes_writer && v.status === "active", user_enrollment: { enrollment_state: user.notes_writer ? "EarnedIn" : "NewUser", writing_impact: 0, rating_impact: 0 },
+	return { alias: user.notes_alias, can_write_notes: (!!user.notes_writer || feature("notes_everyone")) && v.status === "active", user_enrollment: { enrollment_state: user.notes_writer || feature("notes_everyone") ? "EarnedIn" : "NewUser", writing_impact: 0, rating_impact: 0 },
 		notes_count: { ...counts, last_updated_at: Date.now() }, ratings_count: { last_updated_at: Date.now(), successful: {}, unsuccessful: {} },
 		notification_settings: { needs_your_help_frequency: "Never" }, user_settings: { show_in_app_navigation: true }, is_top_writer: false, is_api_contributor: false,
 	};
@@ -116,6 +117,7 @@ export const noteHandlers = {
 		const data = vars.data_v1 ?? {};
 		const text = typeof data.summary === "string" ? data.summary.trim() : typeof data.summary?.text === "string" ? data.summary.text.trim() : "";
 		if (!text || [...text].length > 500) throw new PostError("Notes must contain 1–500 characters.", 186);
+		await refuseHate(v.id, text, "note");
 		const classification = data.classification === "MisinformedOrPotentiallyMisleading" ? "Misleading" : data.classification ?? "Misleading";
 		if (!["Misleading", "NotMisleading"].includes(classification)) throw new PostError("Invalid classification.", 144);
 		const tags = (key: string) => Array.isArray(data[key]) ? data[key].filter((x: unknown) => typeof x === "string" && x.length < 60).slice(0, 20) : [];
@@ -155,6 +157,7 @@ export const noteHandlers = {
 		const suggestion = typeof vars.suggestion === "string" ? vars.suggestion.trim() : "";
 		const source = typeof vars.source_link === "string" ? vars.source_link.trim() : "";
 		if ([...suggestion].length > 500 || source.length > 2048 || (source && !/^https?:\/\/[^\s<>]+$/.test(source))) throw new PostError("Invalid request source or explanation.", 144);
+		await refuseHate(v.id, suggestion, "note");
 		const [r] = await sql`insert into community_note_requests(post_id, user_id, source_link, suggestion) values(${vars.tweet_id}::bigint, ${v.id}::bigint, ${source || null}, ${suggestion || null})
 			on conflict(post_id,user_id) do update set source_link = excluded.source_link, suggestion = excluded.suggestion returning created_at`;
 		return { data: { birdwatchbatsignal_create: { type: "BirdwatchBatSignal", created_at: String(new Date(r.created_at).getTime()) } } };

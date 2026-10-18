@@ -7,56 +7,56 @@
 
 import { sql } from "./db";
 import { newId } from "./ids";
+import { LOOKALIKE, foldGlyphs } from "./fold";
+import { hateIn } from "./hate";
+import { shutOut } from "./moderation";
 import { hasBlockedPhrase, settings } from "./settings";
 
-// what else can stand for a letter; "1" is both i and l
-const LOOKALIKE: Record<string, string> = { a: "4@", b: "8", e: "3", g: "96", i: "1!|", l: "1|", o: "0", s: "5$", t: "7+", z: "2" };
-
-// Letters from other scripts that pass for Latin ones; NFKD already folds
-// full-width, bold/italic math and circled letters. Pairs: look-alike, Latin.
-const GLYPHS = Object.fromEntries(
-	[
-		// Cyrillic, including faux-Cyrillic (И for N, Я for R)
-		"аaвbеeёeкkмmнhоoрpсcтtуyхxіiїiјjѕsԁdьbъbпnиnйnяrгrшwщwцuчyзeэeдdлnғfқkңhүyұyһhӏl",
-		// Greek
-		"αaβbγyδdεeζzηnθoιiκkλnμuνvοoπnρpσoςcτtυuφoχxψwωw",
-		// small caps and other Latin look-alikes NFKD leaves alone
-		"ᴀaʙbᴄcᴅdᴇeɢgʜhɪiᴊjᴋkʟlᴍmɴnᴏoᴘpʀrꜱsᴛtᴜuᴠvᴡwʏyᴢzıiȷjłløođdħhŋnſsɑaɡgɩiʋvƒfßb",
-		// symbols that aren't letters but read as one
-		"∂d©c®r℗p∑e∆a∏n€e£l¢c¥y∅o⊂c∩n∪u∈e∃e∀a",
-	]
-		.join("")
-		.match(/../gsu)!
-		.map((pair) => [...pair] as [string, string]),
-);
-// capitals that look unlike their small letter (Σ is an E, σ an o)
-const CAPITALS: Record<string, string> = { Σ: "e", Δ: "a", Λ: "a", Ξ: "e", Η: "h", Υ: "y", Ν: "n", Μ: "m", Γ: "r" };
-// regional indicators (flag letters) 🇦..🇿
-const FLAG_A = 0x1f1e6;
-
-// NFKD, no accents, lowercase, every look-alike letter as its Latin one
-export function foldGlyphs(text: string): string {
-	return text
-		.normalize("NFKD")
-		.replace(/\p{M}/gu, "")
-		.replace(/[ΣΔΛΞΗΥΝΜΓ]/gu, (c) => CAPITALS[c])
-		.toLowerCase()
-		.replace(/[\u{1F1E6}-\u{1F1FF}]/gu, (c) => String.fromCharCode(97 + c.codePointAt(0)! - FLAG_A))
-		.replace(/[^\x00-\x7f]/gu, (c) => GLYPHS[c] ?? c);
-}
+export { foldGlyphs };
 
 // lowercase letters plus the look-alike digits and symbols; repeats are kept
 export function normalizeName(text: string): string {
 	return foldGlyphs(text).replace(/[^\p{L}0-9!|@$+]/gu, "");
 }
 
-// "nigger" -> n+[i1!|]+[g96]{2,}[e3]+r+
-function wordPattern(word: string): RegExp {
+// "nigger" -> n+ [i1!|]+ [g96]{2,} [e3]+ r+, matched anywhere in a text.
+// Not a RegExp: neighbouring letters share look-alikes (i and l both take 1
+// and |), and a backtracking engine tries every split of a run of them, so a
+// long run took minutes and froze the server. This walks the text once,
+// keeping every place in the word a match could be at.
+type Segment = { chars: Set<string>; min: number };
+type WordPattern = { test(text: string): boolean };
+
+function wordPattern(word: string): WordPattern {
 	const letters = word.replace(/[^\p{L}]/gu, "");
-	return new RegExp(letters.replace(/(\p{L})\1*/gu, (run, c) => {
-		const cls = LOOKALIKE[c] ? `[${c}${LOOKALIKE[c].replace(/[|$+]/g, "\\$&")}]` : c;
-		return run.length > 1 ? `${cls}{${run.length},}` : `${cls}+`;
-	}), "u");
+	const segments: Segment[] = [...letters.matchAll(/(\p{L})\1*/gu)].map(([run, c]) => ({ chars: new Set([c, ...(LOOKALIKE[c] ?? "")]), min: [...run].length }));
+	return {
+		test(text: string) {
+			if (!segments.length) return false;
+			const last = segments.length - 1;
+			// state: segment index * 1000 + how many it has taken so far (capped at its min)
+			let states = new Set<number>();
+			for (const ch of text) {
+				const next = new Set<number>();
+				const step = (k: number, n: number) => {
+					if (!segments[k].chars.has(ch)) return false;
+					const taken = Math.min(n + 1, segments[k].min);
+					if (k === last && taken === segments[k].min) return true;
+					next.add(k * 1000 + taken);
+					return false;
+				};
+				// a match may start at any character
+				if (step(0, 0)) return true;
+				for (const s of states) {
+					const k = Math.floor(s / 1000), n = s % 1000;
+					if (step(k, n)) return true;
+					if (n === segments[k].min && k < last && step(k + 1, 0)) return true;
+				}
+				states = next;
+			}
+			return false;
+		},
+	};
 }
 
 // the first blocked word the text contains, if any
@@ -108,12 +108,13 @@ export function blockedWordIn(...texts: string[]): string | undefined {
 
 // text anyone may write that staff don't want on the instance: a blocked
 // phrase, or a blocked name word read word by word
-export const forbiddenText = (...texts: string[]) => texts.some((t) => hasBlockedPhrase(t)) || !!blockedWordIn(...texts);
+export const forbiddenText = (...texts: string[]) => texts.some((t) => hasBlockedPhrase(t)) || !!blockedWordIn(...texts) || !!hateIn(...texts);
 
 // An account that took a blocked name: suspended and signed out everywhere,
 // with a line in the audit log. Staff are left alone (the caller refuses).
 export async function suspendForName(userId: string, name: string) {
-	await sql`update users set status = 'suspended', status_until = null where id = ${userId}::bigint and role is null`;
-	await sql`delete from sessions where user_id = ${userId}::bigint and exists (select 1 from users where id = ${userId}::bigint and role is null)`;
+	await sql`update users set status = 'suspended', status_until = null, status_restore = null, deactivated_at = null where id = ${userId}::bigint and role is null`;
+	const [member] = await sql`select 1 from users where id = ${userId}::bigint and role is null`;
+	if (member) await shutOut(userId);
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'auto_suspend_name', ${userId}, ${JSON.stringify({ name })}::text::jsonb)`;
 }

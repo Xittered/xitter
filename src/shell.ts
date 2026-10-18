@@ -122,6 +122,8 @@ const ownSwitches = (): Record<string, { value: unknown }> => ({
 	}),
 	// the checkmark sheet's "Upgrade to Premium" leads to X's checkout; there is nothing to buy here
 	responsive_web_user_badge_education_get_verified_button_enabled: { value: false },
+	// "Want more people to see your reply?" after an inline reply, for accounts over 30 days old
+	subscriptions_upsells_reply_boost_popup_enabled: { value: false },
 	// the guest set has 0, which offers "reload for the new version" on every service worker update
 	responsive_web_service_worker_update_toast_interval_hours: { value: 168 },
 	// on, it drops every post label but reposts, pins and communities, topics included

@@ -7,6 +7,7 @@
 // The pinned client has no topic page or followed-topics list any more (its
 // /i/topics links go nowhere), so everything happens from those two places.
 
+import { outOfView } from "./blocks";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 
@@ -76,7 +77,7 @@ export async function setTopicState(viewerId: string, id: string, what: "follow"
 // (most matching posts this week) first.
 export async function suggestedTopics(viewerId: string, limit = 6): Promise<Topic[]> {
 	return (await sql`select ${topicCols(viewerId)},
-			(select count(*) from posts p where p.created_at > now() - interval '7 days' and not p.hidden and p.text ~* ${pattern}) as recent
+			(select count(*) from posts p where p.created_at > now() - interval '7 days' and not p.hidden and p.user_id not in ${outOfView(viewerId)} and p.text ~* ${pattern}) as recent
 		from topics t
 		where not exists (select 1 from topic_follows tf where tf.topic_id = t.id and tf.user_id = ${viewerId}::bigint)
 			and not exists (select 1 from topic_not_interested tn where tn.topic_id = t.id and tn.user_id = ${viewerId}::bigint)

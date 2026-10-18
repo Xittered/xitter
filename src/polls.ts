@@ -85,6 +85,9 @@ export async function pollsByIds(viewerId: string, ids: string[]): Promise<Map<s
 }
 
 export async function createCard(userId: string, raw: unknown): Promise<{ status: string; card_uri: string }> {
+	if (String(raw ?? "").length > 20_000) throw new PollError("card_data is too large.");
+	const [recent] = await sql`select count(*)::int as n from polls where user_id = ${userId}::bigint and created_at > now() - interval '1 hour'`;
+	if (recent.n >= 60) throw new PollError("You've made too many polls. Try again later.", 429);
 	let data: Record<string, unknown>;
 	try {
 		data = JSON.parse(String(raw));

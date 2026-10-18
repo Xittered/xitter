@@ -141,7 +141,9 @@ export async function pushSettingsRoute(viewerId: string, action: string, body: 
 		if (endpoint) await sql`delete from push_subscriptions where user_id = ${viewerId}::bigint and endpoint = ${endpoint}`;
 		return Response.json({});
 	}
-	if (action === "login" && endpoint && d.encryption_key1 && d.encryption_key2) {
+	const keysFit = [d.encryption_key1, d.encryption_key2].every((k) => typeof k === "string" && k.length <= 256) && (endpoint?.length ?? 0) <= 2048;
+	const [subs] = await sql`select count(*)::int as n from push_subscriptions where user_id = ${viewerId}::bigint`;
+	if (action === "login" && endpoint && keysFit && subs.n < 50 && d.encryption_key1 && d.encryption_key2) {
 		await sql`insert into push_subscriptions (id, user_id, endpoint, p256dh, auth) values (${newId()}::bigint, ${viewerId}::bigint, ${endpoint}, ${d.encryption_key1}, ${d.encryption_key2})
 			on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`;
 	}

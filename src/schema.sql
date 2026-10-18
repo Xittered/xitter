@@ -917,18 +917,39 @@ alter table users add column if not exists parody_label text not null default 'N
 -- when it last changed: the client warns further changes wait 48 hours
 alter table users add column if not exists parody_label_at timestamptz;
 
--- Link cards (link-cards.ts): what a linked page says about itself, fetched
--- once by the server. ok is false when the page had nothing to show or
--- couldn't be reached. image is a file in MEDIA_DIR/cards.
-create table if not exists link_cards (
+create table if not exists link_previews (
 	url text primary key,
 	ok boolean not null,
-	kind text check (kind in ('summary', 'summary_large_image')),
-	title text,
-	description text,
-	domain text,
+	title text not null default '',
+	description text not null default '',
+	site text not null default '',
 	image text,
-	image_width int,
-	image_height int,
+	width int not null default 0,
+	height int not null default 0,
 	fetched_at timestamptz not null default now()
 );
+create index if not exists login_events_ip_idx on login_events (ip, created_at desc);
+update users u set deactivated_at = null where u.deactivated_at is not null and u.status = 'suspended' and exists (
+	select 1 from audit_log l where l.target = u.id::text and l.created_at > u.deactivated_at
+		and l.action in ('set_status', 'temporary_status', 'bulk_status', 'auto_suspend_name', 'suspend_blocked_names', 'escalate'));
+create table if not exists retired_identities (
+	kind text not null check (kind in ('handle', 'email', 'ip')),
+	value text not null,
+	user_id bigint,
+	reason text not null default '',
+	created_at timestamptz not null default now(),
+	primary key (kind, value)
+);
+
+-- Profile labels staff make in the admin panel, worn where X shows "Parody
+-- account": the text, a custom badge as its icon (the parody mask without
+-- one) and an optional link. An account wears one label at most, and none
+-- with a parody, commentary or fan label.
+create table if not exists account_labels (
+	id bigint primary key,
+	text text not null check (char_length(text) between 1 and 40),
+	badge_id bigint references custom_badges(id) on delete set null,
+	url text,
+	created_at timestamptz not null default now()
+);
+alter table users add column if not exists label_id bigint references account_labels(id) on delete set null;

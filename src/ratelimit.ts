@@ -116,7 +116,7 @@ export const limitedResponse = (h: Hit) =>
 const POST_OPS = /^(CreateTweet|CreateNoteTweet|CreateScheduledTweet|CreateDraftTweet|ArticleEntityPublish)$/;
 const ENGAGE_OPS = /^(FavoriteTweet|UnfavoriteTweet|CreateRetweet|DeleteRetweet|CreateBookmark|DeleteBookmark|bookmarkTweetToFolder|PinTweet|UnpinTweet)$/;
 const ENGAGE_REST = /^\/1\.1\/(friendships\/(create|destroy)|favorites\/(create|destroy)|statuses\/(retweet|unretweet))/;
-const DM_OPS = /XChat|SendMessageEvent|ConversationEvent/;
+const DM_OPS = /XChat|SendMessage|ConversationEvent|GroupConversation/;
 // what the client posts on its own all the time (event logging, its error
 // reports, read markers): about 40 a minute, which would use up "write" in a
 // quarter of an hour of reading

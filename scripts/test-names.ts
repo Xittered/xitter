@@ -34,6 +34,16 @@ try{
 	check(blockedNameIn('N_1-GGG3rr')==='nigger','digits, separators and repeats');
 	check(!blockedNameIn('Nigeria')&&!blockedNameIn('Niger Delta'),'a doubled letter needs two: Nigeria passes');
 	check(blockedNameIn('kkkk')==='kkk'&&!blockedNameIn('kick'),'kkk needs three ks, a single k passes');
+	// letters sharing look-alikes (i and l both take 1 and |) once made the
+	// matcher backtrack for minutes on a long run of them
+	await admin.admin('saveOperations',{...operations,blocked_names:['lililio']});
+	await loadSettings();
+	const t0=performance.now();
+	check(!blockedWordIn('1'.repeat(5000))&&!blockedNameIn('1|'.repeat(25)),'no match in a long run of shared look-alikes');
+	check(performance.now()-t0<500,'and it answers fast: '+Math.round(performance.now()-t0)+'ms');
+	check(blockedNameIn('l1l1|10')==='lililio','the word itself still matches');
+	await admin.admin('saveOperations',{...operations,blocked_names:[WORD,'nigger','kkk']});
+	await loadSettings();
 	// letters from other scripts and Unicode styles that pass for Latin ones
 	for(const s of['nіggеr','ИIGGER','nιggεr','ɴɪɢɢᴇʀ','🇳🇮🇬🇬🇪🇷','ｎｉｇｇｅｒ','𝐧𝐢𝐠𝐠𝐞𝐫','ⓝⓘⓖⓖⓔⓡ','n​igger','NÏGGËR'])
 		check(blockedNameIn(s)==='nigger','look-alike caught: '+JSON.stringify(s));

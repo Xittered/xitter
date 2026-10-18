@@ -36,6 +36,8 @@ export type User = {
 	automated_by?: string | null;
 	// X's profile label: Parody, Commentary or Fan account (or None)
 	parody_label?: string;
+	// a profile label staff made (account_labels), in the same place
+	label?: { text: string; badge_id: string | null; url: string | null } | null;
 	// posts only for approved followers
 	protected?: boolean;
 	language?: string;
@@ -85,6 +87,7 @@ export async function createUser(screenName: string, name: string, password: str
 }
 
 export async function login(screenName: string, password: string): Promise<{ token: string; csrf: string; userId: string } | undefined> {
+	if (password.length > 1024 || screenName.length > 64) return undefined;
 	await expireSanctions();
 	// accounts with a second factor sign in through the dialog's code step (startSession)
 	const [u] = await sql`select id, password_hash, deactivated_at from users where lower(screen_name) = lower(${screenName}) and not totp_enabled
@@ -93,7 +96,10 @@ export async function login(screenName: string, password: string): Promise<{ tok
 	const ok = await Bun.password.verify(password, u?.password_hash ?? DUMMY_HASH).catch(() => false);
 	if (!u || !ok) return undefined;
 	// signing in within 30 days of deactivating brings the account back
-	if (u.deactivated_at) await sql`update users set status = 'active', deactivated_at = null where id = ${u.id}::bigint`;
+	if (u.deactivated_at) {
+		const back = await sql`update users set status = 'active', deactivated_at = null where id = ${u.id}::bigint and deactivated_at > now() - interval '30 days' returning id`;
+		if (!back.length) return undefined;
+	} else if ((await sql`select status from users where id = ${u.id}::bigint`)[0]?.status === "suspended") return undefined;
 	const token = randomHex(20);
 	const csrf = randomHex(32);
 	await sql`insert into sessions (token, user_id, csrf) values (${token}, ${u.id}::bigint, ${csrf})`;
@@ -105,7 +111,8 @@ export async function login(screenName: string, password: string): Promise<{ tok
 export async function startSession(userId: string): Promise<{ token: string; csrf: string; userId: string }> {
 	const token = randomHex(20);
 	const csrf = randomHex(32);
-	await sql`insert into sessions (token, user_id, csrf) values (${token}, ${userId}::bigint, ${csrf})`;
+	const made = await sql`insert into sessions (token, user_id, csrf) select ${token}, id, ${csrf} from users where id = ${userId}::bigint and status <> 'suspended' returning token`;
+	if (!made.length) throw new Error("account suspended");
 	await sql`update users set last_seen_at = now() where id = ${userId}::bigint`;
 	return { token, csrf, userId };
 }
@@ -125,7 +132,7 @@ export function parseCookies(req: Request): Record<string, string> {
 	return out;
 }
 
-import { countryFromHeader } from "./countries";
+import { requestCountry } from "./login-history";
 
 const viewerCols = () => sql`u.id, u.screen_name, u.name, u.bio, u.location, u.website, u.avatar_url, u.banner_url, u.verified_type, u.flag, u.status, u.role, u.protected, u.language, u.created_at,
 	u.preferences->>'discoverable_by_email' = 'true' as discoverable_by_email,
@@ -149,7 +156,7 @@ export async function getViewer(req: Request): Promise<Viewer | undefined> {
 		await sql`update sessions set last_seen_at = now(), user_agent = ${(req.headers.get("user-agent") ?? "").slice(0, 500)}
 			where token = ${token} and (last_seen_at < now() - interval '1 minute' or user_agent is null)`;
 	// where the account is based, from the edge's country header; kept from the first request that has one
-	const country = row ? countryFromHeader(req.headers.get("cf-ipcountry")) : undefined;
+	const country = row ? requestCountry(req) : undefined;
 	if (country) await sql`update users set country = ${country} where id = ${row.id}::bigint and country is null`;
 	return row as Viewer | undefined;
 }

@@ -55,13 +55,9 @@ copy during setup, and it stays on that machine.
   hashtags): for a set time, liking a post with the hashtag plays a custom
   Lottie animation, and the hashtag shows an emoji (optionally with hashfetti)
 - Polls with a photo on each choice
-- Links in posts: clickable, with X's link card for the last one (title,
-  description and picture from the page's OpenGraph or Twitter tags, fetched by
-  the server from public addresses only; pictures kept in `MEDIA_DIR/cards`)
 - Previews when a public post or profile is shared in other apps (Discord,
   Slack, iMessage…): OpenGraph and Twitter card tags and oEmbed, for active,
-  unprotected accounts only. Both can be switched off in Admin > Settings >
-  Features
+  unprotected accounts only. Admin > Settings > Features switches them off
 - Staff labels under posts, as X shows them: Visibility limited (also kept out
   of For you and search), Misleading, Stay informed, Get the latest, Legally
   required notice; staff can also set the counts a post or profile shows
@@ -171,6 +167,7 @@ scripts/fetch-client.ts --latest` re-pins the build.
 | `SOURCE_URL` | this repository | The source link shown to users |
 | `LOG_REQUESTS` | unset | `1` logs every API call, `errors` also prints the client's error reports |
 | `RATE_LIMITS` | on | `off` turns the rate limits off (for the test scripts; limits are in `src/ratelimit.ts`, `scripts/test-ratelimit.ts` checks them) |
+| `EMBED_PROXY` | `https://cors.estrogen.delivery/` | where link previews are fetched from and their images served, as `<proxy>?url=<link>`, so neither the instance nor its readers reach the linked site |
 | `JUICEBOX_URL` | `http://localhost:8580` | Private address of the key-backup realm, proxied through `/juicebox/` |
 | `CHAT_TOKEN_SECRET` | saved in `data/chat-secrets.json` | Signing secret for chat socket tokens |
 | `JUICEBOX_REALM_ID`, `JUICEBOX_TENANT_SECRET` | saved in `data/chat-secrets.json` | Stable realm identity and tenant signing secret |
@@ -256,6 +253,20 @@ accounts custom badges and delete uploads. Settings also hold maintenance mode
 (everyone but staff sees a message), blocked phrases, hidden and promoted
 trends, and a post pinned to the top of every home timeline.
 `bun scripts/test-admin-extra.ts` checks these.
+
+The automod (`src/hate.ts`) refuses slurs, explicit hate, transphobia and
+abuse like "kill yourself" in posts, replies, scheduled posts, profiles, names,
+polls, image descriptions, lists, communities, articles and Community Notes.
+It reads through look-alike letters from other alphabets, Unicode styles,
+leetspeak, invisible characters, accents, repeated letters, letters spelled
+out one by one and reversed or upside-down text. Reclaimed queer words pass
+unless the text attacks someone, and NSFW text isn't touched. DMs are end-to-end
+encrypted, so the server can't read them. Each refusal is an appealable
+strike, and strikes, from staff or automatic, follow a ladder set in
+Settings > Automod (by default a warning, a day, a week, 30 days, then
+permanent). `bun test ./scripts/test-hate.ts` checks evasions and false
+positives without a server; `bun scripts/test-automod.ts` checks the ladder,
+expiry, write paths and request limits against one.
 
 - `GET /_debug/unknown` lists the client calls no handler answers yet, most
   frequent first. Start there when a screen is empty.

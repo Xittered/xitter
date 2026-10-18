@@ -10,7 +10,9 @@ import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isFlag } from "./flags";
 import { isId, newId } from "./ids";
-import { createInvite } from "./invites";
+import { createInvite, staffHandleProblem } from "./invites";
+import { retireAccount } from "./held";
+import { activeStrikes, shutOut } from "./moderation";
 import { REASONS } from "./reports";
 import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
@@ -227,7 +229,7 @@ const ACTIONS: Record<string, Action> = {
 		role: "support",
 		run: async (_a, b) => {
 			const id = idOf(b.id);
-			const [u] = await sql`select ${userListCols}, u.bio, u.location, u.website, u.based_in_override, u.country, u.count_overrides, u.notes_writer, u.org_badge_id::text, u.status_until,
+			const [u] = await sql`select ${userListCols}, u.bio, u.location, u.website, u.based_in_override, u.country, u.count_overrides, u.notes_writer, u.org_badge_id::text, u.status_until, u.parody_label, u.label_id::text,
 				(select coalesce(json_agg(ub.badge_id::text order by ub.position), '[]') from user_badges ub where ub.user_id = u.id) as badge_ids,
 				(select count(*)::int from sessions s where s.user_id = u.id) as sessions,
 				(select c.screen_name from invites i join users c on c.id = i.created_by where i.code = u.invite_code) as invited_by
@@ -235,9 +237,15 @@ const ACTIONS: Record<string, Action> = {
 			if (!u) throw new AdminError("No such account.", 404);
 			const invited = await sql`select u.id::text as id, u.screen_name from users u join invites i on i.code = u.invite_code
 				where i.created_by = ${id}::bigint order by u.created_at`;
-			const log = await sql`select l.action, l.detail, l.created_at, a.screen_name as actor from audit_log l
+			const log = await sql`select l.action, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic from audit_log l
 				left join users a on a.id = l.actor_id where l.target = ${id} order by l.id desc limit 50`;
-			return { user: u, invited, log };
+			const strikes = await activeStrikes(id);
+			const ladder = settings().automod.ladder;
+			const alts = await sql`select distinct u.id::text as id, u.screen_name, u.status from login_events mine
+				join login_events other on other.ip = mine.ip and other.user_id <> mine.user_id and other.created_at > now() - interval '90 days'
+				join users u on u.id = other.user_id
+				where mine.user_id = ${id}::bigint and mine.ip is not null and mine.created_at > now() - interval '90 days' limit 20`;
+			return { user: u, invited, log, alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
 		},
 	},
 
@@ -246,13 +254,13 @@ const ACTIONS: Record<string, Action> = {
 		run: async (a, b) => {
 			const id = idOf(b.id);
 			await guard(a, id);
-			const limits: Record<string, [string, number]> = { name: ["name", 50], screen_name: ["screen_name", 15], bio: ["bio", 160], location: ["location", 30], website: ["website", 100], based_in: ["based_in_override", 50] };
+			const limits: Record<string, [string, number]> = { name: ["name", 50], screen_name: ["screen_name", 50], bio: ["bio", 160], location: ["location", 30], website: ["website", 100], based_in: ["based_in_override", 50] };
 			const changes: Record<string, string | null> = {};
 			for (const [field, [column, max]] of Object.entries(limits)) {
 				if (typeof b[field] !== "string") continue;
 				const value = b[field].trim();
 				if ([...value].length > max) throw new AdminError(`${field} is at most ${max} characters.`);
-				if (field === "screen_name" && !/^[A-Za-z0-9_]{1,15}$/.test(value)) throw new AdminError("Handles are letters, digits and underscores.");
+				if (field === "screen_name" && staffHandleProblem(value)) throw new AdminError(staffHandleProblem(value)!);
 				if (field === "name" && !value) throw new AdminError("Name can't be blank.");
 				if (field === "website" && value && !/^https?:\/\/\S+$/.test(value)) throw new AdminError("Website must be an http or https address.");
 				// a blank "based in" goes back to the detected region
@@ -325,8 +333,8 @@ const ACTIONS: Record<string, Action> = {
 			if (!["active", "restricted", "limited", "suspended"].includes(status)) throw new AdminError("Unknown standing.");
 			if (id === a.id) throw new AdminError("You can't change your own standing.");
 			await guard(a, id);
-			await sql`update users set status = ${status}, status_until = null, status_restore = null where id = ${id}::bigint`;
-			if (status === "suspended") await sql`delete from sessions where user_id = ${id}::bigint`;
+			await sql`update users set status = ${status}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
+			if (status === "suspended") await shutOut(id);
 			await audit(a, "set_status", id, { status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
 		},
@@ -381,6 +389,7 @@ const ACTIONS: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't delete your own account here.");
 			const u = await guard(a, id);
 			if (String(b.confirm ?? "").toLowerCase() !== u.screen_name.toLowerCase()) throw new AdminError("Type the handle to confirm.");
+			if (u.status === "suspended") await retireAccount(id, `deleted while suspended by @${a.screen_name}`);
 			await sql`delete from users where id = ${id}::bigint`;
 			await audit(a, "delete_account", id, { screen_name: u.screen_name });
 			return {};
@@ -661,13 +670,20 @@ const ACTIONS: Record<string, Action> = {
 
 	audit: {
 		role: "support",
-		run: async (_a, b) => ({
-			entries: await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor,
-				t.screen_name as target_name
-				from audit_log l left join users a on a.id = l.actor_id
-				left join users t on l.target ~ '^[0-9]+$' and t.id = l.target::bigint
-				order by l.id desc limit 100 offset ${Number(b.offset) || 0}`,
-		}),
+		run: async (_a, b) => {
+			const action = typeof b.action === "string" && /^[a-z_]{1,40}$/.test(b.action) ? b.action : null;
+			const who = typeof b.target === "string" ? b.target.trim().replace(/^@/, "").slice(0, 15) : "";
+			const offset = Math.max(0, Math.min(Number(b.offset) || 0, 100_000));
+			return {
+				entries: await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic,
+					t.screen_name as target_name
+					from audit_log l left join users a on a.id = l.actor_id
+					left join users t on l.target ~ '^[0-9]+$' and t.id = l.target::bigint
+					where ${action ? sql`l.action = ${action}` : sql`true`} and ${b.automatic ? sql`l.actor_id is null` : sql`true`}
+						and ${who ? sql`lower(t.screen_name) = lower(${who})` : sql`true`}
+					order by l.id desc limit 100 offset ${offset}`,
+			};
+		},
 	},
 };
 

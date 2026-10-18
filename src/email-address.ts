@@ -5,10 +5,10 @@
 // 6-digit code on X's code screen (onboarding.ts) when mail is configured.
 
 import { createHash } from "node:crypto";
+import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
-import { esc, html, layout } from "./login";
 import { mailEnabled, sendMail } from "./mail";
 import { settings } from "./settings";
 
@@ -51,23 +51,24 @@ export async function resendConfirmation(viewer: Viewer): Promise<string | null>
 	return null;
 }
 
-function emailPage(viewer: Viewer, current: { email: string | null; verified: boolean }, message = "", error = "") {
-	return html(
-		layout(
-			"Email",
-			`<form method="post" action="/account/email">
+function emailPage(req: Request, viewer: Viewer, current: { email: string | null; verified: boolean }, message = "", error = "") {
+	return accountPage({
+		req,
+		viewer,
+		title: "Email",
+		referrer: null,
+		status: error ? 400 : 200,
+		body: `<form method="post" action="/account/email">
 	<h1>Email</h1>
-	<p class="alt">${current.email ? `Your account's email is <b>${esc(current.email)}</b>${current.verified ? "" : " (not confirmed yet)"}.` : "Your account has no email yet. Add one so you can reset your password and get the mail you ask for."}</p>
+	<p class="dim">${current.email ? `Your account's email is <b>${esc(current.email)}</b>${current.verified ? "" : " (not confirmed yet)"}.` : "Your account has no email yet. Add one so you can reset your password and get the mail you ask for."}</p>
 	${message ? `<p>${esc(message)}</p>` : ""}${error ? `<p class="error">${esc(error)}</p>` : ""}
 	<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">
 	<label for="email">New email</label><input id="email" name="email" type="email" autocomplete="email" required>
 	<label for="password">Your password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 	<button type="submit">Send confirmation link</button>
-	<p class="alt">The new address is used once you open the link we mail to it. <a href="/settings/email">Back to settings</a></p>
+	<p class="dim">The new address is used once you open the link we mail to it. <a href="/settings/email">Back to settings</a></p>
 </form>`,
-		),
-		error ? 400 : 200,
-	);
+	});
 }
 
 export async function emailRoute(req: Request, url: URL, viewer: Viewer | undefined): Promise<Response> {
@@ -78,33 +79,34 @@ export async function emailRoute(req: Request, url: URL, viewer: Viewer | undefi
 			: [];
 		const done = c && (await sql`update users set email = ${c.email}, email_verified = true where id = ${c.user_id}::bigint
 			and not exists (select 1 from users o where lower(o.email) = lower(${c.email}) and o.id <> ${c.user_id}::bigint) returning id`).length;
-		return html(
-			layout(
-				"Email",
-				done
-					? `<form><h1>Email confirmed</h1><p class="alt">${esc(c.email)} is now your account's email.</p><a href="/settings/email">Back to settings</a></form>`
-					: `<form><h1>Link expired</h1><p class="alt">This link is invalid, was used already, or the address belongs to another account now. <a href="/account/email">Try again</a></p></form>`,
-			),
-			done ? 200 : 410,
-		);
+		return accountPage({
+			req,
+			viewer,
+			title: "Email",
+			referrer: null,
+			status: done ? 200 : 410,
+			body: done
+				? `<form><h1>Email confirmed</h1><p class="dim">${esc(c.email)} is now your account's email.</p><a href="/settings/email">Back to settings</a></form>`
+				: `<form><h1>Link expired</h1><p class="dim">This link is invalid, was used already, or the address belongs to another account now. <a href="/account/email">Try again</a></p></form>`,
+		});
 	}
 	if (!viewer) return Response.redirect("/", 302);
 	const [u] = await sql`select email, email_verified, password_hash from users where id = ${viewer.id}::bigint`;
 	const current = { email: u.email as string | null, verified: !!u.email_verified };
-	if (req.method !== "POST") return emailPage(viewer, current);
+	if (req.method !== "POST") return emailPage(req, viewer, current);
 	const f = await req.formData().catch(() => undefined);
-	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return emailPage(viewer, current, "", "That form is out of date. Try again.");
+	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return emailPage(req, viewer, current, "", "That form is out of date. Try again.");
 	const email = String(f?.get("email") ?? "").trim().toLowerCase();
-	if (!EMAIL.test(email) || email.length > 254) return emailPage(viewer, current, "", "Enter a valid email address.");
-	if (!(await Bun.password.verify(String(f?.get("password") ?? ""), u.password_hash).catch(() => false))) return emailPage(viewer, current, "", "That password isn't right.");
-	if ((await sql`select 1 from users where lower(email) = ${email} and id <> ${viewer.id}::bigint`).length) return emailPage(viewer, current, "", "That email is already used by another account.");
-	if (!mailEnabled()) return emailPage(viewer, current, "", "This instance can't send mail, so it can't confirm a new address. Ask its staff.");
+	if (!EMAIL.test(email) || email.length > 254) return emailPage(req, viewer, current, "", "Enter a valid email address.");
+	if (!(await Bun.password.verify(String(f?.get("password") ?? ""), u.password_hash).catch(() => false))) return emailPage(req, viewer, current, "", "That password isn't right.");
+	if ((await sql`select 1 from users where lower(email) = ${email} and id <> ${viewer.id}::bigint`).length) return emailPage(req, viewer, current, "", "That email is already used by another account.");
+	if (!mailEnabled()) return emailPage(req, viewer, current, "", "This instance can't send mail, so it can't confirm a new address. Ask its staff.");
 	try {
 		await sendConfirmation(viewer.id, viewer.screen_name, email);
 	} catch (e: any) {
-		return emailPage(viewer, current, "", `The mail couldn't be sent: ${e.message}`);
+		return emailPage(req, viewer, current, "", `The mail couldn't be sent: ${e.message}`);
 	}
-	return emailPage(viewer, current, `We sent a link to ${email}. Open it within a day to switch.`);
+	return emailPage(req, viewer, current, `We sent a link to ${email}. Open it within a day to switch.`);
 }
 
 // Sign-up: the code mailed to the address the account is being made with.

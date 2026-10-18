@@ -1,15 +1,17 @@
 import type { User } from "./auth";
 import { sql } from "./db";
 import { newId } from "./ids";
+import { hateIn } from "./hate";
+import { automodStrike } from "./moderation";
 import { hasBlockedPhrase } from "./settings";
 import { postLimitFor, weightedLength } from "./textlen";
 import type { PostRow } from "./model";
 import { articlesByIds } from "./articles";
 import { blockedFor, hasMutedWord, isBlockedEitherWay, mutedFor, outOfView, protectedFor, suspendedFor } from "./blocks";
+import { fetchPreview, linkCard, linksIn, previewable, previewsFor } from "./links";
 import { mediaForPosts } from "./media";
 import { communityObjects } from "./community-model";
 import { webSource } from "./platforms";
-import { cardsForPosts, prepareCard } from "./link-cards";
 import { pollCard, pollsByIds } from "./polls";
 import { toUser, userCols, usersByIds } from "./users";
 
@@ -107,9 +109,12 @@ async function hydrate(viewerId: string, posts: PostRow[], quotes = true): Promi
 			if (poll) p.poll = pollCard(poll);
 		}
 	}
-	// a link card only where X shows one: no photos, video, poll, quote or article
-	const cards = await cardsForPosts(posts.filter((p) => !p.media?.length && !p.poll_id && !p.quote_id && !p.article_id));
-	for (const p of posts) p.linkCard = cards.get(p.id);
+	const linkOf = (p: PostRow) => (p.poll || p.quote_id || p.article_id || p.media?.length ? undefined : linksIn(p.text).find((l) => previewable(l.url))?.url);
+	const previews = await previewsFor(posts.map(linkOf).filter((u): u is string => !!u));
+	for (const p of posts) {
+		const preview = previews.get(linkOf(p) ?? "");
+		if (preview) p.linkCard = linkCard(preview);
+	}
 	const editedIds = posts.filter((p) => p.edit_count).map((p) => p.id);
 	if (editedIds.length) {
 		const versions = await sql`select post_id::text, version_id::text from post_versions where post_id = any(${sql.array(editedIds, "INT8")}) order by seq`;
@@ -163,7 +168,15 @@ export async function checkLength(userId: string, text: string) {
 	if (weightedLength(text) > limit) throw new PostError(`Posts are limited to ${limit.toLocaleString("en-US")} characters.`, 186);
 }
 
+export async function refuseHate(userId: string, text: string, where: Parameters<typeof automodStrike>[2] = "post") {
+	const hit = hateIn(text);
+	if (!hit) return;
+	await automodStrike(userId, hit, where, text);
+	throw new PostError("Your post contains a slur or hate speech this instance doesn't allow.", 186);
+}
+
 export async function editPost(userId: string, postId: string, text: string): Promise<void> {
+	await refuseHate(userId, text);
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
 	if (!text.trim()) throw new PostError("Your post is empty.", 170);
 	await checkLength(userId, text);
@@ -176,7 +189,6 @@ export async function editPost(userId: string, postId: string, text: string): Pr
 	if (Date.now() > new Date(post.created_at).getTime() + EDIT_WINDOW_MS) throw new PostError("This post can't be edited anymore.", 214);
 	if (post.edit_count >= MAX_EDITS) throw new PostError("This post has reached its edit limit.", 214);
 	if (text === post.text) throw new PostError("There's nothing new to save.", 214);
-	await prepareCard(text);
 	await sql`insert into post_versions (version_id, post_id, seq, text, created_at)
 		values (${newId()}::bigint, ${postId}::bigint, ${post.edit_count}, ${post.text}, ${post.edited_at ?? post.created_at})`;
 	await sql`update posts set text = ${text}, edit_count = edit_count + 1, edited_at = now() where id = ${postId}::bigint`;
@@ -377,11 +389,11 @@ export async function likedPosts(viewerId: string, userId: string, limit = 100):
 }
 
 export async function createPost(userId: string, text: string, opts: { replyToId?: string; quoteId?: string; articleId?: string; source?: string; communityId?: string; placeId?: string; replyPolicy?: string } = {}): Promise<string> {
+	const [author] = await sql`select status, deactivated_at from users where id = ${userId}::bigint`;
+	if (!author || author.status === "restricted" || author.status === "suspended" || author.deactivated_at) throw new PostError("Your account can't post right now.", 326);
+	await refuseHate(userId, text);
 	if (hasBlockedPhrase(text)) throw new PostError("Your post contains a phrase this instance doesn't allow.", 186);
-	const [author] = await sql`select status from users where id = ${userId}::bigint`;
-	if (author?.status === "restricted") throw new PostError("Your account can't post right now.", 326);
 	await checkLength(userId, text);
-	await prepareCard(text);
 	const id = newId();
 	let conversationId = id;
 	if (opts.replyToId) {
@@ -412,6 +424,8 @@ export async function createPost(userId: string, text: string, opts: { replyToId
 	if (names.length)
 		await sql`insert into post_mentions (post_id, user_id)
 			select ${id}::bigint, u.id from users u where lower(u.screen_name) = any(${sql.array(names, "TEXT")}) on conflict do nothing`;
+	const link = opts.quoteId || opts.articleId ? undefined : linksIn(text).find((l) => previewable(l.url));
+	if (link && !(await sql`select 1 from link_previews where url = ${link.url}`).length) await Promise.race([fetchPreview(link.url), Bun.sleep(4000)]);
 	return id;
 }
 

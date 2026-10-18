@@ -2,24 +2,12 @@
 // it, tidy.ts). Admin > Invites sets how many a month; staff make theirs in the
 // panel without a limit. Only while sign-up is by invite.
 
+import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { createInvite } from "./invites";
 import { settings } from "./settings";
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
-const page = (body: string, status = 200) =>
-	new Response(
-		`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invites · ${esc(settings().instance_name)}</title>
-<style>body{margin:0;background:#000;color:#e7e9ea;font:16px/1.45 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-main{width:min(520px,92vw);padding:24px 0}h1{font-size:26px;margin:0 0 12px}button{width:100%;box-sizing:border-box;padding:14px;border-radius:8px;font:inherit;margin:6px 0;background:#eff3f4;color:#0f1419;border:0;font-weight:700;cursor:pointer}
-button:disabled{opacity:.5;cursor:default}.err{color:#f4212e}.dim{color:#71767b;font-size:14px}a{color:#1d9bf0}
-.invite{background:#16181c;border-radius:8px;padding:12px 14px;margin:8px 0}.code{font-family:ui-monospace,monospace;font-size:18px;letter-spacing:1px}</style></head>
-<body><main>${body}<p><a href="/home">Back to ${esc(settings().instance_name)}</a></p></main></body></html>`,
-		{ status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } },
-	);
 
 // what stops this account from making an invite now, or null
 async function blocker(viewer: Viewer): Promise<{ reason: string | null; made: number }> {
@@ -38,7 +26,7 @@ async function blocker(viewer: Viewer): Promise<{ reason: string | null; made: n
 	return { reason: null, made };
 }
 
-async function view(viewer: Viewer, notice = "", error = "") {
+async function view(req: Request, viewer: Viewer, notice = "", error = "") {
 	const q = settings().invite_quota;
 	const { reason, made } = await blocker(viewer);
 	const mine = await sql`select i.code, i.uses, i.max_uses, i.expires_at, i.revoked, i.created_at,
@@ -46,25 +34,30 @@ async function view(viewer: Viewer, notice = "", error = "") {
 		from invites i where i.created_by = ${viewer.id}::bigint order by i.created_at desc limit 50`;
 	const state = (i: any) =>
 		i.revoked ? "withdrawn" : i.uses >= i.max_uses ? "used" : i.expires_at && new Date(i.expires_at) < new Date() ? "expired" : `open until ${new Date(i.expires_at ?? Date.now()).toDateString()}`;
-	return page(`<h1>Invites</h1>
+	return accountPage({
+		req,
+		viewer,
+		title: "Invites",
+		body: `<h1>Invites</h1>
 <p>Invite people you know to ${esc(settings().instance_name)}. ${q.enabled ? `You can make ${q.per_month} a month${q.uses > 1 ? `, each good for ${q.uses} people` : ""}; each is open for 30 days.` : ""}</p>
-${notice ? `<p>${notice}</p>` : ""}${error ? `<p class="err">${esc(error)}</p>` : ""}
+${notice ? `<p>${notice}</p>` : ""}${error ? `<p class="error">${esc(error)}</p>` : ""}
 <form method="post"><button type="submit"${reason ? " disabled" : ""}>Make an invite</button></form>
 ${reason ? `<p class="dim">${esc(reason)}</p>` : q.enabled ? `<p class="dim">${q.per_month - made} left this month.</p>` : ""}
 ${mine
 	.map(
-		(i: any) => `<div class="invite"><div class="code">${esc(i.code)}</div>
+		(i: any) => `<div class="card"><div class="code">${esc(i.code)}</div>
 <div class="dim">${esc(state(i))} · ${i.uses}/${i.max_uses} used${i.used_by.length ? ` by ${i.used_by.map((n: string) => `<a href="/${esc(n)}">@${esc(n)}</a>`).join(", ")}` : ""}</div>
 ${!i.revoked && i.uses < i.max_uses ? `<div class="dim">Link: <a href="${esc(`${PUBLIC_ORIGIN}/signup?code=${encodeURIComponent(i.code)}`)}">${esc(`${PUBLIC_ORIGIN}/signup?code=${i.code}`)}</a></div>` : ""}</div>`,
 	)
-	.join("")}`);
+	.join("")}`,
+	});
 }
 
 export async function memberInvitesRoute(req: Request, viewer: Viewer): Promise<Response> {
-	if (req.method !== "POST") return view(viewer);
+	if (req.method !== "POST") return view(req, viewer);
 	const { reason } = await blocker(viewer);
-	if (reason) return view(viewer, "", reason);
+	if (reason) return view(req, viewer, "", reason);
 	const q = settings().invite_quota;
 	const code = await createInvite({ createdBy: viewer.id, maxUses: q.uses, expiresAt: new Date(Date.now() + 30 * 86400e3) });
-	return view(viewer, `Your invite is <b>${esc(code)}</b>. Send the code or the link below.`);
+	return view(req, viewer, `Your invite is <b>${esc(code)}</b>. Send the code or the link below.`);
 }
