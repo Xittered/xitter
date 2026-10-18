@@ -3,7 +3,7 @@
 // replaced whenever the panel saves one.
 
 import { sql } from "./db";
-import { foldGlyphs } from "./names";
+import { foldGlyphs } from "./fold";
 
 export type SignupMode = "invite" | "open" | "closed";
 
