@@ -4,7 +4,8 @@
 // as images, so they animate without a video conversion step. Videos are
 // converted by video.ts.
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
 import { PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
@@ -19,8 +20,30 @@ const maxImage = () => settings().limits.image_mb * 1024 * 1024;
 const MAX_GIF = 15 * 1024 * 1024;
 const MAX_PENDING_MS = 60 * 60 * 1000;
 
-type Pending = { userId: string; total: number; category: string; video: boolean; chunks: Map<number, Buffer>; started: number };
+type Pending = { userId: string; total: number; category: string; video: boolean; chunks: Map<number, number>; received: number; started: number };
 const pending = new Map<string, Pending>();
+const finalizing = new Set<string>();
+const pendingDir = (id: string) => join(MEDIA_DIR, ".pending", id);
+const segmentFile = (id: string, index: number) => join(pendingDir(id), String(index));
+
+function discardPending(id: string) {
+	pending.delete(id);
+	rmSync(pendingDir(id), { recursive: true, force: true });
+}
+
+setInterval(() => {
+	const now = Date.now();
+	for (const [id, p] of pending) if (now - p.started > MAX_PENDING_MS) discardPending(id);
+	const dir = join(MEDIA_DIR, ".pending");
+	if (!existsSync(dir)) return;
+	for (const id of readdirSync(dir)) {
+		if (!/^\d{1,19}$/.test(id) || pending.has(id) || finalizing.has(id)) continue;
+		const path = pendingDir(id);
+		try {
+			if (now - statSync(path).mtimeMs > MAX_PENDING_MS) rmSync(path, { recursive: true, force: true });
+		} catch {}
+	}
+}, 60_000).unref();
 
 export type MediaRow = {
 	id: string;
@@ -121,39 +144,71 @@ async function croppedGif(id: string, data: Buffer, image: Image): Promise<{ dat
 
 async function finalize(id: string, p: Pending): Promise<Response> {
 	pending.delete(id);
-	const parts = [...p.chunks].sort((a, b) => a[0] - b[0]).map((c) => c[1]);
-	let data: Buffer<ArrayBufferLike> = Buffer.concat(parts);
-	if (data.length !== p.total) return uploadError("File size does not match the size announced at INIT.");
-	if (p.video) {
+	finalizing.add(id);
+	try {
+		if (p.received !== p.total) return uploadError("File size does not match the size announced at INIT.");
+		const parts = [...p.chunks.keys()].sort((a, b) => a - b);
 		mkdirSync(MEDIA_DIR, { recursive: true });
-		writeFileSync(sourceFile(MEDIA_DIR, id), data);
-		await sql`insert into media (id, user_id, kind, mime, size, width, height, state)
-			values (${id}::bigint, ${p.userId}::bigint, 'video', 'video/mp4', ${data.length}, 0, 0, 'processing')`;
-		queueVideo(MEDIA_DIR, id);
-		return Response.json({ ...idFields(id), size: data.length, expires_after_secs: 86400, processing_info: { state: "pending", check_after_secs: 1 } });
+		const assembled = p.video ? sourceFile(MEDIA_DIR, id) : fileOf(id);
+		const output = await open(assembled, "w");
+		try {
+			const buffer = Buffer.allocUnsafe(64 * 1024);
+			for (const index of parts) {
+				const input = await open(segmentFile(id, index), "r");
+				try {
+					for (;;) {
+						const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
+						if (!bytesRead) break;
+						let offset = 0;
+						while (offset < bytesRead) offset += (await output.write(buffer, offset, bytesRead - offset, null)).bytesWritten;
+					}
+				} finally {
+					await input.close();
+				}
+			}
+		} finally {
+			await output.close();
+		}
+		if (statSync(assembled).size !== p.total) {
+			rmSync(assembled, { force: true });
+			return uploadError("File size does not match the size announced at INIT.");
+		}
+		if (p.video) {
+			await sql`insert into media (id, user_id, kind, mime, size, width, height, state)
+				values (${id}::bigint, ${p.userId}::bigint, 'video', 'video/mp4', ${p.total}, 0, 0, 'processing')`;
+			queueVideo(MEDIA_DIR, id);
+			return Response.json({ ...idFields(id), size: p.total, expires_after_secs: 86400, processing_info: { state: "pending", check_after_secs: 1 } });
+		}
+		let data: Buffer<ArrayBufferLike> = readFileSync(assembled);
+		let image = sniffImage(data);
+		if (!image) {
+			rmSync(assembled, { force: true });
+			return uploadError("Unsupported file. Images only: JPEG, PNG, GIF or WebP.");
+		}
+		if (data.length > (image.mime === "image/gif" ? MAX_GIF : maxImage())) {
+			rmSync(assembled, { force: true });
+			return uploadError("File is too large.");
+		}
+		if (image.mime === "image/gif") ({ data, image } = await croppedGif(id, data, image));
+		writeFileSync(fileOf(id), data);
+		await sql`insert into media (id, user_id, kind, mime, size, width, height)
+			values (${id}::bigint, ${p.userId}::bigint, 'photo', ${image.mime}, ${data.length}, ${image.width}, ${image.height})`;
+		return Response.json({
+			...idFields(id),
+			size: data.length,
+			expires_after_secs: 86400,
+			image: { image_type: image.mime, w: image.width, h: image.height },
+			...(/gif|video/.test(p.category) ? { processing_info: { state: "succeeded", progress_percent: 100 } } : {}),
+		});
+	} finally {
+		rmSync(pendingDir(id), { recursive: true, force: true });
+		finalizing.delete(id);
 	}
-	let image = sniffImage(data);
-	if (!image) return uploadError("Unsupported file. Images only: JPEG, PNG, GIF or WebP.");
-	if (data.length > (image.mime === "image/gif" ? MAX_GIF : maxImage())) return uploadError("File is too large.");
-	mkdirSync(MEDIA_DIR, { recursive: true });
-	if (image.mime === "image/gif") ({ data, image } = await croppedGif(id, data, image));
-	writeFileSync(fileOf(id), data);
-	await sql`insert into media (id, user_id, kind, mime, size, width, height)
-		values (${id}::bigint, ${p.userId}::bigint, 'photo', ${image.mime}, ${data.length}, ${image.width}, ${image.height})`;
-	return Response.json({
-		...idFields(id),
-		size: data.length,
-		expires_after_secs: 86400,
-		image: { image_type: image.mime, w: image.width, h: image.height },
-		// the gif flow polls STATUS until processing reports success
-		...(/gif|video/.test(p.category) ? { processing_info: { state: "succeeded", progress_percent: 100 } } : {}),
-	});
 }
 
 export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promise<Response> {
 	const { fields, file } = await params(req, url);
 	const id = fields.media_id;
-	for (const [key, p] of pending) if (Date.now() - p.started > MAX_PENDING_MS) pending.delete(key);
 
 	switch (fields.command) {
 		case "INIT": {
@@ -201,12 +256,15 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 				const image = sniffImage(data);
 				if (!image || image.mime !== "image/gif") return uploadError("The selected source is not a valid GIF.");
 				const newMedia = newId();
+				mkdirSync(pendingDir(newMedia), { recursive: true });
+				writeFileSync(segmentFile(newMedia, 0), data);
 				return finalize(newMedia, {
 					userId: viewer.id,
 					total: data.length,
 					category: fields.media_category ?? "tweet_gif",
 					video: false,
-					chunks: new Map([[0, data]]),
+					chunks: new Map([[0, data.length]]),
+					received: data.length,
 					started: Date.now(),
 				});
 			}
@@ -217,18 +275,21 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!Number.isInteger(total) || total <= 0 || total > (video ? maxVideoBytes() : MAX_GIF)) return uploadError("File is too large or empty.");
 			if ([...pending.values()].filter((p) => p.userId === viewer.id).length >= MAX_PENDING_PER_USER) return uploadError("Finish your other uploads first.", 429);
 			const newMedia = newId();
-			pending.set(newMedia, { userId: viewer.id, total, category: fields.media_category ?? "", video, chunks: new Map(), started: Date.now() });
+			pending.set(newMedia, { userId: viewer.id, total, category: fields.media_category ?? "", video, chunks: new Map(), received: 0, started: Date.now() });
 			return Response.json({ ...idFields(newMedia), expires_after_secs: 86400 }, { status: 202 });
 		}
 		case "APPEND": {
 			const p = id ? pending.get(id) : undefined;
 			if (!p || p.userId !== viewer.id) return uploadError("Unknown upload.", 404);
 			if (!file) return uploadError("No data in APPEND.");
-			const received = [...p.chunks.values()].reduce((n, c) => n + c.length, 0);
-			if (received + file.length > p.total) return uploadError("More data than announced at INIT.");
 			const index = Number(fields.segment_index ?? 0);
 			if (!Number.isInteger(index) || index < 0 || index > MAX_SEGMENTS) return uploadError("Bad segment_index.");
-			p.chunks.set(index, file);
+			const received = p.received - (p.chunks.get(index) ?? 0) + file.length;
+			if (received > p.total) return uploadError("More data than announced at INIT.");
+			mkdirSync(pendingDir(id!), { recursive: true });
+			writeFileSync(segmentFile(id!, index), file);
+			p.chunks.set(index, file.length);
+			p.received = received;
 			return new Response(null, { status: 204 });
 		}
 		// the video uploader: one blob holding the consecutive segments listed in
@@ -241,9 +302,12 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!Number.isInteger(first) || first < 0 || first > MAX_SEGMENTS) return uploadError("Bad segment_indexes.");
 			if (fields.media_md5 && new Bun.CryptoHasher("md5").update(file).digest("hex") !== fields.media_md5.toLowerCase())
 				return uploadError("Segment checksum does not match.");
-			const received = [...p.chunks.values()].reduce((n, c) => n + c.length, 0);
-			if (received + file.length > p.total) return uploadError("More data than announced at INIT.");
-			p.chunks.set(first, file);
+			const received = p.received - (p.chunks.get(first) ?? 0) + file.length;
+			if (received > p.total) return uploadError("More data than announced at INIT.");
+			mkdirSync(pendingDir(id!), { recursive: true });
+			writeFileSync(segmentFile(id!, first), file);
+			p.chunks.set(first, file.length);
+			p.received = received;
 			return new Response(null, { status: 204 });
 		}
 		case "FINALIZE": {

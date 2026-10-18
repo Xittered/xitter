@@ -3,7 +3,8 @@
 // x-rate-limit headers), which the client shows as its own "try again later".
 // Staff are not limited. A restart clears every window.
 
-import { readdir, readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
 import { CLIENT_DIR } from "./client-cache";
@@ -128,17 +129,42 @@ const BACKGROUND_OPS = /^(viewer_context\.json|app_context\.json|p2)$/;
 // the CDN, so the folder is read again now and then.
 const queries = new Set<string>();
 const mutations = new Set<string>();
+const scanned = new Map<string, string>();
+const operationPattern = /operationName:"(\w+)",operationType:"(query|mutation)"/g;
+let scanning = false;
 async function readOperationTypes() {
-	const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
-	let files: string[] = [];
+	if (scanning) return;
+	scanning = true;
 	try {
-		files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
-	} catch {
-		return;
-	}
-	for (const f of files) {
-		const text = await readFile(join(dir, f), "utf8").catch(() => "");
-		for (const m of text.matchAll(/operationName:"(\w+)",operationType:"(query|mutation)"/g)) (m[2] === "query" ? queries : mutations).add(m[1]);
+		const dir = join(CLIENT_DIR, "abs", "responsive-web", "client-web");
+		let files: string[] = [];
+		try {
+			files = (await readdir(dir)).filter((f) => f.endsWith(".js"));
+		} catch {
+			return;
+		}
+		const current = new Set(files.map((f) => join(dir, f)));
+		for (const path of scanned.keys()) if (!current.has(path)) scanned.delete(path);
+		for (const f of files) {
+			const path = join(dir, f);
+			const info = await stat(path).catch(() => undefined);
+			if (!info) continue;
+			const version = `${info.size}:${info.mtimeMs}`;
+			if (scanned.get(path) === version) continue;
+			let tail = "";
+			const decoder = new TextDecoder();
+			try {
+				for await (const chunk of createReadStream(path, { highWaterMark: 64 * 1024 })) {
+					const text = tail + decoder.decode(chunk, { stream: true });
+					for (const m of text.matchAll(operationPattern)) (m[2] === "query" ? queries : mutations).add(m[1]);
+					tail = text.slice(-512);
+				}
+				for (const m of (tail + decoder.decode()).matchAll(operationPattern)) (m[2] === "query" ? queries : mutations).add(m[1]);
+				scanned.set(path, version);
+			} catch {}
+		}
+	} finally {
+		scanning = false;
 	}
 }
 readOperationTypes();
