@@ -1,7 +1,8 @@
 // Settings > Your account: password, deactivation. Username and language go
 // through account/settings.json (rest.ts) and use the helpers here.
 import { hateInName } from "./hate";
-import { automodStrike, signOutEverywhere } from "./moderation";
+import { handleHeld } from "./held";
+import { automodStrike, shutOut } from "./moderation";
 import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { sql } from "./db";
@@ -33,6 +34,7 @@ export async function changeUsername(viewer: Viewer, wanted: string): Promise<st
 	const problem = usernameProblem(wanted);
 	if (problem) return problem;
 	if (isReserved(wanted)) return "That username is reserved.";
+	if (await handleHeld(wanted, viewer.id)) return "That username isn't available.";
 	const [renames] = await sql`select count(*)::int as n from username_changes where user_id = ${viewer.id}::bigint and changed_at > now() - interval '1 day'`;
 	if (renames.n >= 5) return "You've changed your username too often today. Try again tomorrow.";
 	const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${wanted}) and id <> ${viewer.id}::bigint`;
@@ -54,7 +56,7 @@ export async function changeUsername(viewer: Viewer, wanted: string): Promise<st
 }
 
 export async function usernameAvailable(userId: string, wanted: string): Promise<{ available: boolean; suggestions: string[] }> {
-	const valid = !usernameProblem(wanted) && !isReserved(wanted);
+	const valid = !usernameProblem(wanted) && !isReserved(wanted) && !(await handleHeld(wanted, userId));
 	const [taken] = valid ? await sql`select 1 from users where lower(screen_name) = lower(${wanted}) and id <> ${userId}::bigint` : [{}];
 	if (valid && !taken) return { available: true, suggestions: [] };
 	const base = wanted.replace(/[^A-Za-z0-9_]/g, "").slice(0, 11) || "user";
@@ -96,7 +98,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		const [standing] = await sql`select status, status_until from users where id = ${viewer.id}::bigint`;
 		if (standing?.status !== "active" || standing.status_until) return error(214, "Your account can't be deactivated while a sanction is in effect.");
 		await sql`update users set status = 'suspended', deactivated_at = now() where id = ${viewer.id}::bigint`;
-		await signOutEverywhere(viewer.id);
+		await shutOut(viewer.id);
 		const headers = new Headers();
 		for (const n of ["auth_token", "ct0"]) headers.append("set-cookie", `${n}=; Path=/; Max-Age=0`);
 		return Response.json({ status: "ok" }, { headers });

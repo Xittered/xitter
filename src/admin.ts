@@ -11,7 +11,8 @@ import { sql } from "./db";
 import { isFlag } from "./flags";
 import { isId, newId } from "./ids";
 import { createInvite } from "./invites";
-import { activeStrikes, signOutEverywhere } from "./moderation";
+import { retireAccount } from "./held";
+import { activeStrikes, shutOut } from "./moderation";
 import { REASONS } from "./reports";
 import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
@@ -333,7 +334,7 @@ const ACTIONS: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't change your own standing.");
 			await guard(a, id);
 			await sql`update users set status = ${status}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
-			if (status === "suspended") await signOutEverywhere(id);
+			if (status === "suspended") await shutOut(id);
 			await audit(a, "set_status", id, { status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
 		},
@@ -388,6 +389,7 @@ const ACTIONS: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't delete your own account here.");
 			const u = await guard(a, id);
 			if (String(b.confirm ?? "").toLowerCase() !== u.screen_name.toLowerCase()) throw new AdminError("Type the handle to confirm.");
+			if (u.status === "suspended") await retireAccount(id, `deleted while suspended by @${a.screen_name}`);
 			await sql`delete from users where id = ${id}::bigint`;
 			await audit(a, "delete_account", id, { screen_name: u.screen_name });
 			return {};

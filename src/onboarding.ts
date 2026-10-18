@@ -22,10 +22,9 @@ import { requestReset } from "./password-reset";
 import { platformSource } from "./platforms";
 import { mailEnabled } from "./mail";
 import { checkSignupCode, sendSignupCode } from "./email-address";
-import { countryFromHeader } from "./countries";
 import { settings } from "./settings";
 import { hit, used } from "./ratelimit";
-import { requestIp } from "./login-history";
+import { requestCountry, requestIp } from "./login-history";
 
 const load = async (name: string): Promise<Message[]> => fromJson(await Bun.file(new URL(`./jf/${name}.json`, import.meta.url)).json());
 // Takes out of a screen the parts that hold any of these texts. With `part` (a
@@ -226,7 +225,8 @@ function fieldError(field: string, text: string): Message[] {
 // the code, normalised, if it can still be used
 async function validCode(raw: string): Promise<string | undefined> {
 	const code = normalizeCode(raw);
-	const [ok] = await sql`select 1 from invites where code = ${code} and not revoked and uses < max_uses and (expires_at is null or expires_at > now())`;
+	const [ok] = await sql`select 1 from invites where code = ${code} and not revoked and uses < max_uses and (expires_at is null or expires_at > now())
+		and not exists (select 1 from users c where c.id = invites.created_by and c.status = 'suspended' and c.deactivated_at is null)`;
 	return ok ? code : undefined;
 }
 
@@ -315,7 +315,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 				if (!(e instanceof SignupError)) throw e;
 				return respond(fieldError(fieldOf(e), e.message));
 			}
-			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: countryFromHeader(req.headers.get("cf-ipcountry")) ?? null };
+			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: requestCountry(req) ?? null };
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb where token = ${token}::uuid`;
 			if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("email", "Too many codes sent from here. Wait an hour."));
 			try {
@@ -334,7 +334,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 				email: String(f.email ?? ""),
 				ip: requestIp(req),
 				source: await platformSource(req),
-				country: countryFromHeader(req.headers.get("cf-ipcountry")) ?? null,
+				country: requestCountry(req) ?? null,
 			});
 		} catch (e) {
 			if (!(e instanceof SignupError)) throw e;

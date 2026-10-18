@@ -2,6 +2,7 @@
 
 import { sql } from "./db";
 import type { HateHit } from "./hate";
+import { forgetHeld } from "./held";
 import { newId } from "./ids";
 import { settings } from "./settings";
 
@@ -14,12 +15,14 @@ export async function expireSanctions() {
 	});
 }
 
-export async function signOutEverywhere(...userIds: string[]) {
+export async function shutOut(...userIds: string[]) {
 	if (!userIds.length) return;
 	const ids = sql.array(userIds, "INT8");
 	await sql`delete from sessions where user_id = any(${ids})`;
 	await sql`delete from login_challenges where user_id = any(${ids})`;
 	await sql`delete from push_subscriptions where user_id = any(${ids})`;
+	await sql`update invites set revoked = true where created_by = any(${ids}) and not revoked and uses < max_uses`;
+	forgetHeld();
 	const chat = await import("./chat");
 	for (const id of userIds) chat.closeSockets(id);
 }
@@ -55,7 +58,7 @@ export async function escalate(userId: string, actorId: string | null, reason: s
 		}
 		result = { strikes, outcome: permanent ? "permanent" : "suspended", hours: step };
 	}
-	if (result.outcome !== "warning") await signOutEverywhere(userId);
+	if (result.outcome !== "warning") await shutOut(userId);
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, ${actorId}::bigint, 'escalate', ${userId},
 		${JSON.stringify({ ...result, reason: reason.slice(0, 500) })}::text::jsonb)`;
 	return result;

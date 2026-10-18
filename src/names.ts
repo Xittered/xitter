@@ -9,7 +9,7 @@ import { sql } from "./db";
 import { newId } from "./ids";
 import { LOOKALIKE, foldGlyphs } from "./fold";
 import { hateIn } from "./hate";
-import { signOutEverywhere } from "./moderation";
+import { shutOut } from "./moderation";
 import { hasBlockedPhrase, settings } from "./settings";
 
 export { foldGlyphs };
@@ -84,6 +84,6 @@ export const forbiddenText = (...texts: string[]) => texts.some((t) => hasBlocke
 export async function suspendForName(userId: string, name: string) {
 	await sql`update users set status = 'suspended', status_until = null, status_restore = null, deactivated_at = null where id = ${userId}::bigint and role is null`;
 	const [member] = await sql`select 1 from users where id = ${userId}::bigint and role is null`;
-	if (member) await signOutEverywhere(userId);
+	if (member) await shutOut(userId);
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'auto_suspend_name', ${userId}, ${JSON.stringify({ name })}::text::jsonb)`;
 }

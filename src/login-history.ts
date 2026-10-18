@@ -43,9 +43,11 @@ export const requestIp = (req: Request): string | null => {
 	return (forwarded && isIP(forwarded) && fromProxy(peer) ? forwarded : peer) || null;
 };
 
+export const requestCountry = (req: Request) => (fromProxy(socketIps.get(req)) ? countryFromHeader(req.headers.get("cf-ipcountry")) : undefined);
+
 export async function recordSignIn(req: Request, session: { token: string; userId: string }) {
 	const ip = requestIp(req);
-	const country = countryFromHeader(req.headers.get("cf-ipcountry")) ?? null;
+	const country = requestCountry(req) ?? null;
 	const app = (await platformSource(req)) ?? webSource();
 	await sql`insert into login_events (id, user_id, ip, country, app, user_agent)
 		values (${newId()}::bigint, ${session.userId}::bigint, ${ip}, ${country}, ${app}, ${(req.headers.get("user-agent") ?? "").slice(0, 500)})`;

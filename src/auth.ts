@@ -130,7 +130,7 @@ export function parseCookies(req: Request): Record<string, string> {
 	return out;
 }
 
-import { countryFromHeader } from "./countries";
+import { requestCountry } from "./login-history";
 
 const viewerCols = () => sql`u.id, u.screen_name, u.name, u.bio, u.location, u.website, u.avatar_url, u.banner_url, u.verified_type, u.flag, u.status, u.role, u.protected, u.language, u.created_at,
 	u.preferences->>'discoverable_by_email' = 'true' as discoverable_by_email,
@@ -154,7 +154,7 @@ export async function getViewer(req: Request): Promise<Viewer | undefined> {
 		await sql`update sessions set last_seen_at = now(), user_agent = ${(req.headers.get("user-agent") ?? "").slice(0, 500)}
 			where token = ${token} and (last_seen_at < now() - interval '1 minute' or user_agent is null)`;
 	// where the account is based, from the edge's country header; kept from the first request that has one
-	const country = row ? countryFromHeader(req.headers.get("cf-ipcountry")) : undefined;
+	const country = row ? requestCountry(req) : undefined;
 	if (country) await sql`update users set country = ${country} where id = ${row.id}::bigint and country is null`;
 	return row as Viewer | undefined;
 }

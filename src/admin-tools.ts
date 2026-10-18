@@ -12,7 +12,8 @@ import { newId } from "./ids";
 import { MEDIA_DIR, sniffImage } from "./media";
 import { NOTICE_TYPES } from "./model";
 import { hateIn, hateInName } from "./hate";
-import { escalate, signOutEverywhere } from "./moderation";
+import { forgetHeld } from "./held";
+import { escalate, shutOut } from "./moderation";
 import { blockedNameIn, blockedWordIn, suspendForName } from "./names";
 import { setSetting, settings } from "./settings";
 import { clientIp, ipAllowed, parseRange } from "./staff-access";
@@ -201,7 +202,7 @@ export const toolActions: Record<string, Action> = {
 			const hours = Number(b.hours);
 			if (!Number.isFinite(hours) || hours < 1 || hours > 8760) throw new AdminError("Choose 1–8760 hours.");
 			await sql`update users set status_restore = coalesce(status_restore, status), status = ${b.status}, status_until = now() + ${hours} * interval '1 hour', deactivated_at = null where id = ${id}::bigint`;
-			if (b.status === "suspended") await signOutEverywhere(id);
+			if (b.status === "suspended") await shutOut(id);
 			await audit(a, "temporary_status", id, { status: b.status, hours, previous: user.status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
 		},
@@ -218,7 +219,7 @@ export const toolActions: Record<string, Action> = {
 			await sql.begin(async (tx) => {
 				await tx`update users set status = ${b.status}, status_until = null, status_restore = null, deactivated_at = null where id = any(${tx.array(ids, "INT8")})`;
 			});
-			if (b.status === "suspended") await signOutEverywhere(...ids);
+			if (b.status === "suspended") await shutOut(...ids);
 			await audit(a, "bulk_status", null, { ids, status: b.status });
 			return { count: ids.length };
 		},
@@ -375,6 +376,21 @@ export const toolActions: Record<string, Action> = {
 
 	// maintenance mode, blocked phrases, trend controls and the pinned post
 	operations: { role: "support", run: async () => ({ operations: settings().operations, automod: settings().automod }) },
+	heldIdentities: {
+		role: "moderator",
+		run: async () => ({ held: await sql`select kind, value, reason, created_at from retired_identities order by created_at desc limit 500` }),
+	},
+	releaseIdentity: {
+		role: "admin",
+		run: async (a, b) => {
+			if (!["handle", "email", "ip"].includes(b.kind) || typeof b.value !== "string" || b.value.length > 320) throw new AdminError("Choose an entry.");
+			const rows = await sql`delete from retired_identities where kind = ${b.kind} and value = ${b.value} returning value`;
+			if (!rows.length) throw new AdminError("No such entry.", 404);
+			forgetHeld();
+			await audit(a, "release_identity", null, { kind: b.kind, value: b.value });
+			return {};
+		},
+	},
 	automodScan: {
 		role: "moderator",
 		run: async (_a, b) => {

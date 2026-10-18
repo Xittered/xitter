@@ -932,3 +932,11 @@ create index if not exists login_events_ip_idx on login_events (ip, created_at d
 update users u set deactivated_at = null where u.deactivated_at is not null and u.status = 'suspended' and exists (
 	select 1 from audit_log l where l.target = u.id::text and l.created_at > u.deactivated_at
 		and l.action in ('set_status', 'temporary_status', 'bulk_status', 'auto_suspend_name', 'suspend_blocked_names', 'escalate'));
+create table if not exists retired_identities (
+	kind text not null check (kind in ('handle', 'email', 'ip')),
+	value text not null,
+	user_id bigint,
+	reason text not null default '',
+	created_at timestamptz not null default now(),
+	primary key (kind, value)
+);

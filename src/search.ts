@@ -138,7 +138,7 @@ export async function hashtagsLike(prefix: string, limit: number): Promise<strin
 	const clean = prefix.replace(/^#/, "").replace(/[^\w]/g, "");
 	if (!clean) return [];
 	const rows = await sql`select tag, count(*) as n from (
-			select lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag from posts p where p.text ilike ${like(`#${clean}`)}
+			select lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag from posts p where p.text ilike ${like(`#${clean}`)} and not p.hidden and p.user_id not in ${outOfView("0")}
 			order by p.id desc limit 2000) t
 		where tag like ${`${clean.toLowerCase()}%`} group by tag order by n desc, tag limit ${limit}`;
 	return rows.map((r: any) => `#${r.tag}`);
@@ -152,7 +152,7 @@ export async function trendingHashtags(days: number, limit: number, scope: { cou
 			select p.id, lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag,
 				${scope.followedBy ? sql`case when p.user_id in (select followee_id from follows where follower_id = ${scope.followedBy}::bigint) then 2 else 1 end` : sql`1`} as w
 			from posts p
-			where p.created_at > now() - make_interval(days => ${days})
+			where p.created_at > now() - make_interval(days => ${days}) and not p.hidden and p.user_id not in ${outOfView("0")}
 				${scope.country ? sql`and p.user_id in (select id from users where country = ${scope.country})` : sql``}) t
 		group by tag order by score desc, n desc, tag limit ${limit}`;
 	// an admin can hide hashtags and put others first (Settings, Trends)

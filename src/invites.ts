@@ -3,6 +3,7 @@
 // account, so two people can't both use its last use.
 
 import { hateInName } from "./hate";
+import { handleHeld } from "./held";
 import { blockedNameIn } from "./names";
 import { sql } from "./db";
 import { isFlag } from "./flags";
@@ -52,7 +53,7 @@ export async function usernameState(raw: string): Promise<"available" | "taken" 
 	if (!/^[A-Za-z0-9_]{4,15}$/.test(screenName)) return "invalid";
 	if (RESERVED.has(screenName.toLowerCase())) return "taken";
 	const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${screenName})`;
-	return taken ? "taken" : "available";
+	return taken || (await handleHeld(screenName)) ? "taken" : "available";
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -69,7 +70,12 @@ export async function evadedSuspension(email: string, ip: string | null | undefi
 	const [byEmail] = await sql`select u.id::text from users u where ${SUSPENDED_MEMBER} and u.email is not null
 		and ${CANONICAL_EMAIL(sql`u.email`)} = ${CANONICAL_EMAIL(sql`${email}::text`)} limit 1`;
 	if (byEmail) return { user: byEmail.id, by: "email" };
+	const [retiredEmail] = await sql`select user_id::text from retired_identities where kind = 'email'
+		and ${CANONICAL_EMAIL(sql`value`)} = ${CANONICAL_EMAIL(sql`${email}::text`)} limit 1`;
+	if (retiredEmail) return { user: retiredEmail.user_id ?? "", by: "email" };
 	if (!ip) return undefined;
+	const [retiredIp] = await sql`select user_id::text from retired_identities where kind = 'ip' and value = ${ip} and created_at > now() - interval '30 days'`;
+	if (retiredIp) return { user: retiredIp.user_id ?? "", by: "address" };
 	const [byIp] = await sql`select u.id::text from login_events e join users u on u.id = e.user_id
 		where e.ip = ${ip} and e.created_at > now() - interval '30 days' and ${SUSPENDED_MEMBER} limit 1`;
 	return byIp ? { user: byIp.id, by: "address" } : undefined;
@@ -85,6 +91,7 @@ export async function checkSignup(f: SignupForm) {
 	const problem = usernameProblem(screenName);
 	if (problem) throw new SignupError(problem);
 	if (RESERVED.has(screenName.toLowerCase())) throw new SignupError("That username is reserved.");
+	if (await handleHeld(screenName)) throw new SignupError("That username isn't available.");
 	// a blocked word in the handle or name (names.ts): no account at all
 	if (blockedNameIn(screenName, name) || hateInName(screenName, name)) throw new SignupError("That username isn't allowed here.");
 	if ([...name].length > 50) throw new SignupError("Names are at most 50 characters.");
@@ -124,7 +131,8 @@ export async function signUp(
 			mode === "open" && !code
 				? [undefined]
 				: await tx`update invites set uses = uses + 1
-					where code = ${code} and not revoked and uses < max_uses and (expires_at is null or expires_at > now()) returning code, org_id`;
+					where code = ${code} and not revoked and uses < max_uses and (expires_at is null or expires_at > now())
+						and not exists (select 1 from users c where c.id = invites.created_by and c.status = 'suspended' and c.deactivated_at is null) returning code, org_id`;
 		if (!invite && !(mode === "open" && !code)) throw new SignupError("That invite code is not valid or has been used up.");
 		await tx`insert into users (id, screen_name, name, password_hash, invite_code, flag, email, email_verified, signup_source, signup_country)
 			values (${id}::bigint, ${screenName}, ${name}, ${hash}, ${invite ? code : null}, ${flag}, ${email}, ${!!f.emailVerified}, ${f.source ?? null}, ${f.country ?? null})`;

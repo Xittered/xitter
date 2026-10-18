@@ -1017,7 +1017,20 @@ const RENDER = {
 
 	async automod(main) {
 		main.innerHTML = '<h1>Automod</h1><p class="dim">New posts and profiles are checked as they\'re written. This looks through what was there before: visible posts, newest first, and every profile. Nothing happens to what it finds until you act. Settings &gt; Automod holds the strike ladder.</p>' +
-			'<div class="bar"><button class="btn primary" id="scan">Scan</button><span class="dim small" id="scanState"></span></div><div id="hits"></div>';
+			'<div class="bar"><button class="btn primary" id="scan">Scan</button><span class="dim small" id="scanState"></span></div><div id="hits"></div>' +
+			'<h2>Held after deletion</h2><p class="dim small">When a suspended account is deleted, its handles, email and recent addresses stay here, so nobody can take the handle or a look-alike of it, and sign-ups from that email or those addresses are refused. Handles of suspended accounts that still exist are held without being listed.</p><div id="held"></div>';
+		const drawHeld = async () => {
+			const { held } = await api("heldIdentities");
+			$("#held").innerHTML = held.length
+				? '<div class="scroll"><table class="table"><tr><th>Kind</th><th>Value</th><th>Why</th><th></th></tr>' + held.map((h, i) => "<tr><td>" + esc(h.kind) + '</td><td class="code">' + esc(h.value) + '</td><td class="small dim">' + esc(h.reason) + " · " + esc(when(h.created_at)) + "</td><td>" +
+					(can("admin") ? '<button class="btn" data-release="' + i + '">Release</button>' : "") + "</td></tr>").join("") + "</table></div>"
+				: '<div class="empty">Nothing held.</div>';
+			$("#held").querySelectorAll("[data-release]").forEach((b) => b.onclick = () => {
+				const h = held[Number(b.dataset.release)];
+				act(() => api("releaseIdentity", { kind: h.kind, value: h.value }), "Released").then(drawHeld);
+			});
+		};
+		drawHeld();
 		const found = [];
 		let next = null, scanned = 0;
 		const draw = () => {
