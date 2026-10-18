@@ -597,6 +597,17 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("rate_limits", next);
 				changed.push("rate_limits");
 			}
+			if (b.post_limits && typeof b.post_limits === "object") {
+				const next = { ...s.post_limits };
+				for (const k of Object.keys(next) as (keyof typeof next)[]) {
+					if (b.post_limits[k] === undefined) continue;
+					const x = Number(b.post_limits[k]);
+					if (!Number.isInteger(x) || x < 1 || x > 1_000_000) throw new AdminError("Post lengths must be whole numbers from 1 to 1000000.");
+					next[k] = x;
+				}
+				await setSetting("post_limits", next);
+				changed.push("post_limits");
+			}
 			if (b.announcement && typeof b.announcement === "object") {
 				const text = String(b.announcement.text ?? "").trim().slice(0, 500);
 				const link = String(b.announcement.link ?? "").trim();

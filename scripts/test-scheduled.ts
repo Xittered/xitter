@@ -29,6 +29,13 @@ const now = Math.floor(Date.now() / 1000);
 const past = await gql("CreateScheduledTweet", { post_tweet_request: { status: "too soon" }, execute_at: now + 5 });
 check("a time in the next 30 seconds is refused", !!past.errors?.length);
 
+// the length limit holds for scheduled posts and drafts, not only the composer
+const long = "a ".repeat(130000);
+const tooLong = await gql("CreateScheduledTweet", { post_tweet_request: { status: long }, execute_at: now + 3600 });
+check("an over-long scheduled post is refused", !!tooLong.errors?.length && !tooLong.data?.tweet);
+const longDraft = await gql("CreateDraftTweet", { post_tweet_request: { status: long } });
+check("an over-long draft is refused", !!longDraft.errors?.length && !longDraft.data?.tweet);
+
 const text = `scheduled ${now}`;
 const made = await gql("CreateScheduledTweet", { post_tweet_request: { status: text, media_ids: "" }, execute_at: now + 35 });
 const id = made.data?.tweet?.rest_id;

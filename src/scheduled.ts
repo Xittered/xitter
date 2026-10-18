@@ -6,7 +6,7 @@ import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { attachMedia } from "./media";
-import { PostError, createPost } from "./posts";
+import { PostError, checkLength, createPost } from "./posts";
 
 type Vars = Record<string, any>;
 
@@ -52,6 +52,7 @@ async function check(userId: string, request: Vars, kind: "scheduled" | "draft")
 	const [n] = await sql`select count(*)::int as n from scheduled_posts where user_id = ${userId}::bigint and kind = ${kind}`;
 	if (n.n >= MAX_PENDING) throw new PostError(`You can keep up to ${MAX_PENDING} ${kind === "draft" ? "drafts" : "scheduled posts"}.`, 214);
 	if (kind === "scheduled" && !request.status.trim() && !request.media_ids.length) throw new PostError("Your post is empty.", 170);
+	await checkLength(userId, request.status);
 }
 
 async function create(v: Viewer, vars: Vars, kind: "scheduled" | "draft") {
@@ -68,6 +69,7 @@ async function edit(v: Viewer, vars: Vars, kind: "scheduled" | "draft") {
 	if (!isId(id)) throw new PostError("Not found.", 144);
 	const request = cleanRequest(vars.post_tweet_request);
 	const at = kind === "scheduled" ? executeAt(vars) : null;
+	await checkLength(v.id, request.status);
 	const rows = await sql`update scheduled_posts set request = ${JSON.stringify(request)}::text::jsonb, execute_at = ${at}
 		where id = ${id}::bigint and user_id = ${v.id}::bigint and kind = ${kind} returning id`;
 	if (!rows.length) throw new PostError("Not found.", 144);

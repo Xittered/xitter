@@ -9,6 +9,7 @@ import { type MediaRow, absolute, mediaEntity } from "./media";
 import { placeById } from "./places";
 import { webSource } from "./platforms";
 import { settings } from "./settings";
+import { SHORT_POST, previewOf, weightedLength } from "./textlen";
 
 // a note's text with its links marked, as the note box and the note page expect
 export function noteText(text: string) {
@@ -389,9 +390,15 @@ function noticePivot(n: { type: string; text: string; url?: string }) {
 }
 
 function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> {
-	const textLength = [...p.text].length;
-	const mentions = userMentions(p);
-	const tags = hashtags(p.text);
+	// a long post: timelines get its start and "Show more", the post page the
+	// whole text (note_tweet), with entities for each
+	const long = weightedLength(p.text) > SHORT_POST;
+	const shown = long ? previewOf(p.text) : p.text;
+	const textLength = [...shown].length;
+	const allMentions = userMentions(p);
+	const allTags = hashtags(p.text);
+	const mentions = allMentions.filter((m: any) => m.indices[1] <= textLength);
+	const tags = allTags.filter((t: any) => t.indices[1] <= textLength);
 	const media = (p.media ?? []).map((m, i) => mediaEntity(m, p.id, p.author.screen_name, i, textLength));
 	const quoteLink = p.quoted && permalink(p.quoted);
 	return {
@@ -407,6 +414,11 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 		...(p.article ? { article: { article_results: { result: p.article } } } : {}),
 		...(p.community ? { community_results: { result: p.community } } : {}),
 		...(p.poll ? { card: p.poll } : {}),
+		...(long ? { note_tweet: { is_expandable: true, note_tweet_results: { result: {
+			id: globalId("NoteTweet", p.id),
+			text: p.text,
+			entity_set: { hashtags: allTags, user_mentions: allMentions, urls: [], symbols: [] },
+		} } } } : {}),
 		cashtag_attachments: [],
 		core: { user_results: { result: userResult(p.author) } },
 		edit_control: editControl(p),
@@ -422,7 +434,7 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 			bookmarked: p.bookmarked,
 			conversation_id_str: p.conversation_id,
 			created_at: apiDate(p.created_at),
-			display_text_range: [0, [...p.text].length],
+			display_text_range: [0, textLength],
 			entities: {
 				...(media.length ? { media } : {}),
 				...(mentions.length ? { user_mentions: mentions } : {}),
@@ -431,7 +443,7 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 			...(media.length ? { extended_entities: { media } } : {}),
 			favorite_count: p.like_count,
 			favorited: p.liked,
-			full_text: p.text,
+			full_text: shown,
 			possibly_sensitive: !!p.sensitive,
 			...(placeById(p.place_id) ? { place: placeById(p.place_id) } : {}),
 			source: (p.source ?? webSource()).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!),

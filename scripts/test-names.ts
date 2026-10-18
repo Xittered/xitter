@@ -57,6 +57,9 @@ try{
 	const r2=await b.post('/1.1/account/settings.json',{screen_name:'zorbleflax_'+names[1].slice(-3)});
 	check(r2.status===400&&await status(created[1])==='suspended','handle change suspends');
 	check((await sql`select 1 from audit_log where action='auto_suspend_name' and target=${created[1]}`).length===1,'audit line written');
+	// reserved handles are refused at rename too, not only at sign-up
+	const reserved=await staff.post('/1.1/account/settings.json',{screen_name:'Admin'});
+	check(reserved.status===400&&reserved.text.includes('reserved')&&(await sql`select screen_name from users where id=${created[2]}::bigint`)[0].screen_name===names[2],'reserved handle refused at rename');
 	const r3=await staff.post('/1.1/account/update_profile.json',{name:'Zorbleflax staff'});
 	check(r3.status>=400&&await status(created[2])!=='suspended','staff only refused');
 	await sql`update users set status='active', name='Zorbleflax old' where id=${created[0]}::bigint or id=${created[2]}::bigint`;

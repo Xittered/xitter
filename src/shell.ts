@@ -4,6 +4,7 @@
 import type { User } from "./auth";
 import { loadBuild } from "./build";
 import { feature, settings } from "./settings";
+import { postLimitFor } from "./textlen";
 import { STICKER_PICKER_CSS, STICKER_PICKER_SCRIPT } from "./sticker-picker";
 import { FORGOT_SCRIPT, FRESH_SCRIPT, type MenuLink, TIDY_SCRIPT, hideCss, tidyData } from "./tidy";
 import { POST_CONTEXT_SCRIPT } from "./post-context";
@@ -136,11 +137,19 @@ const ownSwitches = (): Record<string, { value: unknown }> => ({
 	responsive_web_edit_tweet_perspective_enabled: { value: true },
 });
 const overrideSwitches = () => Object.fromEntries(Object.entries(settings().switch_overrides).map(([k, value]) => [k, { value }]));
-// the build's, then Xitter's, then an admin's
-const clientSwitches = (config: Record<string, unknown>) => ({
+// Long posts for everyone, up to the limit of the viewer's badge (textlen.ts):
+// the composer reads its limit from this switch and sends CreateNoteTweet past 280.
+const longPostSwitches = (user: User | null) => ({
+	longform_notetweets_consumption_enabled: { value: true },
+	longform_notetweets_composition_without_claims_enabled: { value: true },
+	longform_notetweets_max_weighted_character_length: { value: postLimitFor(user?.verified_type) },
+});
+// the build's, then Xitter's, then an admin's; the long-post limit is the viewer's own
+const clientSwitches = (config: Record<string, unknown>, user: User | null = null) => ({
 	...Object.fromEntries(Object.entries(config ?? {}).filter(([k]) => !HOST_SWITCHES.includes(k))),
 	...ownSwitches(),
 	...overrideSwitches(),
+	...longPostSwitches(user),
 });
 
 // every switch the build knows, with where its value comes from (admin panel)
@@ -165,8 +174,8 @@ function initialState(user: User | null, fs: NonNullable<ReturnType<typeof loadB
 			users: user ? { entities: { [user.id]: legacyUser(user) }, errors: {}, fetchStatus: { [user.id]: "loaded" } } : { entities: {}, errors: {}, fetchStatus: {} },
 		},
 		featureSwitch: {
-			defaultConfig: clientSwitches(fs.defaultConfig),
-			user: { config: clientSwitches(fs.config), impression_pointers: {}, impressions: {}, keysRead: {}, settingsVersion: fs.settingsVersion },
+			defaultConfig: clientSwitches(fs.defaultConfig, user),
+			user: { config: clientSwitches(fs.config, user), impression_pointers: {}, impressions: {}, keysRead: {}, settingsVersion: fs.settingsVersion },
 			debug: {},
 			featureSetToken: fs.featureSetToken,
 			isLoaded: true,
