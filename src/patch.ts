@@ -114,20 +114,42 @@ export function patchText(text: string, chat = false): string {
 	return out;
 }
 
+const MAX_PATCH_CACHE_BYTES = 64 * 1024 * 1024;
 const cache = new Map<string, Buffer>();
-export const clearPatchCache = () => cache.clear();
+let cacheBytes = 0;
+export function cachedPatch(key: string): Buffer | undefined {
+	const slot = key.endsWith(".js") ? `${key}\0${settings().instance_name}` : key;
+	const hit = cache.get(slot);
+	if (hit) {
+		cache.delete(slot);
+		cache.set(slot, hit);
+	}
+	return hit;
+}
+export const clearPatchCache = () => {
+	cache.clear();
+	cacheBytes = 0;
+};
 
 // the name can change while the server runs, so script files are cached per name
 export function patchFile(key: string, raw: Buffer): Buffer {
 	const js = key.endsWith(".js");
 	const name = settings().instance_name;
 	const slot = js ? `${key}\0${name}` : key;
-	let hit = cache.get(slot);
+	let hit = cachedPatch(key);
 	if (!hit) {
 		let text = patchText(raw.toString("utf8"), key.startsWith("/x-web/xchat/"));
 		if (js) text = brandText(text, name, !I18N.test(key));
 		hit = Buffer.from(text);
-		cache.set(slot, hit);
+		if (hit.byteLength <= MAX_PATCH_CACHE_BYTES) {
+			while (cacheBytes + hit.byteLength > MAX_PATCH_CACHE_BYTES) {
+				const oldest = cache.keys().next().value!;
+				cacheBytes -= cache.get(oldest)!.byteLength;
+				cache.delete(oldest);
+			}
+			cache.set(slot, hit);
+			cacheBytes += hit.byteLength;
+		}
 	}
 	return hit;
 }

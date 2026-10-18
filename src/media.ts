@@ -266,6 +266,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 }
 
 const mimeCache = new Map<string, string>();
+const MAX_MIME_CACHE = 4096;
 
 const IMMUTABLE = "public, max-age=31536000, immutable";
 
@@ -282,10 +283,15 @@ export async function serveMedia(req: Request, pathname: string): Promise<Respon
 	const m = /^\/media\/(?:banner\/)?(\d{1,19})(?:\.[a-z0-9]+)?(?:\/[\w-]+)?$/.exec(pathname);
 	if (!m || !existsSync(fileOf(m[1]))) return new Response("not found", { status: 404 });
 	let mime = mimeCache.get(m[1]);
+	if (mime) {
+		mimeCache.delete(m[1]);
+		mimeCache.set(m[1], mime);
+	}
 	if (!mime) {
 		const [row] = await sql`select mime from media where id = ${m[1]}::bigint`;
 		if (!row) return new Response("not found", { status: 404 });
 		mime = row.mime as string;
+		if (mimeCache.size >= MAX_MIME_CACHE) mimeCache.delete(mimeCache.keys().next().value!);
 		mimeCache.set(m[1], mime);
 	}
 	const headers: Record<string, string> = { "content-type": mime, "cache-control": IMMUTABLE, "x-content-type-options": "nosniff", "accept-ranges": "bytes" };

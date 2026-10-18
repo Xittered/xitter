@@ -902,8 +902,9 @@ export async function juiceboxProxy(req: Request, path: string): Promise<Respons
 	const res = await fetch(`${JUICEBOX.url}/${path}`, {
 		method: req.method,
 		headers,
-		body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+		body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
+		duplex: "half",
 	}).catch(() => undefined);
 	if (!res) return new Response("key backup is unavailable", { status: 503 });
-	return new Response(await res.arrayBuffer(), { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/octet-stream" } });
+	return new Response(res.body, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/octet-stream" } });
 }

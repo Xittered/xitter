@@ -32,3 +32,10 @@ export async function getClientFile(cdnPath: string, allowFetch = true): Promise
 	writeFileSync(p, buf);
 	return buf;
 }
+
+export async function getClientFilePath(cdnPath: string): Promise<string | undefined> {
+	const p = localPath(cdnPath);
+	if (!p) return undefined;
+	if (existsSync(p)) return statSync(p).isFile() ? p : undefined;
+	return (await getClientFile(cdnPath)) ? p : undefined;
+}
