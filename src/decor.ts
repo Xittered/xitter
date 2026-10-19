@@ -339,7 +339,7 @@ export async function decorFor(url: URL): Promise<Response> {
 	const out: Record<string, ReturnType<typeof forClient>> = {};
 	if (names.length) {
 		const rows = await sql`select screen_name, decor from users where lower(screen_name) = any(${sql.array(names, "TEXT")})
-			and instance is null and verified_type = 'business' and status <> 'suspended' and decor is not null`;
+			and instance is null and verified_type = 'blue' or verified_type = 'business' and status <> 'suspended' and decor is not null`;
 		for (const r of rows) {
 			const d = clean(r.decor);
 			if (d.theme || d.background || d.frame) out[r.screen_name.toLowerCase()] = forClient(d);
@@ -353,6 +353,8 @@ const swatch = (id: string) => `<span class="swatch" style="background:${themeBa
 
 async function page(req: Request, viewer: Viewer, d: Decor, error = "") {
 	const gold = viewer.verified_type === "business";
+	const verified = viewer.verified_type === "blue";
+	
 	const form = (fields: string, label: string, kind = "") =>
 		`<form method="post" action="/account/decor" class="inline"><input type="hidden" name="csrf" value="${esc(viewer.csrf)}">${fields}<button type="submit"${kind ? ` class="${kind}"` : ""}>${esc(label)}</button></form>`;
 	const worn = (kind: Kind, label: string) => {
@@ -372,9 +374,9 @@ async function page(req: Request, viewer: Viewer, d: Decor, error = "") {
 				`<button type="submit" name="theme" value="${id}" class="theme${d.theme === id ? " on" : ""}" title="${esc(t.name)}">${swatch(id)}<span>${esc(t.name)}</span></button>`,
 		)
 		.join("");
-	const body = gold
+	const body = verified || gold
 		? `<h1>Profile decor</h1>
-	<p class="dim">Gold-check accounts can dress their profile with items from the Steam Points Shop: a theme, a background and an avatar frame. Your profile shows them to everyone here; your frame shows on your posts too.</p>
+	<p class="dim">Verified accounts can dress their profile with items from the Steam Points Shop: a theme, a background and an avatar frame. Your profile shows them to everyone here; your frame shows on your posts too.</p>
 	${error ? `<p class="error">${esc(error)}</p>` : ""}
 	<h2>Wearing</h2>
 	<div class="card split"><div><b>Theme</b><div class="meta">${d.theme ? esc(THEMES[d.theme]!.name) : "None"}</div></div>${d.theme ? swatch(d.theme) : ""}${
@@ -533,7 +535,7 @@ export async function decorRoute(req: Request, viewer: Viewer): Promise<Response
 	const [row] = await sql`select decor from users where id = ${viewer.id}::bigint`;
 	const d = clean(row?.decor);
 	if (req.method !== "POST") return page(req, viewer, d);
-	if (viewer.verified_type !== "business") return page(req, viewer, d, "Profile decor is for gold-check accounts.");
+	if (viewer.verified_type !== "business" && viewer.verified_type !== "blue") return page(req, viewer, d, "Profile decor is for verified accounts.");
 	const f = await req.formData().catch(() => undefined);
 	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return page(req, viewer, d, "That form is out of date. Try again.");
 	const theme = f?.get("theme");
