@@ -1,7 +1,14 @@
 {
 	"version": 1,
-	"sequence": 6,
+	"sequence": 7,
 	"instances": [
+		{
+			"id": "larp.jye.fyi",
+			"name": "larp",
+			"source_url": "https://github.com/Xittered/xitter",
+			"public_key": "MtOOU2p-wazLBbp3goandZk5MLD_BPKT9IikJcIFm5c",
+			"state": "active"
+		},
 		{
 			"id": "social.opsex.best",
 			"name": "Xitter",
