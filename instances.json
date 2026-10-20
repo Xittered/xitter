@@ -1,7 +1,14 @@
 {
 	"version": 1,
-	"sequence": 13,
+	"sequence": 14,
 	"instances": [
+		{
+			"id": "cro.corvine.vip",
+			"name": "CRO",
+			"source_url": "https://github.com/Xittered/xitter",
+			"public_key": "OJiGKsH5eTlfBzKyWCe2G0uHIOESe6QV-9sSmVP-iVk",
+			"state": "active"
+		},
 		{
 			"id": "giggleshitter.gay",
 			"name": "giggleshitter",

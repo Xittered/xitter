@@ -1,10 +1,11 @@
 # Instances
 
-Generated from [instances.json](instances.json), sequence 13. Edit that file, then run
+Generated from [instances.json](instances.json), sequence 14. Edit that file, then run
 `bun scripts/check-instances.ts --write-md` to update this one.
 
 | Instance | Name | State | Key | Source |
 | --- | --- | --- | --- | --- |
+| [cro.corvine.vip](https://cro.corvine.vip) | CRO | federating | `OJiGKsH5eTlfBzKyWCe2G0uHIOESe6QV-9sSmVP-iVk` | [code](https://github.com/Xittered/xitter) |
 | [giggleshitter.gay](https://giggleshitter.gay) | giggleshitter | federating | `IXb5UsVkUbxH0a_Rub1PEJumKBufBtwwNtM5RZffwB0` | [code](https://github.com/Xittered/xitter) |
 | [jr1.xitter.space](https://jr1.xitter.space) | jr1 | federating | `MtOOU2p-wazLBbp3goandZk5MLD_BPKT9IikJcIFm5c` | [code](https://github.com/Xittered/xitter) |
 | [nidus.fourteentrees.net](https://nidus.fourteentrees.net) | Nidus | federating | `kgTDVqZmPWxdWqkSo_cuWcYYmkFnk-YqWMz2RYwKY4w` | [code](https://github.com/Xittered/xitter) |
