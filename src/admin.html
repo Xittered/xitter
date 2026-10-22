@@ -254,9 +254,11 @@ const RENDER = {
 			list("Storage by kind", s.storage.map((m) => "<p>" + esc(m.kind) + ' <span class="dim small">· ' + m.files + " files · " + mb(m.bytes) + "</span></p>"), "Nothing uploaded.") +
 			list("Accounts by sign-up app", s.sources.map((r) => "<p>" + esc(r.source) + ' <span class="dim small">· ' + r.users + "</span></p>"), "No accounts.") +
 			"</div>" +
+			(h.disk && h.disk.warn ? '<div class="box" style="border:1px solid var(--gold);margin:16px 0"><h2>Storage is low</h2><p class="dim">Free space on the media disk is under the reserve. New uploads may be refused until some is freed.</p></div>' : "") +
 			"<h2>Server</h2>" + '<div class="cards">' +
 			[["Up for", duration(h.uptime)], ["Memory", (h.memory / 1048576).toFixed(0) + " MB"], ["Database", (Number(h.database.bytes) / 1048576).toFixed(1) + " MB"],
-				["Database answers in", h.database.latency_ms + " ms"], ["Bun", h.runtime], ["Client build", h.client_build ? h.client_build.slice(0, 7) : "none"]]
+				["Database answers in", h.database.latency_ms + " ms"], ["Bun", h.runtime], ["Client build", h.client_build ? h.client_build.slice(0, 7) : "none"],
+				...(h.disk ? [["Disk free", mb(h.disk.free) + (h.disk.warn ? " · low" : "")], ["Disk total", mb(h.disk.total)]] : [])]
 				.map(([k, v]) => '<div class="card"><span>' + esc(k) + "</span><b>" + esc(v) + "</b></div>").join("") + "</div>";
 	},
 
