@@ -88,7 +88,6 @@ export function outagePage(sentence: string): Response {
 	<img class="logo" src="/public/logo-dark.png" alt="">
 	<h1>Xitter is having trouble right now</h1>
 	<p class="rules">${esc(sentence)}</p>
-	<p class="rules">Try again in a few minutes.</p>
 	<p class="alt"><a href="/">Retry</a></p>
 </form>`,
 		),

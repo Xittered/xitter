@@ -50,9 +50,7 @@ export function databaseOutage(e: unknown): DatabaseOutage | undefined {
 	const message = e instanceof Error ? e.message : "";
 	const hit = codes.some((code) => CONNECT.has(code) || SQLSTATE.has(code) || /^08[0-9A-Z]{3}$/.test(code))
 		|| /connection (?:refused|terminated|timed out|timeout)|too many clients|the database system is (?:shutting down|starting up|in recovery)/i.test(message);
-	if (!hit) return undefined;
-		console.error(e instanceof Error ? e.stack ?? e.message : e);
-		return new DatabaseOutage(e);
+	return hit ? new DatabaseOutage(e) : undefined;
 }
 
 export const sql = new SQL(process.env.DATABASE_URL ?? "postgres://dev@localhost:5432/xitter", {

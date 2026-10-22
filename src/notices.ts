@@ -17,7 +17,7 @@ export const NOTICES = [
 
 const VIDEO_LENGTH = /^Videos can be up to \d{1,4} minutes long\.$/;
 
-const CANNED = [
+const X_CANNED = [
 	"Some of your media failed to upload.",
 	"Something went wrong, but don't fret — it's not your fault.",
 	"Something went wrong, but don’t fret — it’s not your fault.",
@@ -26,6 +26,8 @@ const CANNED = [
 	"Your media failed to resize and is too large to upload.",
 	"X is over capacity. Please wait a few moments then try again.",
 ];
+// the page swaps the brand name in X's strings, so match both spellings
+const CANNED = [...X_CANNED, ...X_CANNED.map((s) => s.replace(/\bX\b/g, "Xitter"))];
 
 export function allowedNotice(text: string): boolean {
 	return (NOTICES as readonly string[]).includes(text) || VIDEO_LENGTH.test(text);

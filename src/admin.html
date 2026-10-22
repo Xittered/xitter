@@ -244,6 +244,7 @@ const RENDER = {
 		};
 		const list = (title, rows, empty) => '<div class="box"><h2>' + title + "</h2>" + (rows.length ? '<div class="list">' + rows.join("") + "</div>" : '<p class="dim small">' + empty + "</p>") + "</div>";
 		main.innerHTML = "<h1>Overview</h1>" +
+			(h.disk && h.disk.warn ? '<div class="box" style="border:1px solid var(--gold);margin:0 0 16px"><h2>Storage is low</h2><p class="dim">' + esc(mb(h.disk.free)) + " free of " + esc(mb(h.disk.total)) + " on the media disk. Uploads are refused once free space drops below the reserve (MEDIA_MIN_FREE_MB).</p></div>" : "") +
 			cards([["Open reports", s.open_reports], ["Open errors", s.open_errors], ["Accounts", s.users], ["Sanctioned", s.sanctioned], ["Open invites", s.open_invites], ["Videos converting", s.videos_processing]]) +
 			"<h2>People</h2>" + cards([["Active today", s.active_day], ["Active this week", s.active_week], ["Active this month", s.active_month], ["Follows", s.follows]]) +
 			"<h2>Content</h2>" + cards([["Posts", s.posts], ["Posts today", s.posts_today], ["Likes", s.likes], ["Reposts", s.reposts], ["Bookmarks", s.bookmarks], ["Media files", s.media], ["Media stored", mb(s.media_bytes)]]) +
@@ -254,7 +255,6 @@ const RENDER = {
 			list("Storage by kind", s.storage.map((m) => "<p>" + esc(m.kind) + ' <span class="dim small">· ' + m.files + " files · " + mb(m.bytes) + "</span></p>"), "Nothing uploaded.") +
 			list("Accounts by sign-up app", s.sources.map((r) => "<p>" + esc(r.source) + ' <span class="dim small">· ' + r.users + "</span></p>"), "No accounts.") +
 			"</div>" +
-			(h.disk && h.disk.warn ? '<div class="box" style="border:1px solid var(--gold);margin:16px 0"><h2>Storage is low</h2><p class="dim">Free space on the media disk is under the reserve. New uploads may be refused until some is freed.</p></div>' : "") +
 			"<h2>Server</h2>" + '<div class="cards">' +
 			[["Up for", duration(h.uptime)], ["Memory", (h.memory / 1048576).toFixed(0) + " MB"], ["Database", (Number(h.database.bytes) / 1048576).toFixed(1) + " MB"],
 				["Database answers in", h.database.latency_ms + " ms"], ["Bun", h.runtime], ["Client build", h.client_build ? h.client_build.slice(0, 7) : "none"],

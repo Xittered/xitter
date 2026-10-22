@@ -1153,6 +1153,7 @@ export async function runOperation(name: string, viewer: Viewer, vars: Vars): Pr
 	} catch (e) {
 		const err = databaseOutage(e) ?? e;
 		if (err instanceof StorageFailure || err instanceof DatabaseOutage) {
+			console.error(`graphql ${name}:`, err.cause ?? err);
 			const message = err instanceof StorageFailure ? STORAGE_SENTENCE : DATABASE_SENTENCE;
 			return Response.json({
 				errors: [{ message: `Error: ${message}`, code: 85, kind: "Validation",

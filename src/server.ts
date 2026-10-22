@@ -316,7 +316,7 @@ async function handle(req: Request): Promise<Response | undefined> {
 			]);
 		}
 		if (res) {
-			console.error(err);
+			console.error(`${req.method} ${new URL(req.url).pathname}:`, err instanceof Error ? err.cause ?? err : err);
 			return res;
 		}
 		throw e;

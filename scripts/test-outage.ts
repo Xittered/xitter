@@ -47,7 +47,7 @@ test("a dead database becomes a 503 page or JSON without internals", async () =>
 	expect(page.headers.get("content-type")).toContain("text/html");
 	const html = await page.text();
 	expect(html).toContain("Xitter is having trouble right now");
-	expect(html).toContain("Try again in a few minutes.");
+	expect(html).toContain("Retry");
 	expect(html).toContain('href="/"');
 	expect(html).toContain("Retry");
 	expect(html).toContain(DATABASE_SENTENCE);

@@ -177,14 +177,17 @@ let diskLow = false;
 export function watchDisk() {
 	const tick = async () => {
 		try {
-			const edge = diskEdge(diskLow, (await space()).warn);
+			const s = await space();
+			const edge = diskEdge(diskLow, s.warn);
 			diskLow = edge.next;
-			if (edge.event === "low") console.warn("media disk is low on free space");
-			if (edge.event === "ok") console.warn("media disk has free space again");
+			const mb = (n: bigint) => `${n / 1048576n} MB`;
+			if (edge.event === "low") console.warn(`media disk is low on free space: ${mb(s.free)} free of ${mb(s.total)}`);
+			if (edge.event === "ok") console.warn(`media disk has free space again: ${mb(s.free)} free of ${mb(s.total)}`);
 		} catch (e) {
 			console.error(e);
 		}
 	};
+	void tick();
 	const timer = setInterval(tick, 5 * 60_000);
 	timer.unref?.();
 }
