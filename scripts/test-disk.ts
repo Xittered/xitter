@@ -80,7 +80,7 @@ test("a storage failure never publishes a short file", async () => {
 	}, () => putFile(dest, Buffer.from("hello"), [extra]))).rejects.toMatchObject({ name: "StorageFailure", message: STORAGE_SENTENCE });
 	expect(existsSync(dest)).toBe(false);
 	expect(existsSync(extra)).toBe(false);
-	expect(readdirSync(dir).some((name) => name.endsWith(".tmp"))).toBe(false);
+	expect(readdirSync(dir).some((name) => /\.tmp(\.|$)/.test(name))).toBe(false);
 	await putFile(dest, Buffer.from("hello"));
 	expect(readFileSync(dest).toString()).toBe("hello");
 	expect(readdirSync(dir)).toEqual(["photo.bin"]);

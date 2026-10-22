@@ -4,7 +4,7 @@ import { mediaUpload } from "../src/media";
 import { failOperation, runOperation } from "../src/graphql";
 import { StorageFailure } from "../src/disk";
 import { NOTICE_HEADER, RESOURCE_NOTICE_SCRIPT, STORAGE_SENTENCE } from "../src/notices";
-import { bootScript, shell } from "../src/shell";
+import { bootFor, bootScript } from "../src/shell";
 
 const viewer = { id: newId() } as any;
 
@@ -30,11 +30,12 @@ test("posting failures that already say the sentence do not add the notice heade
 });
 
 test("the boot script toasts an allowlisted notice and ignores the rest", async () => {
-	const page = shell({ id: "1", screen_name: "alice", name: "Alice", bio: "", location: "", avatar_url: null, banner_url: null, verified_type: null, created_at: new Date() }, false, false, {}, [], null, undefined, undefined, "csrf")!;
-	const signedOut = shell(null)!;
-	for (const html of [page, signedOut]) {
-		const path = html.match(/\/i\/xitter\/boot-[a-z0-9]+\.js/)?.[0];
-		expect(bootScript(path!)!.toString()).toContain(STORAGE_SENTENCE);
+	// the signed-in and signed-out boot scripts both carry the hook; shell() links
+	// bootFor(!!user).path, and needs the fetched client build, so it isn't called here
+	for (const signedIn of [true, false]) {
+		const { path } = bootFor(signedIn);
+		expect(path).toMatch(/^\/i\/xitter\/boot-[a-z0-9]+\.js$/);
+		expect(bootScript(path)!.toString()).toContain(RESOURCE_NOTICE_SCRIPT);
 	}
 	const nodes: any[] = [];
 	const canned = { textContent: "Some of your media failed to upload. Try a smaller file.", style: {} as Record<string, string> };

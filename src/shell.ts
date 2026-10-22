@@ -292,7 +292,7 @@ const boots = () =>
 		const body = Buffer.from(BOOT_SCRIPTS(signedIn));
 		return { body, path: `/i/xitter/boot-${Bun.hash(body).toString(36)}.js` };
 	}));
-const bootFor = (signedIn: boolean) => boots()[signedIn ? 1 : 0];
+export const bootFor = (signedIn: boolean) => boots()[signedIn ? 1 : 0];
 export const bootScript = (path: string): Buffer | undefined => boots().find((b) => b.path === path)?.body;
 
 // With no user the client boots signed out, for the sign-in dialog.

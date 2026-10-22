@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DATABASE_SENTENCE, DatabaseOutage, databaseOutage, sql } from "../src/db";
+import { DATABASE_SENTENCE, DatabaseOutage, databaseOutage, migrate, sql } from "../src/db";
 import { STORAGE_SENTENCE, StorageFailure } from "../src/disk";
 import { failFor } from "../src/failure";
 import { failOperation, runOperation } from "../src/graphql";
@@ -82,6 +82,8 @@ test("CreateTweet reports storage and database failures as code 85", async () =>
 });
 
 test("recording an outage does not write a row", async () => {
+	// unit tests run before CI migrates its database, so make sure error_log exists
+	await migrate();
 	const [before] = await sql`select count(*)::int as n from error_log`;
 	await recordError("server", new DatabaseOutage(refused), { path: "POST /i/api/graphql/CreateTweet" });
 	const [after] = await sql`select count(*)::int as n from error_log`;

@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { appendFile, truncate } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, extname } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { STORAGE_SENTENCE } from "./notices";
 
@@ -125,8 +125,10 @@ function writeBytes(path: string, bytes: Uint8Array) {
 	else writeFileSync(path, bytes);
 }
 
+// the temp name keeps the final extension: ffmpeg picks its output format from it
 function tempPath(finalPath: string): string {
-	return `${finalPath}.${randomBytes(8).toString("hex")}.tmp`;
+	const ext = extname(finalPath);
+	return `${finalPath.slice(0, finalPath.length - ext.length)}.${randomBytes(8).toString("hex")}.tmp${ext}`;
 }
 
 function failWrite(e: unknown, tmp: string, cleanup: readonly string[]): never {
