@@ -181,9 +181,25 @@ export function peers(): Listed[] {
 
 export const isPeer = (id: string) => peers().some((p) => p.id === id);
 
+export class CappedRead extends Error {
+	readonly kind = "capped" as const;
+	constructor() {
+		super("the answer is too large");
+		this.name = "CappedRead";
+	}
+}
+
+// a streamed body with no length is not a file we can pass through
+export function declaredLength(header: string | null, max: number): number | undefined {
+	if (header === null || header.trim() === "") return undefined;
+	const n = Number(header);
+	if (!Number.isFinite(n) || n < 1 || n > max) return undefined;
+	return n;
+}
+
 export async function readLimited(r: Response, max: number): Promise<Uint8Array> {
 	const declared = Number(r.headers.get("content-length") ?? "0");
-	if (declared > max) throw new Error("the answer is too large");
+	if (declared > max) throw new CappedRead();
 	const reader = r.body?.getReader();
 	if (!reader) return new Uint8Array();
 	const parts: Uint8Array[] = [];
@@ -193,12 +209,16 @@ export async function readLimited(r: Response, max: number): Promise<Uint8Array>
 		if (done) break;
 		size += value.length;
 		if (size > max) {
-			await reader.cancel();
-			throw new Error("the answer is too large");
+			await reader.cancel().catch(() => {});
+			throw new CappedRead();
 		}
 		parts.push(value);
 	}
 	return Buffer.concat(parts);
+}
+
+export async function readJson(r: Response, max: number): Promise<any> {
+	return JSON.parse(new TextDecoder().decode(await readLimited(r, max)));
 }
 
 const wellKnownKeys = new Map<string, { key: string; at: number }>();

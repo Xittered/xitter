@@ -3,6 +3,8 @@
 // and deflated entries, and zip64 for archives past 4 GB (X archives get big).
 
 import { createReadStream, createWriteStream, rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { StorageFailure, roomFor, storageCode } from "./disk";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createInflateRaw, inflateRawSync } from "node:zlib";
@@ -113,6 +115,7 @@ export class Zip {
 	// the entry's contents written to `dest` as they're read, never all in
 	// memory (videos); the bytes written
 	async extract(entry: ZipEntry, max: number, dest: string): Promise<number> {
+		await roomFor(Math.max(entry.size, 1), dirname(dest));
 		const start = await this.start(entry, max);
 		let written = 0;
 		const cap = new Transform({
@@ -129,6 +132,7 @@ export class Zip {
 		} catch (e) {
 			from.destroy();
 			rmSync(dest, { force: true });
+			if (e instanceof StorageFailure || storageCode(e)) throw e instanceof StorageFailure ? e : new StorageFailure(e);
 			throw e instanceof ZipError ? e : new ZipError(`${entry.name} couldn't be unpacked.`);
 		}
 		return written;

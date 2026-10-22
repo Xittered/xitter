@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
+import { putFile } from "./disk";
 import { join } from "node:path";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
@@ -629,10 +630,7 @@ export async function remoteMediaFile(localId: string, poster = false): Promise<
 		remember(key, body);
 		return new Blob([body as Uint8Array<ArrayBuffer>]);
 	}
-	mkdirSync(MEDIA_DIR, { recursive: true });
-	const temp = `${file}.part${newId()}`;
-	writeFileSync(temp, body);
-	renameSync(temp, file);
+	await putFile(file, body);
 	if (!poster) await sql`update media set size = ${body.length} where id = ${localId}::bigint`;
 	return Bun.file(file);
 }

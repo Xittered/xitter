@@ -24,8 +24,10 @@
 // posts), @mentions are left as text (an X name here may be someone else), and
 // retweets and likes aren't imported (they're other people's posts).
 
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { appendFile, truncate } from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { truncate } from "node:fs/promises";
+import { appendBytes, StorageFailure, putFile } from "./disk";
+import { STORAGE_SENTENCE } from "./notices";
 import { join } from "node:path";
 import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
@@ -198,8 +200,7 @@ async function savePhoto(userId: string, data: Buffer, post: { id: string; posit
 	const image = sniffImage(data);
 	if (!image || data.length > photoMax()) return undefined;
 	const id = newId();
-	mkdirSync(MEDIA_DIR, { recursive: true });
-	writeFileSync(join(MEDIA_DIR, id), data);
+	await putFile(join(MEDIA_DIR, id), data);
 	await sql`insert into media (id, user_id, kind, mime, size, width, height, post_id, position)
 		values (${id}::bigint, ${userId}::bigint, 'photo', ${image.mime}, ${data.length}, ${image.width}, ${image.height}, ${post?.id ?? null}::bigint, ${post?.position ?? null})`;
 	return id;
@@ -366,7 +367,7 @@ export async function runImport(userId: string) {
 		}
 		await progress(userId, { state: "done", posts, media: mediaCount, skipped, refused, waiting_until: null });
 	} catch (e) {
-		const message = e instanceof ImportError || e instanceof ZipError ? e.message : "The import stopped with an error. Try again, or ask an admin to check the server log.";
+		const message = e instanceof StorageFailure ? STORAGE_SENTENCE : e instanceof ImportError || e instanceof ZipError ? e.message : "The import stopped with an error. Try again, or ask an admin to check the server log.";
 		if (!(e instanceof ImportError || e instanceof ZipError)) console.error(`archive import for ${userId}:`, e);
 		await progress(userId, { state: "failed", error: message, waiting_until: null });
 	} finally {
@@ -543,7 +544,7 @@ export async function importRoute(req: Request, url: URL, viewer: Viewer): Promi
 		if (offset === 0) {
 			await sql`insert into archive_imports (user_id, state, size) values (${viewer.id}::bigint, 'uploading', 0)
 				on conflict (user_id) do update set state = 'uploading', size = 0, total = 0, posts = 0, media = 0, skipped = 0, refused = 0, waiting_until = null, error = null, updated_at = now()`;
-			writeFileSync(file, "");
+			await putFile(file, Buffer.alloc(0));
 		}
 		const size = existsSync(file) ? statSync(file).size : -1;
 		if (size !== offset) return json({ error: "The upload got out of step. Start again." }, 409);
@@ -551,7 +552,7 @@ export async function importRoute(req: Request, url: URL, viewer: Viewer): Promi
 			await truncate(file, 0);
 			return json({ error: `Archives up to ${Math.round(MAX_BYTES / MB)} MB can be imported.` }, 413);
 		}
-		await appendFile(file, data);
+		await appendBytes(file, data, size);
 		await sql`update archive_imports set size = ${size + data.length}, updated_at = now() where user_id = ${viewer.id}::bigint`;
 		return json({ size: size + data.length });
 	}

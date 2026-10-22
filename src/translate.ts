@@ -1,6 +1,7 @@
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { isId } from "./ids";
+import { readJson } from "./federation";
 import { bioEntities, urlEntities } from "./links";
 import { MENTION_HANDLE } from "./mentions";
 import { bioMentions, hashtags, userMentions } from "./model";
@@ -51,7 +52,7 @@ export async function googleTranslate(text: string, target: string, source = "au
 			signal: AbortSignal.timeout(TIMEOUT_MS),
 		});
 		if (!res.ok) return undefined;
-		const data = await res.json();
+		const data = await readJson(res, 1024 * 1024);
 		if (!Array.isArray(data) || !Array.isArray(data[0]) || typeof data[0][0] !== "string") return undefined;
 		const detected = Array.isArray(data[1]) && typeof data[1][0] === "string" ? data[1][0] : source;
 		return { text: unescapeHtml(data[0][0]), source: detected };

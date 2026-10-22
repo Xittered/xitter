@@ -3,6 +3,7 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, statfsSync, writeFileSync } from "node:fs";
+import { appendFile, truncate } from "node:fs/promises";
 import { dirname } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { STORAGE_SENTENCE } from "./notices";
@@ -148,6 +149,44 @@ export async function putFile(finalPath: string, bytes: Uint8Array, cleanup: rea
 	} catch (e) {
 		failWrite(e, tmp, cleanup);
 	}
+}
+
+// a chunk added to a file that already exists. a full disk rewinds to the previous size.
+export async function appendBytes(file: string, data: Uint8Array, rewindTo: number): Promise<void> {
+	await roomFor(data.byteLength, dirname(file));
+	const write = hooks.getStore()?.write;
+	try {
+		if (write) write(file, data);
+		else await appendFile(file, data);
+	} catch (e) {
+		if (e instanceof StorageFailure || storageCode(e)) {
+			await truncate(file, rewindTo).catch(() => {});
+			if (e instanceof StorageFailure) throw e;
+			throw new StorageFailure(e);
+		}
+		throw e;
+	}
+}
+
+export function diskEdge(prev: boolean, warn: boolean): { next: boolean; event?: "low" | "ok" } {
+	if (warn === prev) return { next: prev };
+	return { next: warn, event: warn ? "low" : "ok" };
+}
+
+let diskLow = false;
+export function watchDisk() {
+	const tick = async () => {
+		try {
+			const edge = diskEdge(diskLow, (await space()).warn);
+			diskLow = edge.next;
+			if (edge.event === "low") console.warn("media disk is low on free space");
+			if (edge.event === "ok") console.warn("media disk has free space again");
+		} catch (e) {
+			console.error(e);
+		}
+	};
+	const timer = setInterval(tick, 5 * 60_000);
+	timer.unref?.();
 }
 
 export async function putStream(

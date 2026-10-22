@@ -4,7 +4,9 @@
 // the client polls the upload STATUS command meanwhile.
 
 import { settings } from "./settings";
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { StorageFailure, putFile, putStream } from "./disk";
+import { STORAGE_SENTENCE } from "./notices";
 import { setPriority } from "node:os";
 import { join } from "node:path";
 import { sql } from "./db";
@@ -50,7 +52,7 @@ export async function videoSupported(): Promise<boolean> {
 
 type Probe = { width: number; height: number; seconds: number; vcodec: string; pix: string; acodec?: string; format: string };
 
-function spawnLimited(cmd: string[], ms: number, stderr: "pipe" | "ignore") {
+export function spawnLimited(cmd: string[], ms: number, stderr: "pipe" | "ignore") {
 	const p = Bun.spawn(cmd, { stdout: "pipe", stderr });
 	try {
 		setPriority(p.pid, 10);
@@ -82,7 +84,9 @@ async function probe(file: string): Promise<Probe | undefined> {
 }
 
 // `args` end with the output file; the thread limit goes on the input and the output
-async function run(args: string[], id: string, seconds: number): Promise<boolean> {
+type RunResult = "ok" | "fail" | "storage" | "timeout";
+
+async function run(args: string[], id: string, seconds: number): Promise<RunResult> {
 	const output = ["-threads", THREADS, ...args.slice(0, -1), "-threads", THREADS, ...args.slice(-1)];
 	const p = spawnLimited([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats", ...output], STEP_MS + seconds * 6000, "pipe");
 	const decoder = new TextDecoder();
@@ -91,8 +95,18 @@ async function run(args: string[], id: string, seconds: number): Promise<boolean
 		if (m && seconds > 0) progress.set(id, Math.min(99, Math.floor(Number(m[1]) / 1e4 / seconds)));
 	}
 	const code = await p.exited;
-	if (code !== 0) console.log(`ffmpeg failed for ${id}${p.signalCode === "SIGKILL" ? " (took too long)" : ""}: ${(await new Response(p.stderr).text()).slice(0, 500)}`);
-	return code === 0;
+	const errText = code === 0 ? "" : (await new Response(p.stderr).text()).slice(0, 500);
+	if (code !== 0) console.log(`ffmpeg failed for ${id}${p.signalCode === "SIGKILL" ? " (took too long)" : ""}: ${errText}`);
+	if (code === 0) return "ok";
+	if (p.signalCode === "SIGKILL") return "timeout";
+	if (/no space left|quota exceeded|read-only file system/i.test(errText)) return "storage";
+	return "fail";
+}
+
+function ran(result: RunResult, fallback: string): void {
+	if (result === "ok") return;
+	if (result === "storage") throw new StorageFailure();
+	throw new Error(result === "timeout" ? "Video processing took too long." : fallback);
 }
 
 async function convert(dir: string, id: string) {
@@ -101,7 +115,11 @@ async function convert(dir: string, id: string) {
 	const fail = async (message: string) => {
 		if (errors.size >= MAX_VIDEO_ERRORS) errors.delete(errors.keys().next().value!);
 		errors.set(id, message);
-		await sql`update media set state = 'failed' where id = ${id}::bigint`;
+		try {
+			await sql`update media set state = 'failed' where id = ${id}::bigint`;
+		} catch (e) {
+			console.error(e);
+		}
 	};
 	try {
 		const info = await probe(src);
@@ -117,19 +135,25 @@ async function convert(dir: string, id: string) {
 					"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
 					"-c:a", "aac", "-b:a", "128k", "-ac", "2",
 				];
-		if (!(await run([...INPUT, "-i", src, "-map", "0:v:0", "-map", "0:a:0?", ...video, "-movflags", "+faststart", "-f", "mp4", tmp], id, info.seconds)))
-			return await fail("The video could not be converted.");
-		if (!(await run(["-ss", String(Math.min(1, info.seconds / 2)), "-i", tmp, "-frames:v", "1", "-q:v", "3", posterFile(dir, id)], id, 0)))
-			return await fail("The video could not be converted.");
-		const out = await probe(tmp);
-		if (!out) return await fail("The video could not be converted.");
-		renameSync(tmp, join(dir, id));
+		let out: Probe | undefined;
+		await putStream(join(dir, id), async (encoded) => {
+			ran(await run([...INPUT, "-i", src, "-map", "0:v:0", "-map", "0:a:0?", ...video, "-movflags", "+faststart", "-f", "mp4", encoded], id, info.seconds), "The video could not be converted.");
+			await putStream(posterFile(dir, id), async (poster) => {
+				ran(await run(["-ss", String(Math.min(1, info.seconds / 2)), "-i", encoded, "-frames:v", "1", "-q:v", "3", poster], id, 0), "The video could not be converted.");
+			});
+			out = await probe(encoded);
+			if (!out) throw new Error("The video could not be converted.");
+		}, [], statSync(src).size);
 		const size = Bun.file(join(dir, id)).size;
-		await sql`update media set state = 'ready', mime = 'video/mp4', size = ${size}, width = ${out.width}, height = ${out.height},
-			duration_ms = ${Math.round(out.seconds * 1000)} where id = ${id}::bigint`;
+		await sql`update media set state = 'ready', mime = 'video/mp4', size = ${size}, width = ${out!.width}, height = ${out!.height},
+			duration_ms = ${Math.round(out!.seconds * 1000)} where id = ${id}::bigint`;
 	} catch (e) {
-		console.log(`video ${id} failed:`, e);
-		await fail("The video could not be processed.");
+		console.error(`video ${id} failed:`, e);
+		const said = e instanceof Error ? e.message : "";
+		const message = e instanceof StorageFailure ? STORAGE_SENTENCE
+			: said === "The video could not be converted." || said === "Video processing took too long." || said === "This file has no video we can read." ? said
+			: "The video could not be processed.";
+		await fail(message);
 	} finally {
 		progress.delete(id);
 		rmSync(src, { force: true });
@@ -150,9 +174,10 @@ export function cropGif(dir: string, id: string, gif: Buffer, box: { x: number; 
 		const out = join(dir, `${id}.crop.gif`);
 		const crop = `crop=${box.w}:${box.h}:${box.x}:${box.y}`;
 		try {
-			writeFileSync(src, gif);
-			if (!(await run(["-i", src, "-vf", `${crop},palettegen=reserve_transparent=1`, palette], id, 0))) return undefined;
-			return (await run(["-i", src, "-i", palette, "-lavfi", `[0:v]${crop}[c];[c][1:v]paletteuse`, "-f", "gif", out], id, 0)) ? readFileSync(out) : undefined;
+			await putFile(src, gif);
+			if ((await run(["-i", src, "-vf", `${crop},palettegen=reserve_transparent=1`, palette], id, 0)) !== "ok") return undefined;
+			if ((await run(["-i", src, "-i", palette, "-lavfi", `[0:v]${crop}[c];[c][1:v]paletteuse`, "-f", "gif", out], id, 0)) !== "ok") return undefined;
+			return readFileSync(out);
 		} finally {
 			rmSync(src, { force: true });
 			rmSync(palette, { force: true });
@@ -164,9 +189,14 @@ export function cropGif(dir: string, id: string, gif: Buffer, box: { x: number; 
 }
 
 let queue: Promise<void> = Promise.resolve();
+export function enqueueVideo(job: () => Promise<void>): Promise<void> {
+	const done = queue.then(job).catch((e) => { console.error("video queue", e); });
+	queue = done;
+	return done;
+}
 export function queueVideo(dir: string, id: string) {
 	progress.set(id, 0);
-	queue = queue.then(() => convert(dir, id));
+	enqueueVideo(() => convert(dir, id));
 }
 
 // uploads that were still converting when the server stopped

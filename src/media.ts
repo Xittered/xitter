@@ -18,7 +18,7 @@ import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { settings } from "./settings";
 import { gifProxy } from "./gifs";
-import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, videoError, videoSupported } from "./video";
+import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, spawnLimited, videoError, videoSupported } from "./video";
 import { StorageFailure, WRITE_MARGIN, putFile, putStream, roomFor } from "./disk";
 import { noticeHeadersFor } from "./notices";
 
@@ -275,17 +275,13 @@ export function acceptThemePhoto(data: Buffer): ThemePhotoResult {
 async function writeThemePoster(id: string): Promise<boolean> {
 	const dest = posterFile(MEDIA_DIR, id);
 	try {
-		const proc = Bun.spawn(["ffmpeg", "-y", "-i", fileOf(id), "-frames:v", "1", "-q:v", "3", dest], { stdout: "ignore", stderr: "ignore" });
-		const timer = setTimeout(() => proc.kill(), 8000);
-		const code = await proc.exited;
-		clearTimeout(timer);
-		if (code !== 0) {
-			rmSync(dest, { force: true });
-			return false;
-		}
+		await putStream(dest, async (tmp) => {
+			const proc = spawnLimited([process.env.FFMPEG ?? "ffmpeg", "-y", "-i", fileOf(id), "-frames:v", "1", "-q:v", "3", tmp], 8000, "ignore");
+			if ((await proc.exited) !== 0) throw new Error("poster");
+		});
 		return true;
-	} catch {
-		rmSync(dest, { force: true });
+	} catch (e) {
+		if (e instanceof StorageFailure) throw e;
 		return false;
 	}
 }

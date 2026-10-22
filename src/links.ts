@@ -1,6 +1,6 @@
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
-import { isPeer } from "./federation";
+import { isPeer, readJson } from "./federation";
 
 const PROXY = (process.env.EMBED_PROXY ?? "https://cors.estrogen.delivery/").replace(/\/?$/, "/");
 export const proxied = (url: string) => `${PROXY}?url=${encodeURIComponent(url)}`;
@@ -182,7 +182,7 @@ async function youtubePreview(url: string, id: string): Promise<Preview | undefi
 		await res?.body?.cancel().catch(() => {});
 		return undefined;
 	}
-	const o: any = await res.json().catch(() => undefined);
+	const o: any = await readJson(res, 64 * 1024).catch(() => undefined);
 	if (typeof o?.title !== "string" || !o.title) return undefined;
 	return {
 		url,

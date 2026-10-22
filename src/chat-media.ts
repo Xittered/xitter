@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
+import { putFile, putStream, roomFor } from "./disk";
 import { newId } from "./ids";
+import { noticeHeadersFor } from "./notices";
 
 const directory = join(process.env.MEDIA_DIR ?? "media", "chat");
 const maxBytes = Number(process.env.MAX_CHAT_MEDIA_MB ?? 200) * 1024 * 1024;
@@ -17,6 +19,7 @@ export function chatMedia(authorize: Authorize, create: Authorize = authorize) {
 			if (!Number.isSafeInteger(size) || size <= 0 || size > maxBytes || vars.is_public)
 				return { data: { xchat_initialize_media_upload: { __typename: "InitializeMediaUploadError", upload_error: "InvalidRequest" } } };
 			await create(v.id, String(vars.conversation_id));
+			await roomFor(size, directory);
 			const hash = randomBytes(24).toString("hex");
 			const resume = newId();
 			await mkdir(join(directory, hash), { recursive: true });
@@ -47,13 +50,15 @@ export function chatMedia(authorize: Authorize, create: Authorize = authorize) {
 						const ttl = vars.ttl_msec == null ? null : Number(vars.ttl_msec);
 						if (ttl !== null && (!Number.isSafeInteger(ttl) || ttl <= 0 || ttl > 31536000000)) error = "InvalidRequest";
 						else {
-							const sink = Bun.file(join(directory, upload.hash, "sealed")).writer();
-							try {
-								for (const part of parts) {
-									sink.write(new Uint8Array(await part.arrayBuffer()));
-									await sink.flush();
-								}
-							} finally { await sink.end(); }
+							await putStream(join(directory, upload.hash, "sealed"), async (tmp) => {
+								const sink = Bun.file(tmp).writer();
+								try {
+									for (const part of parts) {
+										sink.write(new Uint8Array(await part.arrayBuffer()));
+										await sink.flush();
+									}
+								} finally { await sink.end(); }
+							}, [], Number(upload.total_bytes));
 							await tx`update chat_uploads set ready = true, expires_at = ${ttl === null ? null : new Date(Date.now() + ttl)} where hash = ${upload.hash}`;
 						}
 					}
@@ -92,7 +97,7 @@ export function chatMedia(authorize: Authorize, create: Authorize = authorize) {
 			const result = await reader.read();
 			if (result.done) break;
 			size += result.value.length;
-			if (size > Math.min(Number(upload.total_bytes), 8 * 1024 * 1024)) { await reader.cancel(); return new Response("too large", { status: 413 }); }
+			if (size > Math.min(Number(upload.total_bytes), 8 * 1024 * 1024)) { await reader.cancel(); return new Response("too large", { status: 413, headers: noticeHeadersFor("File is too large.") }); }
 			chunks.push(result.value);
 		}
 		return sql.begin(async (tx) => {
@@ -101,10 +106,8 @@ export function chatMedia(authorize: Authorize, create: Authorize = authorize) {
 			const folder = join(directory, upload.hash);
 			const other = (await readdir(folder)).filter((name) => /^\d+\.part$/.test(name) && name !== `${Number(index)}.part`);
 			const stored = (await Promise.all(other.map((name) => Bun.file(join(folder, name)).size))).reduce((a, b) => a + b, 0);
-			if (!size || stored + size > Number(upload.total_bytes)) return new Response("too large", { status: 413 });
-			const temp = join(folder, `${crypto.randomUUID()}.tmp`);
-			await writeFile(temp, Buffer.concat(chunks));
-			await rename(temp, join(folder, `${Number(index)}.part`));
+			if (!size || stored + size > Number(upload.total_bytes)) return new Response("too large", { status: 413, headers: noticeHeadersFor("File is too large.") });
+			await putFile(join(folder, `${Number(index)}.part`), Buffer.concat(chunks));
 			return new Response(null, { status: 204 });
 		});
 	}
