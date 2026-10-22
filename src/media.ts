@@ -5,7 +5,7 @@
 // converted by video.ts.
 
 import { conversationVideoMap } from "./conversation-cards";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import type { SQL } from "bun";
@@ -19,6 +19,8 @@ import { isId, newId } from "./ids";
 import { settings } from "./settings";
 import { gifProxy } from "./gifs";
 import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, videoError, videoSupported } from "./video";
+import { StorageFailure, WRITE_MARGIN, putFile, putStream, roomFor } from "./disk";
+import { noticeHeadersFor } from "./notices";
 
 export const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
 const maxImage = () => settings().limits.image_mb * 1024 * 1024;
@@ -292,8 +294,7 @@ export async function storeThemePhoto(id: string, userId: string, data: Buffer):
 	if (!isId(id)) return { ok: false, message: "invalid media id" };
 	const got = acceptThemePhoto(data);
 	if (!got.ok) return got;
-	mkdirSync(MEDIA_DIR, { recursive: true });
-	writeFileSync(fileOf(id), got.photo.bytes);
+	await putFile(fileOf(id), got.photo.bytes);
 	try {
 		await sql`insert into media (id, user_id, kind, mime, size, width, height, detached)
 			values (${id}::bigint, ${userId}::bigint, 'photo', ${got.photo.mime}, ${got.photo.bytes.length}, ${got.photo.width}, ${got.photo.height}, true)`;
@@ -340,14 +341,21 @@ function activeUploadCount(userId: string): number {
 	return ids.size;
 }
 
-const uploadError = (message: string, status = 400) => Response.json({ error: message, errors: [{ code: 324, message }] }, { status });
+const uploadError = (message: string, status = 400) => Response.json({ error: message, errors: [{ code: 324, message }] }, { status, headers: noticeHeadersFor(message) });
+
+class UploadBodyError extends Error {}
 
 async function params(req: Request, url: URL): Promise<{ fields: Record<string, string>; file?: Buffer }> {
 	const fields: Record<string, string> = Object.fromEntries(url.searchParams);
 	let file: Buffer | undefined;
 	const type = req.headers.get("content-type") ?? "";
 	if (req.method === "POST" && /multipart\/form-data|x-www-form-urlencoded/.test(type)) {
-		const form = await req.formData();
+		let form: FormData;
+		try {
+			form = await req.formData();
+		} catch {
+			throw new UploadBodyError();
+		}
 		for (const [k, v] of form) {
 			if (typeof v === "string") fields[k] = v;
 			else if (k === "media") file = Buffer.from(await v.arrayBuffer());
@@ -390,30 +398,33 @@ async function croppedGif(id: string, data: Buffer, image: Image): Promise<{ dat
 async function finalize(id: string, p: Pending): Promise<Response> {
 	pending.delete(id);
 	finalizing.set(id, p);
+	const assembled = p.video ? sourceFile(MEDIA_DIR, id) : fileOf(id);
 	try {
-		if (p.received !== p.total) return uploadError("File size does not match the size announced at INIT.");
-		const parts = [...p.chunks.keys()].sort((a, b) => a - b);
-		mkdirSync(MEDIA_DIR, { recursive: true });
-		const assembled = p.video ? sourceFile(MEDIA_DIR, id) : fileOf(id);
-		const output = await open(assembled, "w");
 		try {
-			const buffer = Buffer.allocUnsafe(64 * 1024);
-			for (const index of parts) {
-				const input = await open(segmentFile(id, index), "r");
-				try {
-					for (;;) {
-						const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
-						if (!bytesRead) break;
-						let offset = 0;
-						while (offset < bytesRead) offset += (await output.write(buffer, offset, bytesRead - offset, null)).bytesWritten;
+		if (p.received !== p.total) return uploadError("File size does not match the size announced at INIT.");
+		await roomFor(p.total + WRITE_MARGIN);
+		const parts = [...p.chunks.keys()].sort((a, b) => a - b);
+		await putStream(assembled, async (tmp) => {
+			const output = await open(tmp, "w");
+			try {
+				const buffer = Buffer.allocUnsafe(64 * 1024);
+				for (const index of parts) {
+					const input = await open(segmentFile(id, index), "r");
+					try {
+						for (;;) {
+							const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
+							if (!bytesRead) break;
+							let offset = 0;
+							while (offset < bytesRead) offset += (await output.write(buffer, offset, bytesRead - offset, null)).bytesWritten;
+						}
+					} finally {
+						await input.close();
 					}
-				} finally {
-					await input.close();
 				}
+			} finally {
+				await output.close();
 			}
-		} finally {
-			await output.close();
-		}
+		}, [pendingDir(id)], p.total);
 		if (statSync(assembled).size !== p.total) {
 			rmSync(assembled, { force: true });
 			return uploadError("File size does not match the size announced at INIT.");
@@ -448,8 +459,11 @@ async function finalize(id: string, p: Pending): Promise<Response> {
 			rmSync(assembled, { force: true });
 			return uploadError("File is too large.");
 		}
-		if (image.mime === "image/gif") ({ data, image } = await croppedGif(id, data, image));
-		writeFileSync(fileOf(id), data);
+		if (image.mime === "image/gif") {
+			const next = await croppedGif(id, data, image);
+			if (next.data !== data) await putFile(fileOf(id), next.data);
+			({ data, image } = next);
+		}
 		await sql`insert into media (id, user_id, kind, mime, size, width, height)
 			values (${id}::bigint, ${p.userId}::bigint, 'photo', ${image.mime}, ${data.length}, ${image.width}, ${image.height})`;
 		return Response.json({
@@ -459,14 +473,35 @@ async function finalize(id: string, p: Pending): Promise<Response> {
 			image: { image_type: image.mime, w: image.width, h: image.height },
 			...(/gif|video/.test(p.category) ? { processing_info: { state: "succeeded", progress_percent: 100 } } : {}),
 		});
+		} catch (e) {
+			rmSync(assembled, { force: true });
+			if (e instanceof StorageFailure) discardPending(id);
+			throw e;
+		}
 	} finally {
 		rmSync(pendingDir(id), { recursive: true, force: true });
 		finalizing.delete(id);
 	}
 }
 
+async function saveSegment(id: string, index: number, file: Buffer) {
+	try {
+		await putFile(segmentFile(id, index), file, [pendingDir(id)]);
+	} catch (e) {
+		if (e instanceof StorageFailure) discardPending(id);
+		throw e;
+	}
+}
+
 export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promise<Response> {
-	const { fields, file } = await params(req, url);
+	let fields: Record<string, string>;
+	let file: Buffer | undefined;
+	try {
+		({ fields, file } = await params(req, url));
+	} catch (e) {
+		if (e instanceof UploadBodyError) return uploadError("That upload could not be read.");
+		throw e;
+	}
 	const id = fields.media_id;
 
 	switch (fields.command) {
@@ -520,8 +555,8 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 					const data = Buffer.concat(chunks, size);
 					const image = sniffImage(data);
 					if (!image || image.mime !== "image/gif") return uploadError("The selected source is not a valid GIF.");
-					mkdirSync(pendingDir(newMedia), { recursive: true });
-					writeFileSync(segmentFile(newMedia, 0), data);
+					await roomFor(data.length + WRITE_MARGIN);
+					await saveSegment(newMedia, 0, data);
 					return await finalize(newMedia, {
 						userId: viewer.id,
 						total: data.length,
@@ -543,6 +578,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			const cap = themeBg ? THEME_PHOTO_MAX : video ? maxVideoBytes() : MAX_GIF;
 			if (!Number.isInteger(total) || total <= 0 || total > cap) return uploadError("File is too large or empty.");
 			if (activeUploadCount(viewer.id) >= MAX_PENDING_PER_USER) return uploadError("Finish your other uploads first.", 429);
+			await roomFor(total + WRITE_MARGIN);
 			const newMedia = newId();
 			pending.set(newMedia, { userId: viewer.id, total, category: fields.media_category ?? "", video, chunks: new Map(), received: 0, started: Date.now() });
 			return Response.json({ ...idFields(newMedia), expires_after_secs: 86400 }, { status: 202 });
@@ -555,8 +591,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!Number.isInteger(index) || index < 0 || index > MAX_SEGMENTS) return uploadError("Bad segment_index.");
 			const received = p.received - (p.chunks.get(index) ?? 0) + file.length;
 			if (received > p.total) return uploadError("More data than announced at INIT.");
-			mkdirSync(pendingDir(id!), { recursive: true });
-			writeFileSync(segmentFile(id!, index), file);
+			await saveSegment(id!, index, file);
 			p.chunks.set(index, file.length);
 			p.received = received;
 			return new Response(null, { status: 204 });
@@ -573,8 +608,7 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 				return uploadError("Segment checksum does not match.");
 			const received = p.received - (p.chunks.get(first) ?? 0) + file.length;
 			if (received > p.total) return uploadError("More data than announced at INIT.");
-			mkdirSync(pendingDir(id!), { recursive: true });
-			writeFileSync(segmentFile(id!, first), file);
+			await saveSegment(id!, first, file);
 			p.chunks.set(first, file.length);
 			p.received = received;
 			return new Response(null, { status: 204 });
@@ -603,8 +637,10 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 			if (!row) return uploadError("Unknown upload.", 404);
 			if (row.state === "processing")
 				return Response.json({ ...idFields(id), processing_info: { state: "in_progress", check_after_secs: 1, progress_percent: progress.get(id!) ?? 0 } });
-			if (row.state === "failed")
-				return Response.json({ ...idFields(id), processing_info: { state: "failed", error: { code: 1, name: "InvalidMedia", message: videoError(id!) } } });
+			if (row.state === "failed") {
+				const message = videoError(id!);
+				return Response.json({ ...idFields(id), processing_info: { state: "failed", error: { code: 1, name: "InvalidMedia", message, detail_message: message } } });
+			}
 			return Response.json({ ...idFields(id), processing_info: { state: "succeeded", progress_percent: 100 } });
 		}
 	}
