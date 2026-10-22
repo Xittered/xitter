@@ -252,9 +252,42 @@ const appIcon = (name: string, src: string | null) =>
 	src ? `<img class="icon" src="${esc(src)}" alt="" referrerpolicy="no-referrer">` : `<span class="icon" aria-hidden="true">${esc([...name.trim()][0]?.toUpperCase() ?? "?")}</span>`;
 const ICON_CSS = `
 .named{display:flex;align-items:center;gap:12px;min-width:0}
+.named>div{min-width:0}
 .icon{width:40px;height:40px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--accent-fill,var(--accent));color:var(--accent-text,#fff);font-weight:800;object-fit:cover}
 img.icon{background:var(--surface)}
-label.file{flex:1 1 220px}
+.list{border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.list>*+*{border-top:1px solid var(--border)}
+.item{padding:12px 16px;display:grid;gap:12px}
+.item.split{display:flex}
+.item .split>:first-child,.item.split>:first-child{flex-basis:200px}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;margin:0;font-size:14px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;min-width:0}
+.facts code{word-break:break-all}
+.pill{border:1px solid var(--outline);border-radius:9999px;padding:1px 10px;font-size:13px;font-weight:700;white-space:nowrap}
+.pill.on{border-color:var(--success);color:var(--success)}
+.actions{display:flex;gap:8px;align-items:flex-start}
+.actions>form{display:contents}
+.actions .end{margin-left:auto}
+details.edit{flex:1;min-width:0}
+details.edit>summary{display:inline-flex;align-items:center;min-height:32px;padding:0 14px;border:1px solid var(--outline);border-radius:9999px;font-size:14px;font-weight:700;cursor:pointer;list-style:none}
+details.edit>summary::-webkit-details-marker{display:none}
+details.edit[open]>summary{background:var(--hover)}
+details.edit>form{margin-top:12px;max-width:100%;display:grid;gap:12px;justify-items:start}
+details.edit .hint{font-size:13px}
+.panel{border:1px solid var(--border);border-radius:16px;padding:16px;display:grid;gap:12px}
+.panel h2{margin:0;font-size:17px;line-height:20px}
+.panel form{justify-items:stretch}
+.panel form button{justify-self:start}
+.panel label{display:grid;gap:6px;margin:0}
+.hint{color:var(--muted);font-size:13px;line-height:16px}
+.section{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:8px}
+.section h2{margin:0;font-size:17px;line-height:20px}
+details.past>summary{cursor:pointer;color:var(--muted);font-size:14px;font-weight:700;padding:4px 0}
+details.past .list{margin-top:8px}
+.empty{padding:24px 16px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:16px}
+.cta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (hover:hover){details.edit>summary:hover{background:var(--hover)}}
 `;
 
 const CONSENT_CSS = `
@@ -300,9 +333,13 @@ async function appsPage(req: Request, viewer: Viewer, message = ""): Promise<Res
 	const grants = await sql`select t.id::text, t.scope, t.created_at, t.last_used_at, t.expires_at, c.name, c.id::text as client_id, c.metadata_url, c.icon_at, c.logo_uri
 		from api_tokens t join oauth_clients c on c.id = t.client_id where t.user_id = ${viewer.id}::bigint order by t.created_at desc`;
 	const hidden = `<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">`;
-	return accountPage({ req, viewer, title: "Connected apps", referrer: "same-origin", css: ICON_CSS, body: `<h1>Connected apps</h1><p>Apps authorized to use your account. Removing one takes effect immediately.</p>
-${message ? `<p>${esc(message)}</p>` : ""}${grants.length ? grants.map((g) => `<div class="card split"><div class="named">${appIcon(g.name, g.icon_at ? iconUrl(g.client_id, g.icon_at) : g.logo_uri)}<div><b>${esc(g.name)}</b><div class="dim">${g.metadata_url ? `${esc(new URL(g.metadata_url).host)} · ` : ""}${g.scope === "write" ? "Read and write" : "Read only"} · expires ${esc(new Date(g.expires_at).toLocaleDateString())}</div></div></div><form method="post">${hidden}<input type="hidden" name="id" value="${g.id}"><button class="danger">Remove</button></form></div>`).join("") : `<p class="dim">No connected apps.</p>`}
-<p><a href="/account/apps/developer">Register an app you are building</a></p>` });
+	const date = (d: string | Date) => esc(new Date(d).toLocaleDateString());
+	const rows = grants
+		.map((g) => `<div class="item split"><div class="named">${appIcon(g.name, g.icon_at ? iconUrl(g.client_id, g.icon_at) : g.logo_uri)}<div><b>${esc(g.name)}</b><div class="dim">${g.metadata_url ? `${esc(new URL(g.metadata_url).host)} · ` : ""}${g.scope === "write" ? "Read and write" : "Read only"}</div><div class="hint">${g.last_used_at ? `Last used ${date(g.last_used_at)} · ` : ""}Expires ${date(g.expires_at)}</div></div></div><form method="post">${hidden}<input type="hidden" name="id" value="${g.id}"><button class="secondary small">Remove</button></form></div>`)
+		.join("");
+	return accountPage({ req, viewer, title: "Connected apps", referrer: "same-origin", css: ICON_CSS, body: `<h1>Connected apps</h1><p class="dim">Apps you've let use your account. Removing one signs it out straight away.</p>
+${message ? `<p class="notice" role="status">${esc(message)}</p>` : ""}${grants.length ? `<div class="list">${rows}</div>` : `<p class="empty">No apps are connected to your account.</p>`}
+<div class="box cta"><div><b>Building an app?</b><div class="dim">Register it so people can sign in with their account.</div></div><a href="/account/apps/developer">Developer apps</a></div>` });
 }
 
 export async function connectedAppsRoute(req: Request, viewer: Viewer): Promise<Response> {
@@ -320,11 +357,20 @@ export async function connectedAppsRoute(req: Request, viewer: Viewer): Promise<
 async function developerPage(req: Request, viewer: Viewer, message = ""): Promise<Response> {
 	const clients = await sql`select id::text, name, redirect_uri, revoked, icon_at from oauth_clients where owner_id = ${viewer.id}::bigint order by created_at desc`;
 	const hidden = `<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">`;
-	return accountPage({ req, viewer, title: "Developer apps", referrer: "same-origin", css: ICON_CSS, body: `<h1>Developer apps</h1>
-<p>Register a public app to use OAuth authorization-code with PKCE (S256). HTTPS redirect URLs and local loopback URLs are supported.</p>
-${message ? `<p>${esc(message)}</p>` : ""}<form method="post">${hidden}<input type="hidden" name="action" value="register"><label>App name<input name="name" maxlength="80" required></label><label>Exact redirect URL<input name="redirect_uri" type="url" maxlength="2048" required></label><button>Register app</button></form>
-${clients.map((c) => `<div class="card"><div class="named">${appIcon(c.name, c.icon_at ? iconUrl(c.id, c.icon_at) : null)}<b>${esc(c.name)}</b></div><p>Client ID: <code>${c.id}</code></p><p>Redirect: <code>${esc(c.redirect_uri)}</code></p><p>${c.revoked ? "Revoked" : "Active"}</p>${c.revoked ? "" : `<form method="post" enctype="multipart/form-data" class="row">${hidden}<input type="hidden" name="action" value="icon"><input type="hidden" name="id" value="${c.id}"><label class="file">Icon (PNG, JPEG, WebP or GIF, up to 256 KB, square works best)<input type="file" name="icon" accept="image/png,image/jpeg,image/webp,image/gif" required></label><button class="secondary">${c.icon_at ? "Change icon" : "Set icon"}</button></form>${c.icon_at ? `<form method="post">${hidden}<input type="hidden" name="action" value="removeIcon"><input type="hidden" name="id" value="${c.id}"><button class="secondary">Remove icon</button></form>` : ""}<form method="post">${hidden}<input type="hidden" name="action" value="revoke"><input type="hidden" name="id" value="${c.id}"><button class="danger">Revoke app</button></form>`}</div>`).join("")}
-<p><a href="/api">API and OAuth documentation</a></p>` });
+	const action = (name: string, id: string) => `${hidden}<input type="hidden" name="action" value="${name}"><input type="hidden" name="id" value="${id}">`;
+	const facts = (c: Record<string, string>) => `<dl class="facts"><dt>Client ID</dt><dd><code>${c.id}</code></dd><dt>Redirect</dt><dd><code>${esc(c.redirect_uri)}</code></dd></dl>`;
+	const active = clients.filter((c) => !c.revoked);
+	const revoked = clients.filter((c) => c.revoked);
+	const card = (c: Record<string, string>) => `<div class="item"><div class="split"><div class="named">${appIcon(c.name, c.icon_at ? iconUrl(c.id, c.icon_at) : null)}<b>${esc(c.name)}</b></div><span class="pill on">Active</span></div>${facts(c)}
+<div class="actions"><details class="edit"><summary>${c.icon_at ? "Change icon" : "Add icon"}</summary><form method="post" enctype="multipart/form-data">${action("icon", c.id)}<input type="file" name="icon" accept="image/png,image/jpeg,image/webp,image/gif" required><span class="hint">PNG, JPEG, WebP or GIF, up to 256 KB. Square works best.</span><button class="small">Save icon</button></form>${c.icon_at ? `<form method="post">${action("removeIcon", c.id)}<button class="secondary small">Remove icon</button></form>` : ""}</details>
+<form method="post" onsubmit="return confirm('Revoke this app? Everyone signed in to it loses access, and it cannot be undone.')">${action("revoke", c.id)}<button class="danger small end">Revoke</button></form></div></div>`;
+	const past = (c: Record<string, string>) => `<div class="item"><div class="split"><div class="named">${appIcon(c.name, null)}<b>${esc(c.name)}</b></div><span class="pill">Revoked</span></div>${facts(c)}</div>`;
+	return accountPage({ req, viewer, title: "Developer apps", referrer: "same-origin", back: { href: "/account/apps", label: "Back to Connected apps" }, css: ICON_CSS, body: `<h1>Developer apps</h1>
+<p class="dim">Apps you build that people sign in to with their account, using OAuth with PKCE (S256). See the <a href="/api">API and OAuth documentation</a>.</p>
+${message ? `<p class="notice" role="status">${esc(message)}</p>` : ""}<div class="panel"><h2>Register an app</h2><form method="post">${hidden}<input type="hidden" name="action" value="register"><label>App name<input name="name" maxlength="80" required></label><label>Redirect URL<input name="redirect_uri" type="url" maxlength="2048" placeholder="https://example.com/callback" required><span class="hint">Must match exactly. HTTPS, or a local loopback address such as http://127.0.0.1:8080/callback.</span></label><button>Register</button></form></div>
+<div class="section"><h2>Your apps</h2><span class="meta">${active.length} of 10</span></div>
+${active.length ? `<div class="list">${active.map(card).join("")}</div>` : `<p class="empty">You haven't registered any apps yet.</p>`}
+${revoked.length ? `<details class="past"><summary>Revoked (${revoked.length})</summary><div class="list">${revoked.map(past).join("")}</div></details>` : ""}` });
 }
 
 export async function developerAppsRoute(req: Request, viewer: Viewer): Promise<Response> {

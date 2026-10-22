@@ -3,7 +3,7 @@ import { loadBuild } from "./build";
 import { readCached } from "./client-cache";
 import { sql } from "./db";
 import { settings } from "./settings";
-import { menuLinks } from "./tidy";
+import { GROUPS, type MenuLink, menuLinks } from "./tidy";
 
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
@@ -91,12 +91,31 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/20px var(--font, 
 .heading{min-width:0}
 .title{font-size:20px;line-height:24px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sub{color:var(--muted);font-size:13px;line-height:16px}
-/* the tabs wrap onto more rows rather than hide past the edge */
-.tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--border)}
-.tabs a{flex:1 0 auto;display:flex;justify-content:center;padding:0 16px;color:var(--muted);font-weight:500;text-decoration:none}
-.tabs span{position:relative;display:block;padding:16px 0;white-space:nowrap}
-.tabs a[aria-current]{color:var(--text);font-weight:700}
-.tabs a[aria-current] span::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;border-radius:9999px;background:var(--accent-fill,var(--accent))}
+/* settings navigation: a side bar beside the column on wide screens, a menu in the bar on narrow ones */
+.shell{display:flex;justify-content:center;align-items:flex-start}
+.shell>.col{margin:0}
+.side{display:none}
+.bar .heading{flex:1}
+.jump{position:relative;flex:none}
+.jump summary{list-style:none;display:flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid var(--outline);border-radius:9999px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+.jump summary::-webkit-details-marker{display:none}
+.jump summary svg{width:18px;height:18px;fill:currentColor}
+.jump summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.jump[open] summary{background:var(--hover)}
+.jump .menu{position:absolute;right:0;top:calc(100% + 8px);z-index:3;width:min(320px,calc(100vw - 32px));max-height:min(70vh,560px);overflow-y:auto;padding:4px 0;background:var(--bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 0 15px rgb(101 119 134 / .2),0 0 3px 1px rgb(101 119 134 / .15)}
+.nav h2{margin:0;padding:12px 16px 4px;color:var(--muted);font-size:13px;line-height:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.nav h2:first-child{padding-top:8px}
+.nav a{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 16px;color:var(--text);text-decoration:none}
+.nav a svg{width:20px;height:20px;flex:none;fill:currentColor}
+.nav a[aria-current]{font-weight:700;box-shadow:inset 3px 0 0 var(--accent-fill,var(--accent));background:var(--hover)}
+@media (max-width:360px){.jump summary span{display:none}.jump summary{padding:0 9px}}
+@media (min-width:1000px){
+.side{display:block;position:sticky;top:0;width:280px;max-height:100vh;overflow-y:auto;padding:8px 0 24px}
+.side .head{padding:12px 16px 8px;font-size:20px;line-height:24px;font-weight:800}
+.side .nav a{border-radius:9999px;margin:0 8px;padding:8px 16px}
+.side .nav a[aria-current]{box-shadow:none}
+.jump{display:none}
+}
 main{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}
 h1,h2,p,pre{margin:0}
 h1{font-size:23px;line-height:28px;font-weight:800;text-wrap:balance}
@@ -124,12 +143,12 @@ button.danger{background:var(--danger);color:#fff}
 button.small{min-height:32px;padding:0 14px;font-size:14px}
 button:disabled{opacity:.5;cursor:default}
 @media (hover:hover){
-.back:hover,.tabs a:hover{background:var(--hover)}
+.back:hover,.nav a:hover,.jump summary:hover{background:var(--hover)}
 button:hover:not(:disabled){background:var(--accent-hover)}
 button.secondary:hover:not(:disabled){background:var(--hover)}
 button.danger:hover:not(:disabled){background:rgb(220 30 41)}
 a:hover{text-decoration:underline}
-.back:hover,.tabs a:hover{text-decoration:none}
+.back:hover,.nav a:hover{text-decoration:none}
 }
 .card{border:1px solid var(--border);border-radius:16px;padding:12px 16px;display:grid;gap:4px}
 .card p{white-space:pre-wrap}
@@ -139,6 +158,7 @@ a:hover{text-decoration:underline}
 .card.success{border-color:var(--success);background:rgb(0 186 124 / .1)}
 .split{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .split>:first-child{flex:1 1 220px;min-width:0}
+.notice{background:var(--surface);border-radius:12px;padding:12px 16px}
 .meta{color:var(--muted);font-size:13px}
 .box{background:var(--surface);border-radius:12px;padding:12px 16px}
 .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
@@ -149,6 +169,23 @@ pre{background:var(--surface);border-radius:12px;padding:12px 16px;overflow-x:au
 .source{padding:16px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
 @media (max-width:600px){.col{border-inline:0}}
 `;
+
+const GRID = "M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z";
+
+// the account pages' navigation, grouped; a page below a link (Developer apps
+// under Connected apps) marks that link
+function nav(links: MenuLink[], path: string): string {
+	return GROUPS.map((g) => {
+		const items = links.filter((l) => l.group === g);
+		if (!items.length) return "";
+		return `<h2>${esc(g)}</h2>${items
+			.map((l) => `<a href="${l.href}"${path === l.href || path.startsWith(`${l.href}/`) ? ' aria-current="page"' : ""}><svg viewBox="${l.viewBox ?? "0 0 24 24"}" aria-hidden="true"><path fill-rule="evenodd" d="${l.icon}"/></svg><span>${esc(l.text)}</span></a>`)
+			.join("")}`;
+	}).join("");
+}
+
+// the narrow screens' menu closes on Escape or a click outside it
+const JUMP_SCRIPT = `<script>(function(){var d=document.querySelector(".jump");if(!d)return;document.addEventListener("click",function(e){if(d.open&&!d.contains(e.target))d.open=false});document.addEventListener("keydown",function(e){if(e.key==="Escape"&&d.open){d.open=false;d.querySelector("summary").focus()}})})()</script>`;
 
 const ARROW = "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z";
 
@@ -181,12 +218,9 @@ export async function accountPage({ req, title, body, viewer, status = 200, back
 	}
 	const theme = paletteOf(look, night);
 	const path = new URL(req.url).pathname;
-	const links = viewer ? await menuLinks(viewer.id) : [];
-	const tabs = links.length
-		? `<nav class="tabs" aria-label="Account pages">${links
-				.map((l) => `<a href="${l.href}"${path === l.href || path.startsWith(`${l.href}/`) ? ' aria-current="page"' : ""}><span>${esc(l.text)}</span></a>`)
-				.join("")}</nav>`
-		: "";
+	// the settings pages (not sign-in or authorizing an app) share one navigation
+	const links = viewer && path.startsWith("/account/") ? await menuLinks(viewer.id) : [];
+	const menu = links.length ? `<nav class="nav" aria-label="Settings">${nav(links, path)}</nav>` : "";
 	const to = back ?? { href: viewer ? "/home" : "/", label: `Back to ${name}` };
 	const html = `<!doctype html>
 <html lang="en"${theme ? ` data-theme="${theme}"` : ""}>
@@ -200,14 +234,16 @@ ${head}
 <style>${fontFaces()}${CSS}${extra}${css}</style>
 </head>
 <body>
-<div class="col">
-<header class="bar"><a class="back" href="${esc(to.href)}" aria-label="${esc(to.label)}" title="${esc(to.label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ARROW}"/></svg></a><div class="heading"><div class="title">${esc(title)}</div><div class="sub">${esc(name)}</div></div></header>
-${tabs}
+<div class="shell">
+${menu ? `<aside class="side"><div class="head">Settings</div>${menu}</aside>` : ""}<div class="col">
+<header class="bar"><a class="back" href="${esc(to.href)}" aria-label="${esc(to.label)}" title="${esc(to.label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ARROW}"/></svg></a><div class="heading"><div class="title">${menu ? "Settings" : esc(title)}</div><div class="sub">${esc(name)}</div></div>${menu ? `<details class="jump"><summary aria-label="All settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${GRID}"/></svg><span>All settings</span></summary><div class="menu">${menu}</div></details>` : ""}</header>
 <main>
 ${body}
 </main>
 <footer class="source">${esc(name)} runs <a href="${esc(settings().source_url)}">open source</a> software (AGPL-3.0)</footer>
 </div>
+</div>
+${menu ? JUMP_SCRIPT : ""}
 </body>
 </html>`;
 	// never inside another site's frame: these pages hold one-click actions
