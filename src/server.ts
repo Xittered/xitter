@@ -16,7 +16,10 @@ import { asRequest, markStaff, setRequestLanguage, staffGate } from "./staff-acc
 import { backupPath, startBackups } from "./backups";
 import { memberInvitesRoute } from "./member-invites";
 import { orgRoute } from "./org-manage";
-import { menuLinks } from "./tidy";
+import { loadMenuFacts } from "./tidy";
+import { clientPayload, type MenuFacts } from "./xitter-menu";
+import { viewerLook, xitterHome } from "./account-page";
+import { FRAME_LOOK_REPORT } from "./settings-shell";
 import { isPlayerPage, playerPage } from "./player-card";
 import { chatMediaRoute, chatSocket, juiceboxProxy, socketUser } from "./chat";
 import { loadBuild } from "./build";
@@ -59,15 +62,16 @@ import { embedImage, linkPreview, oembed } from "./embeds";
 import { noteAppealsRoute } from "./note-appeals";
 import { decorCatalog, decorFor, decorRoute, decorShop, steamFile } from "./decor";
 import { nightModeCookies, themeApi, themeExport, themeImport } from "./themes/api";
-import { resolveBackground } from "./themes/css";
+import { accountVars, resolveBackground } from "./themes/css";
 import { themeRoute } from "./themes/page";
-import { readPrefs } from "./themes/validate";
+import { paletteOf, readPrefs, type Look } from "./themes/validate";
 import { serveFont } from "./fonts";
 import { migrationApi } from "./migration";
 import { failInterrupted } from "./migration-import";
 import { migrateRoute } from "./migration-page";
 import { acceptedEncoding, compressResponse, compressedFile } from "./compress";
 import { forgetRanking } from "./ranking";
+import { blocksClientShell, clientRouteFor, FRAMED_HEADERS, opensInTab, trailingSlashTarget, xitterNotFoundPage } from "./owned-paths";
 
 const MIME: Record<string, string> = {
 	js: "text/javascript; charset=utf-8",
@@ -85,11 +89,7 @@ const MIME: Record<string, string> = {
 // dev mode it calls the bare paths.
 // The client also calls outside services on its own (grok.com checkout, ads
 // measurement). Requests from the page may only reach this instance.
-const SETTINGS_PAGES = new Set(
-	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa"].map((s) => `/account/${s}`),
-);
-
-const PAGE_CSP ="connect-src 'self' blob: data:; font-src 'self'";
+const PAGE_CSP = "connect-src 'self' blob: data:; font-src 'self'";
 
 // the instance's own files (logo, icons), open to everyone since the sign-in page uses them
 const PUBLIC_DIR = process.env.PUBLIC_DIR ?? "public";
@@ -130,9 +130,24 @@ const etags = new WeakMap<Buffer, string>();
 // The panel names the instance in its markup and in its scripts' single-quoted
 // strings; as entities the name is safe in both.
 const ADMIN_ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "\\": "&#92;" };
-const adminPage = async () => {
+// framed beside the client, the panel takes the viewer's theme the way the
+// Xitter settings pages do (light, dim or dark)
+const adminTokens = (look: Look | null, theme: string): string => {
+	if (look?.kind !== "painted") return "";
+	const css = `${accountVars(look.theme)};--panel:var(--surface);--line:var(--border);--dim:var(--muted);--blue:var(--accent);--bar-thin:var(--bar);--on:var(--hover)`;
+	return `<style>:root[data-theme="${theme}"]{${css}}</style>`;
+};
+
+const adminPage = async (req: Request, viewer: Viewer) => {
 	const name = settings().instance_name.replace(/[&<>"'\\]/g, (c) => ADMIN_ENTITIES[c]);
-	return (await Bun.file(new URL("./admin.html", import.meta.url)).text()).replaceAll("{{instance}}", () => name);
+	const got = await viewerLook(viewer);
+	const theme = paletteOf(got.look, parseCookies(req).night_mode) ?? "dark";
+	const page = (await Bun.file(new URL("./admin.html", import.meta.url)).text()).replaceAll("{{instance}}", () => name);
+	return page
+		.replace('<html lang="en">', `<html lang="en" data-theme="${theme}">`)
+		.replace("/public/icon-dark.png", theme === "light" ? "/public/icon-light.png" : "/public/icon-dark.png")
+		.replace("</head>", `${adminTokens(got.look, theme)}<meta name="xitter-look" content="${got.lookKey}">\n</head>`)
+		.replace("</body>", `${FRAME_LOOK_REPORT}\n</body>`);
 };
 
 function staffBlockedPage(reason: string) {
@@ -317,6 +332,10 @@ async function route(req: Request): Promise<Response | undefined> {
 	rememberIp(req, server.requestIP(req)?.address);
 	const url = new URL(req.url);
 	const p = url.pathname;
+	if (req.method === "GET" || req.method === "HEAD") {
+		const slash = trailingSlashTarget(p);
+		if (slash) return Response.redirect(slash + url.search, 302);
+	}
 	// for Docker's health check (Dockerfile): the server answers and reaches its database
 	if (p === "/healthz") {
 		const db = await Promise.race([sql`select 1`.then(() => true, () => false), Bun.sleep(3000).then(() => false)]);
@@ -435,11 +454,14 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (API_PREFIX.test(p) || req.method !== "GET") return apiError(503, 130, settings().operations.message);
 		return maintenancePage();
 	}
-	// opened on their own (a link, a bookmark), the settings pages come up inside
-	// the client's Settings, which frames them (tidy.ts)
-	if (viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && SETTINGS_PAGES.has(p))
-		return Response.redirect(`/settings/xitter/${p.slice("/account/".length)}${url.search}`, 302);
 	if (p === "/oauth/authorize") return oauthAuthorize(req, url, viewer);
+	// a tab opening a Xitter settings page goes to its place in the client's
+	// Settings, which frames the page (tidy.ts)
+	if (viewer && req.method === "GET" && opensInTab(req)) {
+		const to = clientRouteFor(p);
+		if (to) return Response.redirect(to + url.search, 302);
+	}
+	if (p === "/account/xitter" && viewer) return xitterHome(req, viewer);
 	if (p === "/account/apps" && viewer) return connectedAppsRoute(req, viewer);
 	if (p === "/account/apps/developer" && viewer) return developerAppsRoute(req, viewer);
 	if (p === "/federation/superadmin" || p.startsWith("/federation/superadmin/")) return superadminHomeRoute(req, url, viewer);
@@ -478,7 +500,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (isPlayerPage(p)) return viewer ? playerPage(p, viewer.id) : new Response("not found", { status: 404 });
 	// uploads stay inside the instance: only signed-in users get them
 	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p, viewer) : new Response("not found", { status: 404 });
-	// the admin panel: staff only; everyone else gets the client's not-found page
+	// the admin panel: staff only. anyone else signed in gets our 404, not the client shell
 	if (p.startsWith("/admin/api/")) return adminApi(req, p.slice("/admin/api/".length), viewer);
 	if (p === "/admin/flags.json" && viewer?.role) return Response.json(flagPickerData(null).flags);
 	// a backup, for an admin's browser to save
@@ -489,10 +511,14 @@ async function route(req: Request): Promise<Response | undefined> {
 		await audit(viewer, "download_backup", null, { name });
 		return new Response(Bun.file(file), { headers: { "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store" } });
 	}
+	// the panel: a tab gets the client, which draws its own nav and frames the
+	// panel beside it (tidy.ts); the frame, or a script, gets the panel itself
+	let hostAdmin = false;
 	if ((p === "/admin" || p === "/admin/") && viewer?.role) {
 		const blocked = await staffGate(req, viewer);
 		if (blocked) return staffBlockedPage(blocked);
-		return new Response(await adminPage(), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+		if (!opensInTab(req)) return new Response(await adminPage(req, viewer), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...FRAMED_HEADERS } });
+		hostAdmin = true;
 	}
 	if (p === "/_debug/unknown" && viewer?.role === "admin") return Response.json(Object.fromEntries([...unknown].sort((a, b) => b[1] - a[1])));
 	if (API_PREFIX.test(p) || req.method !== "GET") {
@@ -510,18 +536,20 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding")) return Response.redirect("/", 302);
 	// maintenance: guests see the notice; ?staff=1 is the sign-in page, for staff
 	if (!viewer && p === "/" && settings().operations.maintenance && !url.searchParams.has("staff")) return maintenancePage(true);
-	const [communityRows, flagRows, links] = viewer
+	if (viewer && blocksClientShell(p) && !hostAdmin) return xitterNotFoundPage();
+	const [communityRows, flagRows, facts] = viewer
 		? await Promise.all([
 			sql`select 1 from community_members where user_id = ${viewer.id}::bigint limit 1`,
 			sql`select education_flags, preferences from users where id = ${viewer.id}::bigint`,
-			menuLinks(viewer.id),
+			loadMenuFacts(req, viewer),
 		])
-		: [[], [], []];
+		: [[], [], null];
+	const menu = facts ? clientPayload(facts as MenuFacts) : { links: [], staff: undefined };
 	const prefs = readPrefs(flagRows[0]?.preferences);
 	const look = prefs.look;
 	const painted = look?.kind === "painted" ? look.theme : null;
 	const paint = viewer && painted ? await resolveBackground(viewer.id, painted) : undefined;
-	const page = shell(viewer ?? null, !!parseCookies(req).auth_multi, communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf);
+	const page = shell(viewer ?? null, !!parseCookies(req).auth_multi, communityRows.length > 0, flagRows[0]?.education_flags ?? {}, menu.links, look, prefs.accent, paint, viewer?.csrf, menu.staff);
 	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": PAGE_CSP });
 	// a guest token left from the signed-out page makes the signed-in client act
 	// as a guest (no csrf header, every write refused)

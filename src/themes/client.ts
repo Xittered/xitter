@@ -26,6 +26,8 @@ export const THEME_SCRIPT = String.raw`(function(){
 	var presets=X.themePresets||[];
 	var sheet,fontSheet,accentSheet,at=0,timer,key="",accentKey="";
 	var RELATION=${JSON.stringify(RELATION_BUTTON)};
+	var POST_IDS='[data-testid="tweetButton"],[data-testid="tweetButtonInline"],[data-testid="SideNav_NewTweet_Button"]';
+	var POST_NOT=':not([data-testid="tweetButton"]):not([data-testid="tweetButtonInline"]):not([data-testid="SideNav_NewTweet_Button"])';
 	var CHIRP='TwitterChirp,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
 	var TICK='<svg viewBox="0 0 24 24" aria-hidden="true"><g><path d="M9.64 18.952l-5.55-4.861 1.317-1.504 3.951 3.459 8.459-10.948L19.4 6.32 9.64 18.952z"></path></g></svg>';
 	var GOLD={"226, 183, 25":1,"212, 167, 44":1};
@@ -466,6 +468,8 @@ export const THEME_SCRIPT = String.raw`(function(){
 		add("iconFill","fill:var(--xt-icon)!important",false);
 		add("iconActiveFill","fill:var(--xt-icon-active)!important",false);
 		add("border","border-color:var(--xt-border)!important;border-bottom-color:var(--xt-divider)!important",false);
+		found.button=(found.button||[]).map(function(sel){return sel+POST_NOT});
+		["accentBg","accentHover"].forEach(function(kind){found[kind]=(found[kind]||[]).map(function(sel){return sel+POST_NOT})});
 		add("button","background:var(--xt-button)!important",false);
 		add("buttonText","color:var(--xt-button-text)!important",false);
 		add("accentColor","color:var(--xt-accent)!important;fill:var(--xt-accent)!important",false);
@@ -510,14 +514,15 @@ export const THEME_SCRIPT = String.raw`(function(){
 		applyAccentVars();
 		var css=[];
 		function add(sel,decl){css.push(wrapAccent(sel)+"{"+decl+"}")}
+		function addPost(sel,decl){css.push(wrapAccent(sel+POST_NOT)+"{"+decl+"}")}
 		[].forEach.call(document.styleSheets,function(ss){
 			var rules;try{rules=ss.cssRules}catch(e){return}
 			[].forEach.call(rules||[],function(r){
 				if(!r.selectorText||!r.style||!/^\.[\w-]+$/.test(r.selectorText))return;
 				var c=norm(r.style.color),bg=norm(r.style.backgroundColor),fl=norm(r.style.fill),ol=norm(r.style.outlineColor),bd=norm(r.style.borderColor),sel=r.selectorText;
 				if(c==="29, 155, 240"||c==="26, 140, 216"||fl==="29, 155, 240"||fl==="26, 140, 216")add(sel,"color:var(--xt-accent)!important;fill:var(--xt-accent)!important");
-				if(bg==="29, 155, 240")add(sel,"background:var(--xt-accent-fill,var(--xt-accent))!important");
-				if(bg==="26, 140, 216")add(sel,"background:var(--xt-accent-hover,var(--xt-accent))!important");
+				if(bg==="29, 155, 240")addPost(sel,"background:var(--xt-accent-fill,var(--xt-accent))!important");
+				if(bg==="26, 140, 216")addPost(sel,"background:var(--xt-accent-hover,var(--xt-accent))!important");
 				if(bg==="142, 205, 248"||bg==="107, 201, 251")add(sel,"background-color:var(--xt-accent-tint)!important");
 				if(/^29, 155, 240, /.test(bg)||/^26, 140, 216, /.test(bg))add(sel,"background-color:color-mix(in srgb,var(--xt-accent) "+Math.round(Number(bg.split(", ")[3])*100)+"%,transparent)!important");
 				if(ol==="29, 155, 240"||bd==="29, 155, 240"||ol==="142, 205, 248"||bd==="142, 205, 248")add(sel,"outline-color:var(--xt-accent)!important;border-color:var(--xt-accent)!important");
@@ -526,14 +531,31 @@ export const THEME_SCRIPT = String.raw`(function(){
 		});
 		add('[style*="color: rgb(29, 155, 240)"]',"color:var(--xt-accent)!important;fill:var(--xt-accent)!important");
 		add('[style*="fill: rgb(29, 155, 240)"]',"fill:var(--xt-accent)!important");
-		add('[style*="background-color: rgb(29, 155, 240)"]',"background:var(--xt-accent-fill,var(--xt-accent))!important");
-		add('[style*="background-color: rgb(26, 140, 216)"]',"background:var(--xt-accent-hover,var(--xt-accent))!important");
+		addPost('[style*="background-color: rgb(29, 155, 240)"]',"background:var(--xt-accent-fill,var(--xt-accent))!important");
+		addPost('[style*="background-color: rgb(26, 140, 216)"]',"background:var(--xt-accent-hover,var(--xt-accent))!important");
 		add('[style*="background-color: rgba(29, 155, 240"]',"background-color:var(--xt-accent-soft)!important");
 		add('[style*="border-color: rgb(29, 155, 240)"]',"border-color:var(--xt-accent)!important");
 		add('[style*="border-color: rgb(26, 140, 216)"]',"border-color:var(--xt-accent-hover,var(--xt-accent))!important");
 		add('[style*="background-color: rgb(142, 205, 248)"]',"background-color:var(--xt-accent-tint)!important");
-		css.push('html[data-xitter-accent] [data-testid="tweetButton"],html[data-xitter-accent] [data-testid="tweetButtonInline"]{background:var(--xt-accent-fill,var(--xt-accent))!important;border-color:transparent!important}');
-		css.push('html[data-xitter-accent] [data-testid="tweetButton"] div,html[data-xitter-accent] [data-testid="tweetButtonInline"] div{color:var(--xt-accent-text,#fff)!important}');
+		var POST=POST_IDS.split(",");
+		var postFill,postText,postHover;
+		if(theme){
+			var customPost=theme.id==="custom";
+			postFill=customPost?"var(--xt-button,var(--xt-accent-fill,var(--xt-accent)))":"var(--xt-accent-fill,var(--xt-accent))";
+			postText=customPost?"var(--xt-button-text,var(--xt-accent-text,#fff))":"var(--xt-accent-text,#fff)";
+			postHover=customPost?"var(--xt-button-hover,var(--xt-accent-hover))":"var(--xt-accent-hover,var(--xt-accent))";
+			css.push(POST.map(function(s){return "html[data-xitter-theme] "+s}).join(",")+"{background:"+postFill+"!important;border-color:transparent!important}");
+			css.push(POST.map(function(s){return "html[data-xitter-theme] "+s+" div,html[data-xitter-theme] "+s+" span,html[data-xitter-theme] "+s+" svg"}).join(",")+"{color:"+postText+"!important}");
+			css.push(POST.map(function(s){return "html[data-xitter-theme] "+s+":hover"}).join(",")+"{background:"+postHover+"!important}");
+		}else{
+			var lightNative=(look&&look.night)==="0";
+			postFill=lightNative?"#0f1419":"#eff3f4";
+			postText=lightNative?"#ffffff":"#0f1419";
+			postHover=lightNative?"#272c30":"#d7dbdc";
+			css.push(POST.map(function(s){return "html[data-xitter-accent] "+s}).join(",")+"{background:"+postFill+"!important;border-color:transparent!important}");
+			css.push(POST.map(function(s){return "html[data-xitter-accent] "+s+" div,html[data-xitter-accent] "+s+" span,html[data-xitter-accent] "+s+" svg"}).join(",")+"{color:"+postText+"!important}");
+			css.push(POST.map(function(s){return "html[data-xitter-accent] "+s+":hover"}).join(",")+"{background:"+postHover+"!important}");
+		}
 		var next=css.join("");
 		if(next!==accentKey){
 			accentKey=next;

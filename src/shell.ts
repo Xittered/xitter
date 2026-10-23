@@ -9,6 +9,7 @@ import { CONVERSATION_CARD_CSS, CONVERSATION_CARD_SCRIPT } from "./conversation-
 import { STICKER_PICKER_CSS, STICKER_PICKER_SCRIPT } from "./sticker-picker";
 import { PASSKEY_SCRIPT } from "./passkeys";
 import { FORGOT_SCRIPT, FRESH_SCRIPT, type MenuLink, TIDY_SCRIPT, hideCss, tidyData } from "./tidy";
+import type { ClientPayload } from "./xitter-menu";
 import { POST_CONTEXT_SCRIPT } from "./post-context";
 import { ERROR_SCRIPT } from "./errors";
 import { BADGES_SCRIPT } from "./badges";
@@ -17,7 +18,7 @@ import { DECORATIONS_SCRIPT } from "./decorations";
 import { THEME_SCRIPT } from "./themes/client";
 import { bootAccentCss, bootCss, fontLinks, pageChromeCss, steamMotion, type BackgroundPaint } from "./themes/css";
 import { DEFAULT_ACCENT, swatches, themeColorOf, type Accent } from "./themes/presets";
-import { clientLook, themeForClient, type Look } from "./themes/validate";
+import { clientLook, lookView, themeForClient, type Look } from "./themes/validate";
 import { NOTICE_SCRIPT } from "./automod-notice";
 import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-picker";
 import { PRONOUNS_CSS, PRONOUNS_SCRIPT, pronounsData } from "./pronouns";
@@ -296,7 +297,7 @@ export const bootScript = (path: string): Buffer | undefined => boots().find((b)
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
 // asks for them.
-export function shell(user: User | null, multi = false, inCommunity = false, educationFlags: Record<string, number> = {}, links: MenuLink[] = [], look: Look | null = null, accent: Accent = DEFAULT_ACCENT, paint?: BackgroundPaint, csrf?: string): string | undefined {
+export function shell(user: User | null, multi = false, inCommunity = false, educationFlags: Record<string, number> = {}, links: MenuLink[] = [], look: Look | null = null, accent: Accent = DEFAULT_ACCENT, paint?: BackgroundPaint, csrf?: string, staff?: ClientPayload["staff"]): string | undefined {
 	const theme = look?.kind === "painted" ? look.theme : null;
 	const clientTheme = theme ? themeForClient(theme) : null;
 	const loaded = loadBuild();
@@ -325,7 +326,7 @@ ${CONVERSATION_CARD_CSS}
 [data-testid="sidebarColumn"] div:has(> [data-testid="emptyState"]),[data-testid="sidebarColumn"] div:has(> div > aside) ~ div:empty{display:none}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(initialState(user, build.featureSwitch, inCommunity, educationFlags, accent))};window.__META_DATA__=${inline(meta)};</script>
-<script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
+<script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), tidy: tidyData(links, staff), theme: clientTheme, look: clientLook(look, accent), savedLook: lookView(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
 <script id="nonce-csp"></script>
 <script>${runtimePatched.text}</script>

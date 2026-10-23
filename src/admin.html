@@ -7,28 +7,38 @@
 <link rel="icon" type="image/png" href="/public/favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,400,0,0">
 <style>
-	:root { --bg: #000; --panel: #16181c; --line: #2f3336; --text: #e7e9ea; --dim: #71767b; --blue: #1d9bf0; --red: #f4212e; --green: #00ba7c; --gold: #e2b719; }
+	:root { --bg: #000; --panel: #16181c; --line: #2f3336; --text: #e7e9ea; --dim: #71767b; --blue: #1d9bf0; --red: #f4212e; --green: #00ba7c; --gold: #e2b719; --bar: rgb(0 0 0 / .85); --bar-thin: rgb(0 0 0 / .65); --on: rgb(231 233 234 / .08); --on-text: #0f1419; color-scheme: dark; }
+	:root[data-theme="dim"] { --bg: rgb(21 32 43); --panel: #1e2732; --line: #38444d; --text: #f7f9f9; --dim: #8b98a5; --bar: rgb(21 32 43 / .85); --bar-thin: rgb(21 32 43 / .65); --on: rgb(247 249 249 / .08); --on-text: #0f1419; }
+	:root[data-theme="light"] { --bg: #fff; --panel: #f7f9f9; --line: #eff3f4; --text: #0f1419; --dim: #536471; --bar: rgb(255 255 255 / .85); --bar-thin: rgb(255 255 255 / .85); --on: rgb(15 20 25 / .06); --on-text: #fff; color-scheme: light; }
 	* { box-sizing: border-box; }
 	body { margin: 0; background: var(--bg); color: var(--text); font: 15px system-ui, -apple-system, "Segoe UI", sans-serif; }
 	a { color: var(--blue); text-decoration: none; }
 	.icon { font-family: "Material Symbols Outlined"; font-size: 20px; line-height: 1; vertical-align: middle; }
-	.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-	nav { border-right: 1px solid var(--line); padding: 16px 12px; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; }
-	nav .logo { width: 128px; margin: 4px 8px 20px; display: block; }
-	nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 12px; border: 0; border-radius: 999px; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+	.app { display: flex; align-items: flex-start; min-height: 100vh; }
+	nav { width: 390px; flex: none; border-right: 1px solid var(--line); padding: 0 0 24px; position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+	.navhead { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; min-height: 53px; padding: 0 16px; background: var(--bar); backdrop-filter: blur(12px); }
+	nav .logo { width: 28px; height: 28px; margin: 0; object-fit: contain; display: block; }
+	.navhead .home { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; flex: none; }
+	.navhead .home:hover, a.back:hover { background: var(--panel); }
+	a.back { color: var(--text); }
+	.navtitle { font-size: 20px; line-height: 24px; font-weight: 700; }
+	.navsearch { margin: 4px 16px 12px; display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); }
+	.navsearch:focus-within { border-color: var(--blue); color: var(--blue); }
+	.navsearch input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; color: var(--text); font: inherit; padding: 0; }
+	.navgroup { padding: 16px 16px 4px; font-size: 17px; line-height: 20px; font-weight: 800; }
+	nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 16px; border: 0; border-radius: 0; background: none; color: var(--text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; position: relative; }
 	nav button:hover { background: var(--panel); }
-	nav button.on { font-weight: 700; }
-	/* 28 pages didn't fit a laptop screen: they sit in groups, one open at a time */
-	nav .ghead { margin-top: 6px; color: var(--dim); font-size: 14px; font-weight: 600; }
-	nav .ghead > span:first-child { flex: 1; }
-	nav .ghead .icon { transition: rotate .15s; }
-	nav .group.open .ghead { color: var(--text); }
-	nav .group.open .ghead .icon { rotate: 180deg; }
-	nav .gitems { display: none; }
-	nav .group.open .gitems, nav .group.solo .gitems { display: block; }
-	nav .end { margin-top: 12px; }
-	nav .who { margin-top: 24px; padding: 0 12px; color: var(--dim); font-size: 13px; }
-	main { padding: 20px 24px 64px; max-width: 1100px; min-width: 0; }
+	nav button.on { font-weight: 700; background: var(--on); }
+	nav button.on::after { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: var(--blue); }
+	nav .who { margin-top: 16px; padding: 0 16px; color: var(--dim); font-size: 13px; }
+	main { flex: 1 1 auto; min-width: 0; border-right: 1px solid var(--line); padding: 0; background: var(--bg); }
+	.detailbar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 8px; min-height: 53px; padding: 0 12px; background: var(--bar-thin); backdrop-filter: blur(12px); }
+	.detailbar h1 { margin: 0; font-size: 20px; line-height: 24px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.back { width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: inherit; display: grid; place-items: center; cursor: pointer; flex: none; }
+	.back:hover { background: var(--panel); }
+	#pane { padding: 4px 16px 80px; min-width: 0; }
+	#pane > h1:first-child { display: none; }
+	.need { display: inline-block; margin: 4px 0; color: var(--dim); font-size: 13px; }
 	h1 { margin: 0 0 16px; font-size: 22px; }
 	h2 { margin: 24px 0 10px; font-size: 17px; }
 	.bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
@@ -37,11 +47,13 @@
 	textarea { width: 100%; min-height: 70px; resize: vertical; }
 	.btn { padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
 	.btn:hover { background: var(--panel); }
-	.btn.primary { background: var(--text); color: #0f1419; border-color: var(--text); }
+	.btn.primary { background: var(--primary, var(--text)); color: var(--primary-text, var(--on-text)); border-color: transparent; }
+	:root[data-theme="dim"] { --primary: var(--blue); --primary-text: #fff; --primary-hover: #1a8cd8; }
+	.btn.primary:hover:not(:disabled) { background: var(--primary-hover, var(--text)); }
 	.btn.danger { color: var(--red); border-color: rgba(244,33,46,.5); }
 	.btn:disabled { opacity: .5; cursor: default; }
-	.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-	.card { background: var(--panel); border-radius: 12px; padding: 14px 16px; }
+	.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: 10px; margin-bottom: 16px; }
+	.card { background: var(--panel); border-radius: 12px; padding: 16px; }
 	.card b { display: block; font-size: 24px; margin-top: 4px; }
 	.card span { color: var(--dim); font-size: 13px; }
 	.table { width: 100%; border-collapse: collapse; }
@@ -65,7 +77,7 @@
 	.pill.suspended { color: var(--red); border-color: rgba(244,33,46,.5); }
 	.pill.restricted, .pill.limited { color: var(--gold); border-color: rgba(226,183,25,.5); }
 	.pill.staff { color: var(--blue); border-color: rgba(29,155,240,.5); }
-	.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+	.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 16px; }
 	.box { background: var(--panel); border-radius: 12px; padding: 16px; }
 	.box h2 { margin-top: 0; }
 	.field { display: grid; gap: 4px; margin-bottom: 10px; }
@@ -98,20 +110,17 @@
 	.thumb .play { position: absolute; font-size: 40px; color: #fff; text-shadow: 0 0 8px #000; }
 	.list p { margin: 0 0 10px; }
 	.list p:last-child { margin-bottom: 0; }
+	@media (max-width: 1100px) and (min-width: 701px) {
+		nav { width: 280px; }
+	}
+	@media (max-width: 700px) {
+		.app { display: block; }
+		nav, main { width: 100%; border-right: 0; }
+		nav { position: static; height: auto; }
+		body[data-depth="0"] main { display: none; }
+		body[data-depth="1"] nav { display: none; }
+	}
 	@media (max-width: 760px) {
-		.app { grid-template-columns: 1fr; }
-		nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 2px; }
-		nav .logo { display: none; }
-		nav button { width: auto; padding: 8px 10px; font-size: 14px; }
-		nav .who { display: none; }
-		/* the groups make one row of chips, the open one's pages a row below */
-		nav .group, nav .group.solo .gitems, nav .end { display: contents; }
-		nav .ghead { margin-top: 0; }
-		nav .ghead .icon { display: none; }
-		nav .group.open .ghead { font-weight: 700; background: var(--panel); }
-		nav .gitems { order: 1; flex-basis: 100%; }
-		nav .group.open .gitems { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-		main { padding: 16px; }
 		/* a table's last columns (the action buttons) fell off the side of a
 		   phone, behind a sideways scroll nobody noticed: each row stacks instead */
 		.table, .table tbody { display: block; }
@@ -123,15 +132,38 @@
 	}
 </style>
 </head>
-<body>
+<body data-depth="0">
 <div class="app">
 	<nav id="nav">
-		<img class="logo" src="/public/logo-dark.png" alt="{{instance}}">
+		<div class="navhead"><a class="back" id="navback" href="/account/xitter" aria-label="Back" title="Back"><span class="icon">arrow_back</span></a><a class="home" href="/home" aria-label="Home" title="Home"><img class="logo" src="/public/icon-dark.png" alt="{{instance}}"></a><div class="navtitle">Admin</div></div>
 	</nav>
 	<main id="main"></main>
 </div>
 <script>
 "use strict";
+// In a browser tab the client draws its nav and frames this panel beside it
+// (tidy.ts). Leaving the panel moves the client: the list's back arrow goes
+// back to where the panel was opened from (else Settings > Xitter), and every
+// link out of the panel opens in the client, not in the frame.
+let framed = false;
+try { framed = window.parent !== window && parent.location.origin === location.origin; } catch (e) {}
+const tell = (m) => parent.postMessage(Object.assign({ xitter: 1 }, m), location.origin);
+function leaveTo(path) { if (framed) tell({ type: "go", path }); else location.href = path; }
+if (framed) {
+	document.documentElement.setAttribute("data-framed", "");
+	tell({ type: "title", title: document.title });
+	addEventListener("hashchange", () => tell({ type: "hash", hash: location.hash }));
+	document.addEventListener("click", (e) => {
+		if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		const a = e.target.closest && e.target.closest("a[href]");
+		if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+		const u = new URL(a.href, location.href);
+		if (u.origin !== location.origin || (u.pathname === location.pathname && u.hash)) return;
+		e.preventDefault();
+		if (a.id === "navback") tell({ type: "back" });
+		else tell({ type: "go", path: u.pathname + u.search + u.hash });
+	});
+}
 const csrf = (document.cookie.match(/(?:^|; )ct0=([^;]+)/) || [])[1] || "";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const annRow = (b, dis) => '<div class="row ann-row"><input data-label maxlength="30" placeholder="Label, like More" aria-label="Button label" value="' + esc(b.label) + '"' + dis + '><input data-url type="url" inputmode="url" placeholder="https://" aria-label="Button link" value="' + esc(b.url) + '"' + dis + '>' + (dis ? "" : '<button class="btn" type="button" data-remove>Remove</button>') + "</div>";
@@ -141,6 +173,12 @@ let me = null;
 let flags = [];
 // a role ("moderator") or an action ("deletePost"): what an admin let this role do (Staff permissions)
 const can = (what) => !!me && (what in RANK ? RANK[me.role] >= RANK[what] : me.allowed.includes(what));
+function need(action) {
+	if (action in RANK) return '<span class="need">Needs the ' + esc(action) + " role</span>";
+	const label = me && me.labels && me.labels[action];
+	return '<span class="need">Needs ' + esc(label || "a higher role") + "</span>";
+}
+function allow(action, html) { return can(action) ? html : need(action); }
 
 async function api(action, body = {}) {
 	const r = await fetch("/admin/api/" + action, { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify(body) });
@@ -218,7 +256,7 @@ const PAGES = {
 	topics: { icon: "tag", title: "Topics" },
 	cards: { icon: "newspaper", title: "Explore cards" },
 	email: { icon: "mail", title: "Email" },
-	apps: { icon: "devices", title: "Client apps" },
+	apps: { icon: "devices", title: "Client apps", needs: "platforms" },
 	oauth: { icon: "key", title: "OAuth apps" },
 	federation: { icon: "hub", title: "Federation" },
 	settings: { icon: "tune", title: "Settings" },
@@ -230,35 +268,42 @@ const PAGES = {
 	audit: { icon: "history", title: "Audit log" },
 };
 
-const GROUPS = [
-	[null, ["overview"]],
-	["Moderation", ["reports", "appeals", "automod", "posts", "articles", "media"]],
-	["People", ["users", "orgs", "invites", "badges"]],
-	["Content", ["stickers", "hashflags", "topics", "cards"]],
-	["Instance", ["settings", "switches", "email", "apps", "oauth", "federation", "hosting"]],
-	["Staff and system", ["permissions", "security", "audit", "errors", "backups", "client"]],
-];
-function openGroup(g, on) {
-	g.classList.toggle("open", on);
-	g.querySelector(".ghead")?.setAttribute("aria-expanded", String(on));
+function go(hash) {
+	openDetail = true;
+	if (location.hash === "#" + hash) route();
+	else location.hash = hash;
 }
-
-function go(hash) { location.hash = hash; }
+let openDetail = false;
 window.addEventListener("hashchange", route);
 
 async function route() {
 	const [page, arg] = location.hash.slice(1).split("/");
-	const name = PAGES[page] ? page : page === "user" ? "users" : "overview";
+	let name = PAGES[page] ? page : page === "user" ? "users" : "overview";
+	if (PAGES[name] && PAGES[name].needs && !can(PAGES[name].needs)) {
+		if (location.hash !== "#overview") { location.replace("#overview"); return; }
+		name = "overview";
+	}
 	document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.page === name));
-	const cur = $('nav [data-page="' + name + '"]');
-	document.querySelectorAll("nav .group").forEach((g) => openGroup(g, g.contains(cur)));
+	const title = page === "user" && arg ? "Account" : PAGES[name].title;
 	const main = $("#main");
-	main.innerHTML = '<div class="empty">Loading…</div>';
+	main.innerHTML = '<header class="detailbar"><button type="button" class="back" id="back" aria-label="Back"><span class="icon">arrow_back</span></button><h1></h1></header><div id="pane"><div class="empty">Loading…</div></div>';
+	$(".detailbar h1").textContent = title;
+	$("#back").onclick = () => {
+		if (page === "user") { go("users"); return; }
+		if (window.matchMedia("(max-width: 700px)").matches) { document.body.dataset.depth = "0"; return; }
+		if (name !== "overview") go("overview");
+	};
+	if (window.matchMedia("(max-width: 700px)").matches) {
+		const named = location.hash.length > 1 && location.hash !== "#overview";
+		document.body.dataset.depth = named || openDetail ? "1" : "0";
+	}
+	openDetail = false;
+	const pane = $("#pane");
 	try {
-		if (page === "user" && arg) await renderUser(main, arg);
-		else await RENDER[name](main);
+		if (page === "user" && arg) await renderUser(pane, arg);
+		else await RENDER[name](pane);
 	} catch (e) {
-		main.innerHTML = '<div class="empty">' + esc(e.message) + "</div>";
+		pane.innerHTML = '<div class="empty">' + esc(e.message) + "</div>";
 	}
 }
 
@@ -379,11 +424,11 @@ const RENDER = {
 		main.innerHTML = '<h1>Errors</h1><p class="dim">Requests that failed on the server, background jobs, and uncaught errors in signed-in people\'s browsers. The same error is counted on one row; a resolved one that happens again comes back.</p>' +
 			'<div class="bar">' + [["", "Open"], ["resolved", "Resolved"]].map(([t, l]) => '<button class="btn' + ((t === "resolved") === resolved ? " primary" : "") + '" data-tab="' + t + '">' + l + "</button>").join("") +
 			'<select id="esrc"><option value="">Everywhere</option>' + Object.entries(what).map(([k, l]) => '<option value="' + k + '"' + (k === source ? " selected" : "") + ">" + l + "</option>").join("") + "</select>" +
-			(!resolved && errors.length && can("resolveErrors") ? '<button class="btn" id="eall">Resolve all</button>' : "") + "</div>" +
+			(!resolved && errors.length ? allow("resolveErrors", '<button class="btn" id="eall">Resolve all</button>') : "") + "</div>" +
 			(errors.length ? errors.map((e) => '<div class="box" style="margin-bottom:12px" data-error="' + esc(e.fingerprint) + '"><div class="row" style="justify-content:space-between"><div><b>' + esc(e.message) + "</b>" +
 				'<div class="dim small">' + esc(what[e.source] || e.source) + (e.path ? " · " + esc(e.path) : "") + " · " + e.count + (e.count === 1 ? " time" : " times") + " · last " + esc(when(e.last_at)) + (e.count > 1 ? ", first " + esc(when(e.first_at)) : "") +
 				(e.screen_name ? ' · last for <a href="#user/' + esc(e.user_id) + '">@' + esc(e.screen_name) + "</a>" : "") + "</div></div>" +
-				(!e.resolved && can("resolveErrors") ? '<button class="btn" data-resolve>Resolve</button>' : "") + "</div>" +
+				(!e.resolved ? allow("resolveErrors", '<button class="btn" data-resolve>Resolve</button>') : "") + "</div>" +
 				(e.stack ? '<details style="margin-top:8px"><summary class="small dim">Stack</summary><pre class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(e.stack) + "</pre></details>" : "") + "</div>").join("")
 				: '<div class="empty">' + (resolved ? "Nothing resolved yet." : "No open errors.") + "</div>");
 		main.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { sessionStorage.setItem("errorTab", b.dataset.tab); route(); });
@@ -422,7 +467,7 @@ const RENDER = {
 				articles.map((a) => "<tr><td>" + esc(a.title || "Untitled") + ' <span class="dim small">· ' + (a.state === "Published" ? "published" : "draft") + "</span>" + (a.hidden ? ' <span class="pill suspended">hidden</span>' : "") +
 					'</td><td><a href="#user/' + esc(a.user_id) + '">@' + esc(a.screen_name) + '</a></td><td class="small dim">' + esc(when(a.modified_at)) + '</td><td class="row">' +
 					(a.post_id ? '<a class="btn" target="_blank" href="/' + esc(a.screen_name) + "/status/" + esc(a.post_id) + '">Open</a>' : "") +
-					(can("setArticleVisibility") ? '<button class="btn' + (a.hidden ? "" : " danger") + '" data-article="' + esc(a.id) + '" data-hidden="' + !a.hidden + '">' + (a.hidden ? "Show again" : "Hide") + "</button>" : "") +
+					allow("setArticleVisibility", '<button class="btn' + (a.hidden ? "" : " danger") + '" data-article="' + esc(a.id) + '" data-hidden="' + !a.hidden + '">' + (a.hidden ? "Show again" : "Hide") + "</button>") +
 					"</td></tr>").join("") + "</table>"
 			: '<div class="empty">No articles yet.</div>') + "</div>";
 		main.querySelectorAll("[data-article]").forEach((b) => b.onclick = () =>
@@ -440,7 +485,7 @@ const RENDER = {
 				(m.state === "ready" || m.kind !== "video" ? '<img alt="" loading="lazy" src="/media/' + (m.kind === "video" ? "poster/" + esc(m.id) + ".jpg" : esc(m.id)) + '">' : '<span class="dim small">' + esc(m.state) + "</span>") +
 				(m.kind === "video" ? '<span class="icon play">play_circle</span>' : "") + "</a>" +
 				'<div class="small" style="margin-top:8px"><a href="#user/' + esc(m.user_id) + '">@' + esc(m.screen_name) + '</a> <span class="dim">· ' + (m.size < 1048576 ? Math.ceil(m.size / 1024) + " KB" : (m.size / 1048576).toFixed(1) + " MB") + " · " + esc(when(m.created_at)) + "</span>" + (m.post_id ? "" : ' <span class="dim">· not in a post</span>') + "</div>" +
-				(can("deleteMedia") ? '<button class="btn danger" style="margin-top:8px" data-del>Delete</button>' : "") + "</div>").join(""));
+				(allow("deleteMedia", '<button class="btn danger" style="margin-top:8px" data-del>Delete</button>')) + "</div>").join(""));
 			if (!media.length && !offset) $("#grid").outerHTML = '<div class="empty">No uploads yet.</div>';
 			if (media.length < 60) $("#more")?.remove();
 			main.querySelectorAll("[data-media] [data-del]:not([data-bound])").forEach((b) => {
@@ -460,22 +505,22 @@ const RENDER = {
 		const [{ badges }, { labels }] = await Promise.all([api("badges"), api("labels")]);
 		main.innerHTML = "<h1>Badges</h1>" +
 			'<p class="dim">A custom badge is a small image after an account\'s name, in the slot where X shows an organisation\'s badge. Give one to an account on its page. An organisation can also use one for its affiliates instead of its profile picture.</p>' +
-			(can("createBadge") ? '<div class="box" style="margin-bottom:16px"><h2>New badge</h2><div class="row"><input id="bn" placeholder="Name, shown on hover" maxlength="60" style="flex:1;min-width:180px">' +
+			allow("createBadge", '<div class="box" style="margin-bottom:16px"><h2>New badge</h2><div class="row"><input id="bn" placeholder="Name, shown on hover" maxlength="60" style="flex:1;min-width:180px">' +
 				'<label class="btn">Choose image<input type="file" id="bf" accept="image/png,image/jpeg,image/webp" hidden></label><span class="dim small" id="bfname">PNG, JPEG or WebP, square, up to 256 KB</span>' +
-				'<button class="btn primary" id="bc">Create</button></div></div>' : "") +
+				'<button class="btn primary" id="bc">Create</button></div></div>') +
 			'<div class="scroll">' + (badges.length
 				? '<table class="table"><tr><th></th><th>Name</th><th>Accounts</th><th>Made</th><th></th></tr>' +
 					badges.map((b) => '<tr><td style="width:44px"><img alt="" src="/public/badge-' + esc(b.id) + '.png" width="24" height="24" style="border-radius:4px;vertical-align:middle"></td><td>' + esc(b.name) + "</td><td>" + b.users +
-						'</td><td class="small dim">' + esc(when(b.created_at)) + "</td><td>" + (can("deleteBadge") ? '<button class="btn danger" data-del="' + esc(b.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
+						'</td><td class="small dim">' + esc(when(b.created_at)) + "</td><td>" + allow("deleteBadge", '<button class="btn danger" data-del="' + esc(b.id) + '">Delete</button>') + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No custom badges yet.</div>') + "</div>" +
 			'<h1 style="margin-top:32px">Profile labels</h1><p class="dim">Text under an account\'s name, where X shows "Parody account", with a badge as its icon (the parody mask without one). Give one to an account on its page; it replaces a parody, commentary or fan label, and the account can\'t change it.</p>' +
-			(can("createLabel") ? '<div class="box" style="margin-bottom:16px"><h2>New label</h2><div class="row"><input id="ln" placeholder="Text, e.g. State-affiliated media" maxlength="40" style="flex:1;min-width:180px">' +
+			allow("createLabel", '<div class="box" style="margin-bottom:16px"><h2>New label</h2><div class="row"><input id="ln" placeholder="Text, e.g. State-affiliated media" maxlength="40" style="flex:1;min-width:180px">' +
 				'<select id="lb"><option value="">parody mask</option>' + badges.map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("") + "</select>" +
-				'<input id="lu" placeholder="Link (optional)" maxlength="500" style="flex:1;min-width:160px"><button class="btn primary" id="lc">Create</button></div></div>' : "") +
+				'<input id="lu" placeholder="Link (optional)" maxlength="500" style="flex:1;min-width:160px"><button class="btn primary" id="lc">Create</button></div></div>') +
 			'<div class="scroll">' + (labels.length
 				? '<table class="table"><tr><th></th><th>Text</th><th>Link</th><th>Accounts</th><th></th></tr>' +
 					labels.map((l) => '<tr><td style="width:44px">' + (l.badge_id ? '<img alt="" src="/public/badge-' + esc(l.badge_id) + '.png" width="20" height="20" style="border-radius:3px;vertical-align:middle">' : '<span class="icon">theater_comedy</span>') + "</td><td>" + esc(l.text) +
-						'</td><td class="small dim">' + esc(l.url || "") + "</td><td>" + l.users + "</td><td>" + (can("deleteLabel") ? '<button class="btn danger" data-dellabel="' + esc(l.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
+						'</td><td class="small dim">' + esc(l.url || "") + "</td><td>" + l.users + "</td><td>" + allow("deleteLabel", '<button class="btn danger" data-dellabel="' + esc(l.id) + '">Delete</button>') + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No profile labels yet.</div>') + "</div>";
 		if ($("#lc")) $("#lc").onclick = () => act(() => api("createLabel", { text: $("#ln").value, badgeId: $("#lb").value, url: $("#lu").value }), "Label created").then(route);
 		main.querySelectorAll("[data-dellabel]").forEach((b) => b.onclick = async () => {
@@ -499,18 +544,19 @@ const RENDER = {
 	async stickers(main) {
 		const { packs } = await api("stickers");
 		const admin = can("createStickerPack");
+		const sticker = (html) => admin ? html : need("createStickerPack");
 		main.innerHTML = "<h1>Stickers</h1>" +
 			'<p class="dim">Packs show in the sticker button beside the composer\'s emoji button. A sticker is posted as an image, so it shows anywhere images do. PNG, GIF or WebP, up to 1024×1024 and 1 MB; transparency is kept.</p>' +
-			(admin ? '<div class="box" style="margin-bottom:16px"><h2>New pack</h2><div class="row"><input id="pn" placeholder="Pack name" maxlength="40" style="flex:1;min-width:180px"><button class="btn primary" id="pc">Create</button></div></div>' : "") +
+			sticker('<div class="box" style="margin-bottom:16px"><h2>New pack</h2><div class="row"><input id="pn" placeholder="Pack name" maxlength="40" style="flex:1;min-width:180px"><button class="btn primary" id="pc">Create</button></div></div>') +
 			(packs.length ? packs.map((p, i) => '<div class="box" style="margin-bottom:16px" data-pack="' + esc(p.id) + '">' +
 				'<div class="row" style="justify-content:space-between"><h2 style="margin:0">' + esc(p.name) + ' <span class="dim small">' + p.stickers.length + " sticker" + (p.stickers.length === 1 ? "" : "s") + "</span></h2>" +
-				(admin ? '<div class="row"><button class="btn" data-up' + (i ? "" : " disabled") + '><span class="icon">arrow_upward</span></button><button class="btn" data-down' + (i < packs.length - 1 ? "" : " disabled") + '><span class="icon">arrow_downward</span></button><button class="btn" data-rename>Rename</button><button class="btn danger" data-delpack>Delete pack</button></div>' : "") + "</div>" +
+				sticker('<div class="row"><button class="btn" data-up' + (i ? "" : " disabled") + '><span class="icon">arrow_upward</span></button><button class="btn" data-down' + (i < packs.length - 1 ? "" : " disabled") + '><span class="icon">arrow_downward</span></button><button class="btn" data-rename>Rename</button><button class="btn danger" data-delpack>Delete pack</button></div>') + "</div>" +
 				'<div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">' + (p.stickers.length ? p.stickers.map((s) =>
 					'<div style="position:relative;width:88px;text-align:center"><img alt="" src="' + esc(s.url) + '" style="width:80px;height:80px;object-fit:contain;border-radius:6px;background:repeating-conic-gradient(#8882 0 25%,transparent 0 50%) 0 0/12px 12px">' +
 					'<div class="small dim" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(s.name || "") + "</div>" +
-					(admin ? '<button class="btn danger small" data-delsticker="' + esc(s.id) + '" title="Delete" style="position:absolute;top:0;right:0;padding:0 4px"><span class="icon">close</span></button>' : "") + "</div>").join("")
+					sticker('<button class="btn danger small" data-delsticker="' + esc(s.id) + '" title="Delete" style="position:absolute;top:0;right:0;padding:0 4px"><span class="icon">close</span></button>') + "</div>").join("")
 					: '<div class="empty" style="width:100%">No stickers in this pack yet.</div>') + "</div>" +
-				(admin ? '<div class="row"><input data-sname placeholder="Sticker name (optional)" maxlength="40" style="flex:1;min-width:160px"><label class="btn">Choose images<input type="file" data-sfile accept="image/png,image/gif,image/webp" multiple hidden></label><span class="dim small" data-sfname></span><button class="btn primary" data-add>Add</button></div>' : "") +
+				sticker('<div class="row"><input data-sname placeholder="Sticker name (optional)" maxlength="40" style="flex:1;min-width:160px"><label class="btn">Choose images<input type="file" data-sfile accept="image/png,image/gif,image/webp" multiple hidden></label><span class="dim small" data-sfname></span><button class="btn primary" data-add>Add</button></div>') +
 				"</div>").join("") : '<div class="empty">No sticker packs yet.</div>');
 		const read = (file) => new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.onerror = () => fail(new Error("Couldn't read " + file.name + ".")); r.readAsDataURL(file); });
 		if ($("#pc")) $("#pc").onclick = () => act(() => api("createStickerPack", { name: $("#pn").value }), "Pack created").then(route);
@@ -549,25 +595,26 @@ const RENDER = {
 	async hashflags(main) {
 		const { hashflags } = await api("hashflags");
 		const admin = can("createHashflag");
+		const hashflag = (html) => admin ? html : need("createHashflag");
 		const local = (d) => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 16); };
 		const now = Date.now();
 		const state = (h) => new Date(h.ends_at) <= now ? "ended" : new Date(h.starts_at) > now ? "upcoming" : "running";
 		main.innerHTML = "<h1>Branded hashtags</h1>" +
 			'<p class="dim">X\'s branded likes and hashmoji. While one runs, liking a post that has its hashtag plays the like animation instead of the heart, and the hashtag shows its emoji. The animation is a Lottie JSON file (After Effects with Bodymovin, or LottieFiles), square, like X\'s own heart. With hashfetti on, the emoji rains over the hashtag\'s search results. People see a change after they reload.</p>' +
-			(admin ? '<div class="box" style="margin-bottom:16px"><h2>New branded hashtag</h2>' +
+			hashflag('<div class="box" style="margin-bottom:16px"><h2>New branded hashtag</h2>' +
 				'<div class="field"><label>Hashtag</label><input id="hh" placeholder="#SuperMarioMovie" maxlength="101"></div>' +
 				'<div class="row"><div class="field" style="flex:1"><label>Starts</label><input id="hs" type="datetime-local" value="' + local(now) + '"></div><div class="field" style="flex:1"><label>Ends</label><input id="he" type="datetime-local" value="' + local(now + 7 * 864e5) + '"></div></div>' +
 				'<div class="row"><label class="btn">Like animation (.json)<input type="file" id="ha" accept="application/json,.json" hidden></label><span class="dim small" id="han">Lottie JSON, up to 1 MB</span></div>' +
 				'<div class="row" style="margin-top:8px"><label class="btn">Emoji<input type="file" id="hm" accept="image/png,image/gif,image/webp" hidden></label><span class="dim small" id="hmn">PNG, GIF or WebP, up to 512×512 and 256 KB</span></div>' +
 				'<label class="row" style="margin:12px 0"><input type="checkbox" id="hf"> Hashfetti (needs an emoji)</label>' +
-				'<button class="btn primary" id="hc">Create</button></div>' : "") +
+				'<button class="btn primary" id="hc">Create</button></div>') +
 			'<div class="scroll">' + (hashflags.length
 				? '<table class="table"><tr><th>Hashtag</th><th>Like</th><th>Emoji</th><th>When</th><th>State</th><th></th></tr>' +
 					hashflags.map((h) => '<tr><td>#' + esc(h.hashtag) + (h.hashfetti ? ' <span class="dim small">hashfetti</span>' : "") + "</td><td>" +
 						(h.like_url ? '<a href="' + esc(h.like_url) + '" target="_blank">animation</a>' : '<span class="dim">—</span>') + "</td><td>" +
 						(h.emoji_url ? '<img alt="" src="' + esc(h.emoji_url) + '" width="20" height="20" style="vertical-align:middle">' : '<span class="dim">—</span>') +
 						'</td><td class="small">' + esc(when(h.starts_at)) + " → " + esc(when(h.ends_at)) + '</td><td><span class="pill' + (state(h) === "ended" ? " suspended" : "") + '">' + state(h) + "</span></td><td>" +
-						(admin ? (state(h) !== "ended" ? '<button class="btn" data-end="' + esc(h.id) + '">End now</button> ' : "") + '<button class="btn danger" data-del="' + esc(h.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
+						hashflag((state(h) !== "ended" ? '<button class="btn" data-end="' + esc(h.id) + '">End now</button> ' : "") + '<button class="btn danger" data-del="' + esc(h.id) + '">Delete</button>') + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No branded hashtags yet.</div>') + "</div>";
 		const read = (file) => new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.onerror = () => fail(new Error("Couldn't read " + file.name + ".")); r.readAsDataURL(file); });
 		if ($("#ha")) $("#ha").onchange = () => $("#han").textContent = $("#ha").files[0]?.name || "";
@@ -645,7 +692,7 @@ const RENDER = {
 			(m.enabled ? '<p>Mail goes out through Resend from <span class="code">' + esc(m.from) + "</span>.</p>"
 				: '<p>Mail is off: set <span class="code">RESEND_API_KEY</span> (and <span class="code">MAIL_FROM</span>, on a domain verified in Resend) and restart. Until then every mail below is only logged as skipped.</p>') +
 			'<p class="dim small">A test mail shows what Resend answers; if the sending domain isn\'t verified yet, it says so here.</p>' +
-			(can("sendTestMail") ? '<div class="row"><input id="mto" placeholder="you@example.org" style="flex:1;min-width:200px"><button class="btn primary" id="msend">Send test mail</button><button class="btn" id="mdigest">Send digests now</button></div>' : "") + "</div>" +
+			(allow("sendTestMail", '<div class="row"><input id="mto" placeholder="you@example.org" style="flex:1;min-width:200px"><button class="btn primary" id="msend">Send test mail</button><button class="btn" id="mdigest">Send digests now</button></div>')) + "</div>" +
 			'<div class="box"><h2>Recent mail</h2><p class="dim small">Password resets, notification digests for people who turned them on (Settings > Notifications > Email notifications: activity, new messages; only after 30 minutes away, at most every 4 hours) and tests.</p><div class="scroll">' +
 			(m.log.length ? '<table class="table"><tr><th>When</th><th>To</th><th>What</th><th>State</th></tr>' +
 				m.log.map((l) => '<tr><td class="small dim">' + esc(when(l.created_at)) + "</td><td>" + (l.to_addr ? esc(l.to_addr) : '<span class="dim">hidden</span>') + (l.screen_name ? ' <span class="dim small">@' + esc(l.screen_name) + "</span>" : "") +
@@ -694,10 +741,10 @@ const RENDER = {
 		};
 		main.innerHTML = "<h1>Explore cards</h1>" +
 			'<p class="dim">News and sports cards at the top of Explore. Each opens a search. The first news card with a picture is shown large. Sports cards show a scoreboard; update the score here as the game goes.</p>' +
-			(can("saveCard") ? '<div class="box" style="margin-bottom:16px" id="cnew"><h2>New card</h2>' + form() + '<div class="row" style="margin-top:8px"><button class="btn primary" id="cc">Create</button></div></div>' : "") +
+			allow("saveCard", '<div class="box" style="margin-bottom:16px" id="cnew"><h2>New card</h2>' + form() + '<div class="row" style="margin-top:8px"><button class="btn primary" id="cc">Create</button></div></div>') +
 			(cards.length ? cards.map((c) => '<div class="box" style="margin-bottom:12px" data-card="' + esc(c.id) + '"><div class="row" style="justify-content:space-between"><div><b>' + esc(c.title) + '</b> <span class="dim small">· ' + esc(c.kind) +
 				(c.kind === "sports" ? " · " + esc(c.home) + " " + esc(c.home_score || "–") + " : " + esc(c.away_score || "–") + " " + esc(c.away) : "") + (c.hidden ? " · hidden" : "") + "</span></div>" +
-				(can("saveCard") ? '<div><button class="btn" data-edit>Edit</button> <button class="btn danger" data-del>Delete</button></div>' : "") + "</div></div>").join("")
+				(allow("saveCard", '<div><button class="btn" data-edit>Edit</button> <button class="btn danger" data-del>Delete</button></div>')) + "</div></div>").join("")
 				: '<div class="empty">No cards yet.</div>');
 		if ($("#cnew")) { wire($("#cnew")); $("#cc").onclick = () => act(async () => api("saveCard", await read($("#cnew"))), "Card created").then(route); }
 		main.querySelectorAll("[data-card]").forEach((box) => {
@@ -722,11 +769,11 @@ const RENDER = {
 		const read = (box) => Object.fromEntries([...box.querySelectorAll("[data-f]")].map((i) => [i.dataset.f, i.value]));
 		main.innerHTML = "<h1>Topics</h1>" +
 			'<p class="dim">People follow topics from "Topics to follow" in the side bar and from a post\'s menu. A post matches a topic when it has one of its keywords (with or without #). "For you" lifts posts on followed topics and labels the ones from accounts people don\'t follow; "Not interested" keeps them out.</p>' +
-			(can("saveTopic") ? '<div class="box" style="margin-bottom:16px" id="tnew"><h2>New topic</h2>' + form() + '<div class="row" style="margin-top:8px"><button class="btn primary" id="tc">Create</button></div></div>' : "") +
+			allow("saveTopic", '<div class="box" style="margin-bottom:16px" id="tnew"><h2>New topic</h2>' + form() + '<div class="row" style="margin-top:8px"><button class="btn primary" id="tc">Create</button></div></div>') +
 			'<div class="scroll">' + (topics.length
 				? '<table class="table"><tr><th>Topic</th><th>Keywords</th><th>Followers</th><th></th></tr>' +
 					topics.map((t) => '<tr data-topic="' + esc(t.id) + '"><td><b>' + esc(t.name) + '</b><div class="small dim">' + esc(t.description) + "</div></td><td class=\"small\">" + esc(t.keywords.join(", ")) + "</td><td>" + t.followers +
-						"</td><td>" + (can("saveTopic") ? '<button class="btn" data-edit="' + esc(t.id) + '">Edit</button> <button class="btn danger" data-del="' + esc(t.id) + '">Delete</button>' : "") + "</td></tr>").join("") + "</table>"
+						"</td><td>" + allow("saveTopic", '<button class="btn" data-edit="' + esc(t.id) + '">Edit</button> <button class="btn danger" data-del="' + esc(t.id) + '">Delete</button>') + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No topics yet.</div>') + "</div>";
 		if ($("#tc")) $("#tc").onclick = () => act(() => api("saveTopic", read($("#tnew"))), "Topic created").then(route);
 		main.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
@@ -746,11 +793,11 @@ const RENDER = {
 		const { platforms } = await api("platforms");
 		main.innerHTML = "<h1>Client apps</h1>" +
 			'<p class="dim">Posts show the app they came from after their time, like "{{instance}} for Web". Give another app (your Android build, a bot) a token here; posts sent with it show its name. People still sign in as usual: the token only names the app.</p>' +
-			(can("admin") ? '<div class="box" style="margin-bottom:16px"><h2>New app</h2><div class="row"><input id="al" placeholder="{{instance}} for Android" maxlength="80" style="flex:1;min-width:200px"><button class="btn primary" id="ac">Create token</button></div><div id="asecret"></div></div>' : "") +
+			(allow("createPlatform", '<div class="box" style="margin-bottom:16px"><h2>New app</h2><div class="row"><input id="al" placeholder="{{instance}} for Android" maxlength="80" style="flex:1;min-width:200px"><button class="btn primary" id="ac">Create token</button></div><div id="asecret"></div></div>')) +
 			'<div class="scroll">' + (platforms.length
 				? '<table class="table"><tr><th>Shown as</th><th>Made</th><th>State</th><th></th></tr>' +
 					platforms.map((p) => "<tr><td>" + esc(p.label) + '</td><td class="small dim">' + esc(when(p.created_at)) + "</td><td>" + (p.revoked ? '<span class="pill suspended">revoked</span>' : '<span class="pill">active</span>') +
-						"</td><td>" + (can("admin") && !p.revoked ? '<button class="btn danger" data-revoke="' + esc(p.id) + '">Revoke</button>' : "") + "</td></tr>").join("") + "</table>"
+						"</td><td>" + (!p.revoked ? allow("revokePlatform", '<button class="btn danger" data-revoke="' + esc(p.id) + '">Revoke</button>') : "") + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No apps yet. Posts from the web app show "{{instance}} for Web".</div>') + "</div>";
 		if ($("#ac")) $("#ac").onclick = () => act(async () => {
 			const r = await api("createPlatform", { label: $("#al").value });
@@ -771,15 +818,15 @@ const RENDER = {
 			: "Registered by " + (x.owner ? "@" + esc(x.owner) : "a deleted account") + ', returns to <span class="code">' + esc(x.redirect_uri) + "</span>";
 		main.innerHTML = "<h1>OAuth apps</h1>" +
 			'<p class="dim">Apps people can sign in to with their account here: ones registered under Developer apps, and ones that use the address of their own client ID document instead (they have no owner here). Blocking an app ends everyone\'s access to it and stops it asking again.</p>' +
-			(can("blockOAuthApp") ? '<div class="box" style="margin-bottom:16px"><h2>Block an app nobody has used yet</h2><div class="row"><input id="obu" placeholder="https://app.example/oauth-client.json" style="flex:2;min-width:220px"><input id="obr" placeholder="Reason" maxlength="500" style="flex:1;min-width:160px"><button class="btn danger" id="obgo">Block</button></div></div>' : "") +
+			(allow("blockOAuthApp", '<div class="box" style="margin-bottom:16px"><h2>Block an app nobody has used yet</h2><div class="row"><input id="obu" placeholder="https://app.example/oauth-client.json" style="flex:2;min-width:220px"><input id="obr" placeholder="Reason" maxlength="500" style="flex:1;min-width:160px"><button class="btn danger" id="obgo">Block</button></div></div>')) +
 			'<div class="scroll">' + (apps.length
 				? '<table class="table"><tr><th>App</th><th>People using it</th><th>State</th><th></th></tr>' +
 					apps.map((x) => "<tr><td><b>" + esc(x.name) + '</b><div class="dim small">' + who(x) + "</div>" +
 						(x.blocked_at ? '<div class="dim small">Blocked ' + esc(when(x.blocked_at)) + (x.blocked_reason ? ": " + esc(x.blocked_reason) : "") + "</div>" : "") +
 						"</td><td>" + esc(String(x.grants)) + "</td><td>" + state(x) + "</td><td>" +
 						(x.blocked_at
-							? (can("unblockOAuthApp") ? '<button class="btn" data-unblock="' + esc(x.id) + '">Unblock</button>' : "")
-							: !x.revoked && can("blockOAuthApp") ? '<button class="btn danger" data-block="' + esc(x.id) + '">Block</button>' : "") +
+							? allow("unblockOAuthApp", '<button class="btn" data-unblock="' + esc(x.id) + '">Unblock</button>')
+							: !x.revoked ? allow("blockOAuthApp", '<button class="btn danger" data-block="' + esc(x.id) + '">Block</button>') : "") +
 						"</td></tr>").join("") + "</table>"
 				: '<div class="empty">No OAuth apps yet.</div>') + "</div>";
 		const block = async (body, name) => {
@@ -820,13 +867,13 @@ const RENDER = {
 								? (i.block.source === "registry" || (i.block.source === "emergency" && !f.superadmin) ? "" : '<button class="btn" data-unblock="' + esc(i.id) + '">Federate again</button> ') + '<button class="btn danger" data-purge="' + esc(i.id) + '">Delete its content</button>'
 								: '<button class="btn" data-pull="' + esc(i.id) + '">Sync now</button> <button class="btn danger" data-block="' + esc(i.id) + '">Defederate</button>') +
 								(i.key_change ? ' <button class="btn" data-key="' + esc(i.id) + '">Accept the new key</button>' : "")
-							: "") + "</td></tr>").join("") + "</table>"
+							: need("admin")) + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No other instances yet.</div>') + "</div>" +
 			'<div class="box" style="margin-top:16px"><h2>Media from other instances</h2><p class="dim small">' +
 				(f.media.stored ? "Saved on this server (FEDERATION_MEDIA=store)." : "Shown straight from their home instance and not saved here.") +
 				" Saved now: " + esc(String(f.media.files)) + " files, " + esc((f.media.bytes / 1048576).toFixed(1)) + " MB.</p>" +
-				(can("admin") && f.media.bytes > 0 ? '<button class="btn danger" id="dropmedia">Delete saved media</button>' : "") + "</div>" +
-			(can("admin") ? '<div class="box" style="margin-top:16px"><h2>Defederate an instance</h2><div class="row"><input id="fbi" placeholder="xit.example.org" style="flex:1;min-width:180px"><input id="fbr" placeholder="Reason" maxlength="500" style="flex:2;min-width:200px"><button class="btn danger" id="fbgo">Defederate</button></div></div>' : "");
+				(f.media.bytes > 0 ? allow("admin", '<button class="btn danger" id="dropmedia">Delete saved media</button>') : "") + "</div>" +
+			(allow("admin", '<div class="box" style="margin-top:16px"><h2>Defederate an instance</h2><div class="row"><input id="fbi" placeholder="xit.example.org" style="flex:1;min-width:180px"><input id="fbr" placeholder="Reason" maxlength="500" style="flex:2;min-width:200px"><button class="btn danger" id="fbgo">Defederate</button></div></div>'));
 		const block = async (instance, reason) => {
 			if (!(await ask("Defederate " + instance + "? Its accounts and posts disappear here and nothing more comes from it until you federate again."))) return;
 			act(() => api("federationBlock", { instance, reason }), "Defederated").then(route);
@@ -864,11 +911,12 @@ const RENDER = {
 					'<div style="margin:10px 0">' + target + (r.actioned_before ? '<div class="dim small" style="margin-top:4px">' + r.actioned_before + " earlier reports were acted on</div>" : "") + "</div>" +
 					(r.post_id ? (r.post_text !== null ? '<div class="box" style="background:var(--bg);border:1px solid var(--line)">' + esc(r.post_text || "(no text)") + (r.post_media ? ' <span class="dim small">· ' + r.post_media + " media</span>" : "") +
 						' <a class="small" target="_blank" href="/' + esc(r.screen_name) + "/status/" + esc(r.post_id) + '">open</a></div>' : '<p class="dim small">The post was deleted.</p>') : '<p class="dim small">Report about the account.</p>') +
-					(status === "open" && can("resolveReport") ? '<div class="field" style="margin-top:12px"><input data-note placeholder="Note for the audit log (optional)"></div><div class="row">' +
-						'<button class="btn" data-do="dismiss">Dismiss</button>' +
-						(r.post_id && r.post_text !== null && can("deletePost") ? '<button class="btn danger" data-do="delete">Delete post</button>' : "") +
-						(r.user_id && can("setStatus") ? '<button class="btn" data-do="restricted">Restrict author</button><button class="btn" data-do="limited">Limit author</button><button class="btn danger" data-do="suspended">Suspend author</button>' : "") +
-						(r.user_id ? '<a class="btn" href="#user/' + esc(r.user_id) + '">Open account</a>' : "") + "</div>"
+					(status === "open"
+						? allow("resolveReport", '<div class="field" style="margin-top:12px"><input data-note placeholder="Note for the audit log (optional)"></div><div class="row">' +
+							'<button class="btn" data-do="dismiss">Dismiss</button>' +
+							(r.post_id && r.post_text !== null ? allow("deletePost", '<button class="btn danger" data-do="delete">Delete post</button>') : "") +
+							(r.user_id ? allow("setStatus", '<button class="btn" data-do="restricted">Restrict author</button><button class="btn" data-do="limited">Limit author</button><button class="btn danger" data-do="suspended">Suspend author</button>') : "") +
+							(r.user_id ? '<a class="btn" href="#user/' + esc(r.user_id) + '">Open account</a>' : "") + "</div>")
 						: '<p class="dim small">' + esc(r.status) + (r.handled_by ? " by @" + esc(r.handled_by) : "") + (r.handled_at ? " · " + esc(when(r.handled_at)) : "") + (r.note ? " · " + esc(r.note) : "") + "</p>") +
 					"</div>";
 			}).join("") : '<div class="empty">' + (status === "open" ? "No open reports." : "Nothing here.") + "</div>");
@@ -893,8 +941,8 @@ const RENDER = {
 			'<select id="status"><option value="">Any standing</option><option>active</option><option>restricted</option><option>limited</option><option>suspended</option></select>' +
 			HOME_SELECT +
 			'<label class="row small"><input type="checkbox" id="staff"> Staff only</label></div>' +
-			(can("bulkStatus") ? '<div class="bar" id="bulk" hidden><span class="small" id="picked"></span>' +
-				[["active", "Reinstate", ""], ["restricted", "Restrict", ""], ["limited", "Limit", ""], ["suspended", "Suspend", " danger"]].map(([s, l, c]) => '<button class="btn' + c + '" data-bulk="' + s + '">' + l + "</button>").join("") + "</div>" : "") +
+			allow("bulkStatus", '<div class="bar" id="bulk" hidden><span class="small" id="picked"></span>' +
+				[["active", "Reinstate", ""], ["restricted", "Restrict", ""], ["limited", "Limit", ""], ["suspended", "Suspend", " danger"]].map(([s, l, c]) => '<button class="btn' + c + '" data-bulk="' + s + '">' + l + "</button>").join("") + "</div>") +
 			'<p class="dim small" id="total"></p><div id="list" class="scroll"></div>' +
 			'<div class="row" style="margin-top:16px"><button class="btn" id="more" hidden>Show more</button></div>';
 		const picked = () => [...main.querySelectorAll("[data-pick]:checked")].map((c) => c.dataset.pick);
@@ -939,7 +987,7 @@ const RENDER = {
 		main.innerHTML = "<h1>Organisations</h1>" +
 			'<div class="bar">' + HOME_SELECT + "</div>" +
 			'<p class="dim">Organisations are accounts with the gold badge or the grey government badge, and any other account an admin has given affiliates on its page. Their affiliates show the organisation\'s picture as a badge after their name and are listed on its Affiliates tab.</p>' +
-			(can("createOrg") ? '<div class="box" style="margin-bottom:16px"><h2>New organisation</h2><div class="row"><input id="oh" placeholder="handle"><input id="on" placeholder="Name"><button class="btn primary" id="oc">Create</button></div><div id="osecret"></div></div>' : "") +
+			(allow("createOrg", '<div class="box" style="margin-bottom:16px"><h2>New organisation</h2><div class="row"><input id="oh" placeholder="handle"><input id="on" placeholder="Name"><button class="btn primary" id="oc">Create</button></div><div id="osecret"></div></div>')) +
 			'<div class="scroll">' + (orgs.length ? userTable(orgs, true) : '<div class="empty">' + (home ? "No organisations match." : "No organisations yet. Give an account the gold or grey government badge, or create one above.") + "</div>") + "</div>";
 		if ($("#oc")) $("#oc").onclick = () => act(async () => {
 			const r = await api("createOrg", { screen_name: $("#oh").value, name: $("#on").value });
@@ -955,14 +1003,14 @@ const RENDER = {
 		// the label and shown counts of one post, opened by its Edit button
 		const postEditor = (p) => {
 			const n = p.notice || {}, c = p.count_overrides || {};
-			return '<div class="grid2">' + (can("setPostNotice") ? '<div><b>Label under the post</b><div class="field"><select data-k="type">' +
+			return '<div class="grid2">' + allow("setPostNotice", '<div><b>Label under the post</b><div class="field"><select data-k="type">' +
 				[["", "none"]].concat(Object.entries(NOTICE_LABELS)).map(([k, l]) => '<option value="' + k + '"' + ((n.type || "") === k ? " selected" : "") + ">" + esc(l) + "</option>").join("") +
 				'</select></div><div class="field"><input data-k="text" maxlength="280" placeholder="Text (blank: the usual one for the label)" value="' + esc(n.text || "") + '"></div>' +
 				'<div class="field"><input data-k="url" placeholder="Learn more link (blank: the rules page)" value="' + esc(n.url || "") + '"></div>' +
-				'<p class="dim small">Visibility limited also keeps the post out of For you and search.</p><button class="btn primary" data-save-notice>Save label</button></div>' : "") +
-				(can("setPostCounts") ? '<div><b>Shown counts</b><p class="dim small">Blank shows the real number. Only the number changes, not who liked or reposted.</p><div class="row" style="flex-wrap:wrap">' +
+				'<p class="dim small">Visibility limited also keeps the post out of For you and search.</p><button class="btn primary" data-save-notice>Save label</button></div>') +
+				allow("setPostCounts", '<div><b>Shown counts</b><p class="dim small">Blank shows the real number. Only the number changes, not who liked or reposted.</p><div class="row" style="flex-wrap:wrap">' +
 					["likes", "replies", "reposts", "quotes", "bookmarks", "views"].map((k) => '<label class="small" style="width:30%">' + k + '<input data-k="' + k + '" type="number" min="0" value="' + (c[k] ?? "") + '"></label>').join("") +
-					'</div><button class="btn primary" data-save-counts style="margin-top:8px">Save counts</button></div>' : "") + "</div>";
+					'</div><button class="btn primary" data-save-counts style="margin-top:8px">Save counts</button></div>') + "</div>";
 		};
 		main.innerHTML = '<h1>Posts</h1><div class="bar"><input id="q" placeholder="Text contains" style="flex:1;min-width:160px"><input id="author" placeholder="@author"></div><p class="dim small" id="total"></p><div id="list" class="scroll"></div>' +
 			'<div class="row" style="margin-top:16px"><button class="btn" id="more" hidden>Show more</button></div>';
@@ -983,10 +1031,10 @@ const RENDER = {
 						(p.notice ? ' <span class="pill restricted">' + esc(NOTICE_LABELS[p.notice.type] || p.notice.type) + "</span>" : "") + (p.count_overrides ? ' <span class="pill">counts set</span>' : "") +
 						'<div class="dim small">' + p.likes + ' likes · <a href="/' + esc(p.screen_name) + "/status/" + esc(p.id) + '" target="_blank">open</a></div></td><td><a href="#user/' + esc(p.user_id) + '">@' + esc(p.screen_name) + '</a></td><td class="small dim">' + esc(when(p.created_at)) + "</td><td>" +
 						'<div class="row" style="flex-wrap:nowrap">' +
-							(can("setPostVisibility") ? '<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !p.hidden + '" data-sensitive="' + !!p.sensitive + '" title="Hidden posts are seen by staff only">' + (p.hidden ? "Show" : "Hide") + "</button>" +
-								'<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !!p.hidden + '" data-sensitive="' + !p.sensitive + '" title="Media behind a content warning">' + (p.sensitive ? "Not sensitive" : "Sensitive") + "</button>" : "") +
-							(can("setPostNotice") || can("setPostCounts") ? '<button class="btn" data-edit="' + esc(p.id) + '">Edit</button>' : "") +
-							(can("deletePost") ? '<button class="btn danger" data-del="' + esc(p.id) + '">Delete</button>' : "") + "</div></td></tr>" +
+							allow("setPostVisibility", '<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !p.hidden + '" data-sensitive="' + !!p.sensitive + '" title="Hidden posts are seen by staff only">' + (p.hidden ? "Show" : "Hide") + "</button>" +
+								'<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !!p.hidden + '" data-sensitive="' + !p.sensitive + '" title="Media behind a content warning">' + (p.sensitive ? "Not sensitive" : "Sensitive") + "</button>") +
+							(can("setPostNotice") || can("setPostCounts") ? '<button class="btn" data-edit="' + esc(p.id) + '">Edit</button>' : need("setPostNotice")) +
+							allow("deletePost", '<button class="btn danger" data-del="' + esc(p.id) + '">Delete</button>') + "</div></td></tr>" +
 						'<tr data-editor="' + esc(p.id) + '" hidden><td colspan="4">' + postEditor(p) + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No posts match.</div>';
 			$("#list").querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
@@ -1031,22 +1079,22 @@ const RENDER = {
 		const state = (i) => i.revoked ? "revoked" : i.uses >= i.max_uses ? "used up" : i.expires_at && new Date(i.expires_at) < new Date() ? "expired" : "open";
 		main.innerHTML = "<h1>Invites</h1>" + tabs +
 			'<div class="box" style="margin-bottom:16px"><h2>Members\' invites</h2><p class="dim small">Members make their own at <a href="/account/invites" target="_blank">/account/invites</a> (in the side bar\'s More menu) while sign-up is by invite. Each is open for 30 days.</p><div class="row">' +
-				'<label class="row"><input type="checkbox" id="qon"' + (q.enabled ? " checked" : "") + (can("admin") ? "" : " disabled") + "> Members can make invites</label>" +
+				'<label class="row"><input type="checkbox" id="qon"' + (q.enabled ? " checked" : "") + (can("admin") ? "" : " disabled") + "> Members can make invites</label>" + (can("admin") ? "" : need("admin")) +
 				'<label class="small dim">A month <input id="qn" type="number" min="1" max="100" style="width:70px" value="' + q.per_month + '"></label>' +
 				'<label class="small dim">Uses each <input id="qu" type="number" min="1" max="100" style="width:70px" value="' + q.uses + '"></label>' +
 				'<label class="small dim">From account age (days) <input id="qa" type="number" min="0" max="3650" style="width:80px" value="' + q.min_age_days + '"></label>' +
-				(can("admin") ? '<button class="btn" id="qsave">Save</button>' : "") + "</div></div>" +
-			(can("createInvite") ? '<div class="box" style="margin-bottom:16px"><h2>Make invites</h2><div class="row">' +
+				(allow("admin", '<button class="btn" id="qsave">Save</button>')) + "</div></div>" +
+			allow("createInvite", '<div class="box" style="margin-bottom:16px"><h2>Make invites</h2><div class="row">' +
 				'<label class="small dim">How many <input id="n" type="number" min="1" max="50" value="1" style="width:70px"></label>' +
 				'<label class="small dim">Uses each <input id="u" type="number" min="1" value="1" style="width:80px"></label>' +
 				'<label class="small dim">Expires in days <input id="d" type="number" min="0" placeholder="never" style="width:90px"></label>' +
 				'<label class="small dim">Joins organisation <select id="o"><option value="">none</option>' + orgs.map((o) => '<option value="' + esc(o.id) + '">@' + esc(o.screen_name) + "</option>").join("") + "</select></label>" +
-				'<button class="btn primary" id="make">Make</button></div><div id="made"></div></div>' : "") +
+				'<button class="btn primary" id="make">Make</button></div><div id="made"></div></div>') +
 			'<div class="scroll"><table class="table"><tr><th>Code</th><th>State</th><th>Used</th><th>By</th><th>Made</th><th></th></tr>' +
 			invites.map((i) => '<tr><td class="code">' + (i.code ? esc(i.code) : '<span class="dim">hidden</span>') + (i.org ? ' <span class="dim small">→ @' + esc(i.org) + "</span>" : "") + "</td><td>" + esc(state(i)) + "</td><td>" + i.uses + "/" + i.max_uses +
 				(i.used_by.length ? '<div class="dim small">' + i.used_by.map((n) => "@" + esc(n)).join(", ") + "</div>" : "") + '</td><td class="small">' + (i.created_by ? "@" + esc(i.created_by) : '<span class="dim">script</span>') +
 				'</td><td class="small dim">' + esc(when(i.created_at)) + (i.expires_at ? "<br>until " + esc(when(i.expires_at)) : "") + "</td><td>" +
-				(state(i) === "open" && i.code ? '<button class="btn" data-copy="' + esc(i.code) + '">Copy link</button>' + (can("revokeInvite") ? ' <button class="btn danger" data-revoke="' + esc(i.code) + '">Revoke</button>' : "") : "") + "</td></tr>").join("") +
+				(state(i) === "open" && i.code ? '<button class="btn" data-copy="' + esc(i.code) + '">Copy link</button>' + allow("revokeInvite", ' <button class="btn danger" data-revoke="' + esc(i.code) + '">Revoke</button>') : "") + "</td></tr>").join("") +
 			"</table></div>";
 		bindTabs();
 		if ($("#qsave")) $("#qsave").onclick = () => act(() => api("saveInviteQuota", { enabled: $("#qon").checked, per_month: Number($("#qn").value), uses: Number($("#qu").value), min_age_days: Number($("#qa").value) }), "Saved").then(route);
@@ -1069,77 +1117,77 @@ const RENDER = {
 			'<div class="box"><h2>Sign-up</h2>' +
 			Object.entries(modes).map(([k, v]) => '<label class="row" style="margin:6px 0"><input type="radio" name="mode" value="' + k + '"' + (s.signup_mode === k ? " checked" : "") + dis + "> " + esc(v) + "</label>").join("") +
 			'<div class="field" style="margin-top:12px"><label>New accounts follow (handles, comma separated)</label><input id="follows" value="' + esc(s.default_follows.map((h) => "@" + h).join(", ")) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveFollows">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveFollows">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Name and source</h2><div class="field"><label>Instance name (page titles, text in the app, sign-in page, mail)</label><input id="name" maxlength="30" value="' + esc(s.instance_name) + '"' + dis + "></div>" +
 			'<div class="field"><label>Source code link (AGPL-3.0: shown on the sign-in pages)</label><input id="source" value="' + esc(s.source_url) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveName">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveName">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Features</h2><p class="dim small">Switched-off features disappear from everyone\'s menus and composer.</p>' +
 			Object.entries(features).map(([k, label]) => '<label class="row" style="margin:6px 0"><input type="checkbox" data-feature="' + k + '"' + (s.features[k] ? " checked" : "") + dis + "> " + esc(label) + "</label>").join("") +
-			(admin ? '<button class="btn primary" id="saveFeatures" style="margin-top:8px">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveFeatures" style="margin-top:8px">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Upload limits</h2>' +
 			[["image_mb", "Image size, MB"], ["video_mb", "Video size, MB"], ["video_seconds", "Video length, seconds"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" data-limit="' + k + '" value="' + esc(s.limits[k]) + '"' + dis + "></div>").join("") +
-			(admin ? '<button class="btn primary" id="saveLimits">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveLimits">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Rate limits</h2><p class="dim small">Requests per account per 15 minutes. Staff have no limits. Hitting one shows the app\'s "try again later" and a line in the server log.</p>' +
 			[["read", "Any request (a page load is about 30)"], ["endpoint", "Any one kind of request (a stuck page loses only that)"], ["write", "Other changes (settings, deletes, lists…)"], ["post", "Posts and replies"], ["engage", "Likes, reposts, bookmarks, follows"], ["dm", "Messages sent"], ["upload", "Files uploaded"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" min="1" data-rate="' + k + '" value="' + esc(s.rate_limits[k]) + '"' + dis + "></div>").join("") +
-			(admin ? '<button class="btn primary" id="saveRates">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveRates">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Post length</h2><p class="dim small">The longest post each badge may write, counted like X counts (links 23, Chinese, Japanese, Korean and emoji 2). Past 280 a post shows a preview with "Show more". Changes reach the composer on its next page load.</p>' +
 			[["none", "No badge"], ["blue", "Blue check"], ["business", "Gold check (organisations)"], ["government", "Grey check (government organisations and officials)"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" min="1" data-postlen="' + k + '" value="' + esc(s.post_limits[k]) + '"' + dis + "></div>").join("") +
-			(admin ? '<button class="btn primary" id="savePostLen">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="savePostLen">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Daily caps</h2><p class="dim small">The most posts and replies one account may make in any 24 hours. Staff have no caps.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="capsOn"' + (s.daily_caps.enabled ? " checked" : "") + dis + "> Cap posts and replies per day</label>" +
 			'<div class="field"><label>Posts a day</label><input type="number" min="1" id="capPosts" value="' + esc(s.daily_caps.posts) + '"' + dis + "></div>" +
 			'<div class="field"><label>Replies a day</label><input type="number" min="1" id="capReplies" value="' + esc(s.daily_caps.replies) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveCaps">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveCaps">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Announcement</h2><p class="dim small">A banner above everyone\'s timeline until they close it. Saving new text shows it again to everyone.</p>' +
 			'<div class="field"><label>Text (empty removes the banner)</label><textarea id="annText" maxlength="500"' + dis + ">" + esc(s.announcement.text) + "</textarea></div>" +
 			'<div class="field"><label>Buttons (up to 4, each opens its link in a new tab)</label><div id="annButtons" class="ann-buttons">' +
 			((s.announcement.buttons && s.announcement.buttons.length) ? s.announcement.buttons : s.announcement.link ? [{ label: "More", url: s.announcement.link }] : []).map((b) => annRow(b, dis)).join("") +
-			"</div>" + (admin ? '<button class="btn" id="addAnnBtn" type="button" style="margin-top:8px">Add button</button>' : "") + "</div>" +
-			(admin ? '<button class="btn primary" id="saveAnn">Save</button>' : "") + "</div>" +
+			"</div>" + (admin ? '<button class="btn" id="addAnnBtn" type="button" style="margin-top:8px">Add button</button>' : need("admin")) + "</div>" +
+			(admin ? '<button class="btn primary" id="saveAnn">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Rules</h2><p class="dim small">Shown at <a href="/rules" target="_blank">/rules</a> and linked from sign-up. A blank line starts a new paragraph.</p>' +
 			'<textarea id="rules" style="min-height:160px"' + dis + ">" + esc(s.rules) + "</textarea>" +
-			(admin ? '<button class="btn primary" id="saveRules" style="margin-top:8px">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveRules" style="margin-top:8px">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Maintenance</h2><p class="dim small">While it\'s on, everyone except staff sees this message instead of the site.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="maint"' + (o.maintenance ? " checked" : "") + dis + "> Maintenance mode</label>" +
 			'<div class="field"><label>Message</label><input id="maintMsg" maxlength="500" value="' + esc(o.message) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Blocked phrases</h2><p class="dim small">Posts, articles, profiles, poll choices, image descriptions, lists and communities containing any of these are refused. One per line; case, look-alike letters from other alphabets and invisible characters are ignored.</p>' +
 			'<textarea id="blocked"' + dis + ">" + esc(o.blocked_phrases.join("\n")) + "</textarea>" +
-			(admin ? '<button class="btn primary" data-save-ops style="margin-top:8px">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" data-save-ops style="margin-top:8px">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Blocked names</h2><p class="dim small">No handle, display name, bio, location or website may contain these. Sign-up with one is refused; an account that puts one in its profile is suspended at once (staff are only refused). Poll choices, image descriptions, lists and communities with one are refused. Case, accents, look-alike letters from other alphabets, separators, digits for letters (n1gg3r) and repeated letters are ignored; in a bio and the other longer fields words are read one at a time. One per line.</p>' +
 			'<textarea id="blockedNames"' + dis + ">" + esc((o.blocked_names || []).join("\n")) + "</textarea>" +
-			(admin ? '<div class="row" style="margin-top:8px"><button class="btn primary" data-save-ops>Save</button><button class="btn" id="checkNames">Check existing accounts</button></div><div id="nameHits"></div>' : "") + "</div>" +
+			(admin ? '<div class="row" style="margin-top:8px"><button class="btn primary" data-save-ops>Save</button><button class="btn" id="checkNames">Check existing accounts</button></div><div id="nameHits"></div>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Automod</h2><p class="dim small">Slurs, explicit hate, transphobia and abuse such as "kill yourself" are refused in posts, profiles, names, polls, image descriptions, lists, communities, articles and notes. Each refusal is a strike the account can appeal. Reclaimed queer words used without an attack and NSFW text are left alone. DMs are end-to-end encrypted, so they can\'t be read.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="amOn"' + (am.enabled ? " checked" : "") + dis + "> Strike accounts automatically</label>" +
 			'<div class="field"><label>Strikes count for (days)</label><input id="amDays" type="number" min="1" max="3650" value="' + esc(am.strike_days) + '"' + dis + "></div>" +
 			'<div class="field"><label>Steps, one per strike: 0 is a warning, a number is hours suspended, -1 is permanent</label><input id="amLadder" value="' + esc(am.ladder.join(", ")) + '"' + dis + "></div>" +
 			'<div class="field"><label>Second chances a week: refused content that doesn\'t count as a strike, 0 for none</label><input id="amChances" type="number" min="0" max="100" value="' + esc(am.second_chances ?? 5) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveAutomod">Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveAutomod">Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Import from X</h2><p class="dim small">While the Import from X feature is on, who may bring their posts over from an X archive. Staff accounts skip both. An import waiting for approval is deleted after a week.</p>' +
 			'<div class="field"><label>From account age (days, 0 for any)</label><input id="aiDays" type="number" min="0" max="3650" value="' + esc(String(s.archive_import.min_age_days)) + '"' + dis + "></div>" +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="aiApproval"' + (s.archive_import.approval ? " checked" : "") + dis + "> Staff approve each import before it starts</label>" +
-			(admin ? '<button class="btn primary" id="saveArchiveImport">Save</button>' : "") +
-			(can("archiveImports") ? '<h2 class="small" style="margin-top:16px">Waiting for approval</h2><div id="aiPending" class="dim small">Loading…</div>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" id="saveArchiveImport">Save</button>' : need("admin")) +
+			(allow("archiveImports", '<h2 class="small" style="margin-top:16px">Waiting for approval</h2><div id="aiPending" class="dim small">Loading…</div>')) + "</div>" +
 
 			'<div class="box"><h2>Trends</h2><div class="field"><label>Hidden hashtags, one per line</label><textarea id="hiddenTrends"' + dis + ">" + esc(o.hidden_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			'<div class="field"><label>Promoted hashtags, shown first</label><textarea id="promotedTrends"' + dis + ">" + esc(o.promoted_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			'<div class="row"><div class="field"><label>People needed before a hashtag trends</label><input id="trendPeople" type="number" min="1" max="1000" value="' + esc(String(o.trend_min_people ?? 3)) + '"' + dis + "></div>" +
 			'<div class="field"><label>Days an account must exist to count</label><input id="trendDays" type="number" min="0" max="365" value="' + esc(String(o.trend_min_account_days ?? 3)) + '"' + dis + "></div></div>" +
 			'<p class="dim small">Each person counts once per hashtag, and accounts that last signed in from the same address count as one person.</p>' +
-			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : need("admin")) + "</div>" +
 			'<div class="box"><h2>Pinned post</h2><p class="dim small">Shown at the top of everyone\'s home timeline. Paste a post\'s link or id; empty unpins.</p>' +
 			'<div class="field"><input id="pin" value="' + esc(o.global_pin || "") + '" placeholder="https://…/status/123"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div>" +
+			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : need("admin")) + "</div>" +
 			"</div>" +
 			"<h2>Logo and icons</h2><p class=\"dim small\">PNG, JPEG or WebP, up to 2 MB. Each replaces the shipped image of the same name.</p>" +
 			'<div class="grid2">' + Object.entries(slots).map(([slot, label]) =>
 				'<div class="box"><h2 class="small">' + esc(label) + '</h2><div style="background:' + (slot.endsWith("light") ? "#fff" : "#000") + ';border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;place-items:center;min-height:80px">' +
 				'<img alt="" style="max-width:100%;max-height:60px" src="/public/' + slot + ".png?t=" + Date.now() + '"></div>' +
-				'<div class="row" style="margin-top:10px">' + (admin ? '<label class="btn">Upload<input type="file" accept="image/png,image/jpeg,image/webp" data-slot="' + slot + '" hidden></label>' : "") +
-				(admin && branding[slot] ? '<button class="btn" data-reset="' + slot + '">Use the default</button>' : "") +
+				'<div class="row" style="margin-top:10px">' + (admin ? '<label class="btn">Upload<input type="file" accept="image/png,image/jpeg,image/webp" data-slot="' + slot + '" hidden></label>' : need("admin")) +
+				(admin ? (branding[slot] ? '<button class="btn" data-reset="' + slot + '">Use the default</button>' : "") : "") +
 				'<span class="dim small">' + (branding[slot] ? "uploaded" : "default") + "</span></div></div>").join("") + "</div>";
 
 		const save = (body, done) => act(() => api("saveSettings", body), done).then(route);
@@ -1234,12 +1282,12 @@ const RENDER = {
 	async automod(main) {
 		main.innerHTML = '<h1>Automod</h1><p class="dim">New posts and profiles are checked as they\'re written. This looks through what was there before: visible posts, newest first, and every profile. Nothing happens to what it finds until you act. Settings &gt; Automod holds the strike ladder.</p>' +
 			'<div class="bar"><button class="btn primary" id="scan">Scan</button><span class="dim small" id="scanState"></span></div><div id="hits"></div>' +
-			(can("heldIdentities") ? '<h2>Held after deletion</h2><p class="dim small">When a suspended account is deleted, its handles, email and recent addresses stay here, so nobody can take the handle or a look-alike of it, and sign-ups from that email or those addresses are refused. Handles of suspended accounts that still exist are held without being listed.</p><div id="held"></div>' : "");
+			(allow("heldIdentities", '<h2>Held after deletion</h2><p class="dim small">When a suspended account is deleted, its handles, email and recent addresses stay here, so nobody can take the handle or a look-alike of it, and sign-ups from that email or those addresses are refused. Handles of suspended accounts that still exist are held without being listed.</p><div id="held"></div>'));
 		const drawHeld = async () => {
 			const { held } = await api("heldIdentities");
 			$("#held").innerHTML = held.length
 				? '<div class="scroll"><table class="table"><tr><th>Kind</th><th>Value</th><th>Why</th><th></th></tr>' + held.map((h, i) => "<tr><td>" + esc(h.kind) + '</td><td class="code">' + esc(h.value) + '</td><td class="small dim">' + esc(h.reason) + " · " + esc(when(h.created_at)) + "</td><td>" +
-					(can("releaseIdentity") ? '<button class="btn" data-release="' + i + '">Release</button>' : "") + "</td></tr>").join("") + "</table></div>"
+					allow("releaseIdentity", '<button class="btn" data-release="' + i + '">Release</button>') + "</td></tr>").join("") + "</table></div>"
 				: '<div class="empty">Nothing held.</div>';
 			$("#held").querySelectorAll("[data-release]").forEach((b) => b.onclick = () => {
 				const h = held[Number(b.dataset.release)];
@@ -1301,12 +1349,6 @@ async function refreshCounts() {
 		b.querySelector(".count")?.remove();
 		if (n) b.insertAdjacentHTML("beforeend", '<span class="count">' + n + "</span>");
 	}
-	// a shut group still shows what waits inside it
-	document.querySelectorAll("nav .ghead").forEach((h) => {
-		h.querySelector(".count")?.remove();
-		const n = [...h.parentNode.querySelectorAll(".gitems .count")].reduce((sum, c) => sum + Number(c.textContent), 0);
-		if (n) h.firstChild.insertAdjacentHTML("afterend", '<span class="count">' + n + "</span>");
-	});
 }
 
 // which instances' accounts the Users and Organisations lists show (sessionStorage "userHome")
@@ -1356,63 +1398,63 @@ async function renderUser(main, id) {
 		// badges
 		'<div class="box"><h2>Badge and flag</h2><div class="field"><label>Verification badge</label><select id="badge"' + (can("setBadge") ? "" : " disabled") + ">" +
 		[["", "none"], ["blue", "blue"], ["business", "gold (organisation)"], ["government", "grey (government organisation)"], ["government_individual", "grey (government official)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.verified_type ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
-		'</select></div><div class="field"><label>Translator badge (a globe after the verification badge)</label><select id="translator"' + (canHere("setTranslator") ? "" : " disabled") + ">" +
+		'</select>' + (can("setBadge") ? "" : need("setBadge")) + '</div><div class="field"><label>Translator badge (a globe after the verification badge)</label><select id="translator"' + (canHere("setTranslator") ? "" : " disabled") + ">" +
 		[["", "none"], ["translator", "blue (translator)"], ["moderator", "gold (translator moderator)"], ["approver", "yellow (approver)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.translator ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
-		'</select></div><div class="field"><label>Profile label (under the name, where X shows "Parody account"; <a href="#badges">make one</a>)</label><select id="plabel"' + (can("setProfileLabel") ? "" : " disabled") + ">" +
+		'</select>' + (can("setTranslator") ? "" : need("setTranslator")) + '</div><div class="field"><label>Profile label (under the name, where X shows "Parody account"; <a href="#badges">make one</a>)</label><select id="plabel"' + (can("setProfileLabel") ? "" : " disabled") + ">" +
 		[["None", "none"], ["Parody", "Parody account"], ["Commentary", "Commentary account"], ["Fan", "Fan account"]].concat(labels.map((l) => [l.id, l.text])).map(([v, l]) => '<option value="' + esc(v) + '"' + ((u.label_id || u.parody_label || "None") === v ? " selected" : "") + ">" + esc(l) + "</option>").join("") +
-		'</select></div><div class="field"><label>Pride flag</label><div class="flags" id="flags">' +
+		'</select>' + (can("setProfileLabel") ? "" : need("setProfileLabel")) + '</div><div class="field"><label>Pride flag</label><div class="flags" id="flags">' +
 		[{ id: "", name: "none" }].concat(flags).map((f) => '<button type="button" title="' + esc(f.name) + '" data-flag="' + esc(f.id) + '" class="' + ((u.flag ?? "") === f.id ? "on" : "") + '"' + (can("setFlag") ? "" : " disabled") + ">" +
-			(f.id ? '<img alt="" src="/public/flag-' + esc(f.id) + '.svg">' : "none") + "</button>").join("") + "</div></div>" +
+			(f.id ? '<img alt="" src="/public/flag-' + esc(f.id) + '.svg">' : "none") + "</button>").join("") + "</div>" + (can("setFlag") ? "" : need("setFlag")) + "</div>" +
 		(u.decor ? '<div class="field"><label>Profile decor from Steam</label><div class="dim small">' +
 			esc([u.decor.profile && "game profile " + u.decor.profile.name, u.decor.theme && "theme " + u.decor.theme, u.decor.background && "background " + u.decor.background.name, u.decor.frame && "frame " + u.decor.frame.name].filter(Boolean).join(" · ")) +
-			"</div>" + (canHere("resetDecor") ? '<button class="btn" id="resetDecor" style="margin-top:6px">Reset decor</button>' : "") + "</div>" : "") +
+			"</div>" + (canHere("resetDecor") ? '<button class="btn" id="resetDecor" style="margin-top:6px">Reset decor</button>' : can("resetDecor") ? "" : need("resetDecor")) + "</div>" : "") +
 		'<div class="field"><label>Custom badges, in the order they show (<a href="#badges">make one</a>)</label>' +
 		(u.badge_ids.length ? '<div class="list">' + u.badge_ids.map((bid, i) => {
 			const b = badges.find((x) => x.id === bid);
 			return '<div class="row" style="margin-bottom:6px"><img alt="" src="/public/badge-' + esc(bid) + '.png" width="20" height="20" style="border-radius:3px"><span style="flex:1">' + esc(b?.name ?? "?") + "</span>" +
 				(can("setBadges") ? (i ? '<button class="btn" data-up="' + i + '" title="Show earlier"><span class="icon">arrow_upward</span></button>' : "") + '<button class="btn" data-drop="' + i + '" title="Remove"><span class="icon">close</span></button>' : "") + "</div>";
 		}).join("") + "</div>" : '<p class="dim small" style="margin:0">None.</p>') +
-		(can("setBadges") && badges.some((b) => !u.badge_ids.includes(b.id)) ? '<select id="addBadge"><option value="">Add a badge…</option>' + badges.filter((b) => !u.badge_ids.includes(b.id)).map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("") + "</select>" : "") +
+		(can("setBadges") ? (badges.some((b) => !u.badge_ids.includes(b.id)) ? '<select id="addBadge"><option value="">Add a badge…</option>' + badges.filter((b) => !u.badge_ids.includes(b.id)).map((b) => '<option value="' + esc(b.id) + '">' + esc(b.name) + "</option>").join("") + "</select>" : "") : need("setBadges")) +
 		'<p class="dim small" style="margin:4px 0 0">The first one fills X\'s badge slot (after an organisation\'s badge, if any); the rest and the flag follow it.</p></div>' +
-		('<div class="field"><label>Badge its affiliates wear</label><select id="orgBadge"' + (can("setOrgBadge") ? "" : " disabled") + ">" + badgeOptions(u.org_badge_id, "its profile picture") + "</select></div>") +
+		('<div class="field"><label>Badge its affiliates wear</label><select id="orgBadge"' + (can("setOrgBadge") ? "" : " disabled") + ">" + badgeOptions(u.org_badge_id, "its profile picture") + "</select>" + (can("setOrgBadge") ? "" : need("setOrgBadge")) + "</div>") +
 		"</div>" +
 		// standing
 		'<div class="box"><h2>Standing</h2><p class="dim small">Now: <b>' + esc(u.status) + "</b>" + (u.status_until ? " until " + esc(when(u.status_until)) : "") + "</p>" +
 		'<p class="dim small">Active strikes: <b>' + strikes + "</b>. The next strike " + (next_step < 0 ? "suspends for good" : next_step > 0 ? "suspends for " + next_step + " hours" : "is a warning") + ".</p>" +
 		'<div class="field"><label>Reason (kept in the audit log)</label><input id="reason" placeholder="optional"></div>' +
-		'<div class="field"><label>For</label><select id="for"' + (!can("setTemporaryStatus") || self ? " disabled" : "") + '><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select></div><div class="row">' +
+		'<div class="field"><label>For</label><select id="for"' + (!can("setTemporaryStatus") || self ? " disabled" : "") + '><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select>' + (can("setTemporaryStatus") || self ? "" : need("setTemporaryStatus")) + '</div><div class="row">' +
 		[["active", "Reinstate", ""], ["restricted", "Restrict", "Can read, can't post"], ["limited", "Limit", "Only followers see their posts"], ["suspended", "Suspend", "Signed out, hidden everywhere"]]
-			.map(([s, l, t]) => '<button class="btn' + (s === "suspended" ? " danger" : "") + '" data-status="' + s + '" title="' + esc(t) + '"' + (u.status === s || !can("setStatus") || self ? " disabled" : "") + ">" + l + "</button>").join("") +
+			.map(([s, l, t]) => '<button class="btn' + (s === "suspended" ? " danger" : "") + '" data-status="' + s + '" title="' + esc(t) + '"' + (u.status === s || !can("setStatus") || self ? " disabled" : "") + ">" + l + "</button>").join("") + (can("setStatus") || self ? "" : need("setStatus")) +
 		'</div><p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p></div>' +
 		// access
-		'<div class="box"><h2>Access</h2><div class="row">' + (canHere("resetPassword") ? '<button class="btn" id="reset">Reset password</button>' : "") + (canHere("signOut") ? '<button class="btn" id="signout">Sign out everywhere</button>' : "") +
-			(canHere("revokeApiTokens") ? '<button class="btn danger" id="revoketokens"' + (u.api_tokens ? "" : " disabled") + ">Revoke API tokens (" + u.api_tokens + ")</button>" : "") + '</div><div id="secret"></div>' +
-		'<label class="row" style="margin-top:14px"><input type="checkbox" id="notes-access"' + (u.notes_writer ? " checked" : "") + (canHere("setNotesAccess") ? "" : " disabled") + '>Community Notes writing access</label>' +
-		'<label class="row" style="margin-top:8px"><input type="checkbox" id="never-sensitive"' + (u.never_sensitive ? " checked" : "") + (can("setNeverSensitive") ? "" : " disabled") + '>Never mark their posts as sensitive</label>' +
-		(canHere("admin") ? '<div class="field" style="margin-top:14px"><label>Staff role</label><select id="role"><option value="">none</option>' + ["support", "moderator", "admin"].map((r) => '<option' + (u.role === r ? " selected" : "") + ">" + r + "</option>").join("") + "</select></div>" : "") +
-		(can("deleteUser") && !self ? '<div class="field" style="margin-top:14px"><label>Delete account (type @' + esc(u.screen_name) + ' to confirm)</label><div class="row"><input id="confirm" placeholder="' + esc(u.screen_name) + '"><button class="btn danger" id="delete">Delete forever</button></div></div>' : "") +
+		'<div class="box"><h2>Access</h2><div class="row">' + (canHere("resetPassword") ? '<button class="btn" id="reset">Reset password</button>' : can("resetPassword") ? "" : need("resetPassword")) + (canHere("signOut") ? '<button class="btn" id="signout">Sign out everywhere</button>' : can("signOut") ? "" : need("signOut")) +
+			(canHere("revokeApiTokens") ? '<button class="btn danger" id="revoketokens"' + (u.api_tokens ? "" : " disabled") + ">Revoke API tokens (" + u.api_tokens + ")</button>" : can("revokeApiTokens") ? "" : need("revokeApiTokens")) + '</div><div id="secret"></div>' +
+		'<label class="row" style="margin-top:14px"><input type="checkbox" id="notes-access"' + (u.notes_writer ? " checked" : "") + (canHere("setNotesAccess") ? "" : " disabled") + '>Community Notes writing access</label>' + (can("setNotesAccess") ? "" : need("setNotesAccess")) +
+		'<label class="row" style="margin-top:8px"><input type="checkbox" id="never-sensitive"' + (u.never_sensitive ? " checked" : "") + (can("setNeverSensitive") ? "" : " disabled") + '>Never mark their posts as sensitive</label>' + (can("setNeverSensitive") ? "" : need("setNeverSensitive")) +
+		(canHere("admin") ? '<div class="field" style="margin-top:14px"><label>Staff role</label><select id="role"><option value="">none</option>' + ["support", "moderator", "admin"].map((r) => '<option' + (u.role === r ? " selected" : "") + ">" + r + "</option>").join("") + "</select></div>" : can("admin") ? "" : need("admin")) +
+		(!self ? allow("deleteUser", '<div class="field" style="margin-top:14px"><label>Delete account (type @' + esc(u.screen_name) + ' to confirm)</label><div class="row"><input id="confirm" placeholder="' + esc(u.screen_name) + '"><button class="btn danger" id="delete">Delete forever</button></div></div>') : "") +
 		"</div>" +
 		// messages, private notes, sessions
 		'<div class="box"><h2>Messages to the account</h2><p class="dim small">' + (u.instance ? "It can't read messages from here. Its own instance's staff can message it." : "They arrive in its notifications. A warning or strike can be appealed.") + "</p>" +
 		(messages.length ? '<div class="list" style="margin-bottom:12px">' + messages.map((m) => '<p><span class="pill' + (m.kind === "strike" ? " suspended" : m.kind === "warning" ? " restricted" : "") + '">' + esc(m.kind) + "</span> " +
 			(m.revoked_at ? '<s class="dim">' + esc(m.body) + "</s>" : esc(m.body)) + '<br><span class="dim small">' + (m.actor ? "@" + esc(m.actor) + " · " : "") + esc(when(m.created_at)) + (m.read_at ? " · read" : "") + (m.revoked_at ? " · withdrawn" : "") + "</span>" +
-			(m.kind === "strike" && !m.revoked_at && can("revokeStrike") ? ' <button class="btn" data-unstrike="' + esc(m.id) + '">Withdraw</button>' : "") + "</p>").join("") + "</div>" : "") +
-		(canHere("sendStaffMessage") && !self ? '<div class="field"><select id="msgKind"><option value="message">Message</option><option value="warning">Warning</option><option value="strike">Strike</option></select></div>' +
-			'<div class="field"><textarea id="msgBody" maxlength="2000" placeholder="What they\'ll read"></textarea></div><label class="row" style="margin:6px 0"><input type="checkbox" id="msgEscalate" checked> A strike counts toward suspension</label><button class="btn primary" id="send">Send</button>' : "") + "</div>" +
+			(m.kind === "strike" && !m.revoked_at ? allow("revokeStrike", ' <button class="btn" data-unstrike="' + esc(m.id) + '">Withdraw</button>') : "") + "</p>").join("") + "</div>" : "") +
+		(!self ? (canHere("sendStaffMessage") ? '<div class="field"><select id="msgKind"><option value="message">Message</option><option value="warning">Warning</option><option value="strike">Strike</option></select></div>' +
+			'<div class="field"><textarea id="msgBody" maxlength="2000" placeholder="What they\'ll read"></textarea></div><label class="row" style="margin:6px 0"><input type="checkbox" id="msgEscalate" checked> A strike counts toward suspension</label><button class="btn primary" id="send">Send</button>' : can("sendStaffMessage") ? "" : need("sendStaffMessage")) : "") + "</div>" +
 		'<div class="box"><h2>Staff notes</h2><p class="dim small">Only staff see these.</p>' +
 		(notes.length ? '<div class="list" style="margin-bottom:12px">' + notes.map((n) => '<p style="white-space:pre-wrap">' + esc(n.body) + '<br><span class="dim small">@' + esc(n.actor ?? "?") + " · " + esc(when(n.created_at)) + "</span></p>").join("") + "</div>" : "") +
-		(can("addStaffNote") ? '<div class="field"><textarea id="noteBody" maxlength="2000" placeholder="Context for other staff"></textarea></div><button class="btn primary" id="addNote">Add note</button>' : "") + "</div>" +
+		(allow("addStaffNote", '<div class="field"><textarea id="noteBody" maxlength="2000" placeholder="Context for other staff"></textarea></div><button class="btn primary" id="addNote">Add note</button>')) + "</div>" +
 		(handles.length ? '<div class="box"><h2>Handle history</h2><div class="list">' + handles.map((h) => "<p>@" + esc(h.old_name) + " → @" + esc(h.new_name) + ' <span class="dim small">' + esc(when(h.changed_at)) + "</span></p>").join("") + "</div></div>" : "") +
 		'<div class="box"><h2>Sessions</h2>' + (sessions === null ? '<p class="dim small">Hidden: this account is staff at your level or above.</p>'
 			: sessions.length ? '<div class="list">' + sessions.slice(0, 10).map((s) => "<p>" + esc(browser(s.user_agent)) + (s.current ? ' <span class="pill staff">you, now</span>' : "") +
 				'<br><span class="dim small">' + (s.ip ? esc(s.ip) + " · " : "") + "signed in " + esc(when(s.created_at)) + " · last active " + esc(when(s.last_seen_at)) + "</span>" +
-				(s.current || !can("revokeSession") ? "" : ' <button class="btn" data-session="' + esc(s.id) + '">Sign out</button>') + "</p>").join("") +
+				(s.current ? "" : allow("revokeSession", ' <button class="btn" data-session="' + esc(s.id) + '">Sign out</button>')) + "</p>").join("") +
 				(sessions.length > 10 ? '<p class="dim small">and ' + (sessions.length - 10) + ' older (Access → Sign out everywhere ends them all)</p>' : "") + "</div>"
 			: '<p class="dim small">Not signed in anywhere.</p>') + "</div>" +
 		"</div>" +
 		// organisation
-		('<h2>Affiliates</h2>' + (canHere("addAffiliate") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : "") +
-			(affiliates.length ? '<div class="scroll"><table class="table">' + affiliates.map((a) => '<tr><td>' + person(a) + "</td><td>" + (can("removeAffiliate") ? '<button class="btn danger" data-unaff="' + esc(a.id) + '">Remove</button>' : "") + "</td></tr>").join("") + "</table></div>" : '<div class="empty">No affiliates yet.</div>')) +
+		('<h2>Affiliates</h2>' + (canHere("addAffiliate") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : can("addAffiliate") ? "" : need("addAffiliate")) +
+			(affiliates.length ? '<div class="scroll"><table class="table">' + affiliates.map((a) => '<tr><td>' + person(a) + "</td><td>" + allow("removeAffiliate", '<button class="btn danger" data-unaff="' + esc(a.id) + '">Remove</button>') + "</td></tr>").join("") + "</table></div>" : '<div class="empty">No affiliates yet.</div>')) +
 		(alts?.length ? '<h2>Seen from the same addresses</h2><p class="dim small">Accounts that signed in from an address this one used in the last 90 days. Shared networks put strangers here too.</p><p>' + alts.map((a) => '<a href="#user/' + esc(a.id) + '">@' + esc(a.screen_name) + "</a>" + (a.status !== "active" ? ' <span class="pill ' + esc(a.status) + '">' + esc(a.status) + "</span>" : "")).join(", ") + "</p>" : "") +
 		(invited.length ? "<h2>Invited</h2><p>" + invited.map((i) => '<a href="#user/' + esc(i.id) + '">@' + esc(i.screen_name) + "</a>").join(", ") + "</p>" : "") +
 		"<h2>History</h2>" + (log.length ? '<table class="table">' + log.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>" + (e.automatic ? "automod" : "@" + esc(e.actor ?? "?")) + " " + esc(e.action.replace(/_/g, " ")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</table>" : '<div class="empty">No staff actions yet.</div>');
@@ -1483,23 +1525,34 @@ async function renderUser(main, id) {
 		$("#main").innerHTML = '<div class="empty">' + esc(e.message) + ' <a href="/home">Back to {{instance}}</a></div>';
 		return;
 	}
-	const item = (k) => '<button data-page="' + k + '"><span class="icon">' + PAGES[k].icon + "</span>" + esc(PAGES[k].title) + "</button>";
-	$("#nav").insertAdjacentHTML("beforeend", GROUPS.map(([title, keys]) => {
-		const shown = keys.filter((k) => !PAGES[k].needs || can(PAGES[k].needs));
-		if (!shown.length) return "";
-		return '<div class="group' + (title ? "" : " solo") + '">' +
-			(title ? '<button class="ghead" aria-expanded="false"><span>' + esc(title) + '</span><span class="icon">expand_more</span></button>' : "") +
-			'<div class="gitems">' + shown.map(item).join("") + "</div></div>";
-	}).join("") +
-		'<div class="end">' +
-		(me.superadmin_home ? '<button onclick="location.href=\'/federation/superadmin\'"><span class="icon">shield_person</span>Superadmin</button>' : "") +
-		'<button onclick="location.href=\'/home\'"><span class="icon">arrow_back</span>Back to {{instance}}</button>' +
-		'<div class="who">@' + esc(me.screen_name) + " · " + esc(me.superadmin ? "superadmin" : me.role) + "</div></div>");
-	document.querySelectorAll("nav [data-page]").forEach((b) => b.onclick = () => go(b.dataset.page));
-	document.querySelectorAll("nav .ghead").forEach((h) => h.onclick = () => {
-		const g = h.parentNode, on = !g.classList.contains("open");
-		document.querySelectorAll("nav .group").forEach((x) => openGroup(x, on && x === g));
+	const GROUPS = [
+		["", ["overview"]],
+		["Moderation", ["reports", "appeals", "posts", "automod", "articles", "media"]],
+		["Accounts", ["users", "orgs", "invites"]],
+		["Content", ["badges", "stickers", "hashflags", "topics", "cards"]],
+		["Instance", ["switches", "email", "apps", "oauth", "federation", "settings", "errors"]],
+		["Staff", ["permissions", "security", "backups", "client", "audit"]],
+	];
+	const item = (k) => {
+		const p = PAGES[k];
+		if (!p || (p.needs && !can(p.needs))) return "";
+		return '<button data-page="' + k + '" data-find="' + esc(p.title.toLowerCase()) + '"><span class="icon">' + p.icon + "</span><span>" + esc(p.title) + "</span></button>";
+	};
+	const groups = GROUPS.map(([title, keys]) => {
+		const buttons = keys.map(item).join("");
+		if (!buttons) return "";
+		return '<section data-group>' + (title ? '<div class="navgroup">' + esc(title) + "</div>" : "") + buttons + "</section>";
+	}).join("");
+	$("#nav").insertAdjacentHTML("beforeend", '<label class="navsearch"><span class="icon">search</span><input id="navq" type="search" placeholder="Search admin" aria-label="Search admin"></label>' + groups +
+		(me.superadmin_home ? '<button data-find="superadmin" onclick="leaveTo(\'/federation/superadmin\')"><span class="icon">shield_person</span><span>Superadmin</span></button>' : "") +
+		'<button data-find="home" onclick="leaveTo(\'/home\')"><span class="icon">arrow_back</span><span>Back to {{instance}}</span></button>' +
+		'<div class="who">@' + esc(me.screen_name) + " · " + esc(me.superadmin ? "superadmin" : me.role) + "</div>");
+	$("#navq").addEventListener("input", () => {
+		const q = $("#navq").value.trim().toLowerCase();
+		document.querySelectorAll("#nav [data-find]").forEach((el) => { el.hidden = !!q && el.getAttribute("data-find").indexOf(q) < 0; });
+		document.querySelectorAll("#nav [data-group]").forEach((g) => { g.hidden = !!q && ![...g.querySelectorAll("[data-find]")].some((el) => !el.hidden); });
 	});
+	document.querySelectorAll("nav [data-page]").forEach((b) => b.onclick = () => go(b.dataset.page));
 	refreshCounts();
 	route();
 })();

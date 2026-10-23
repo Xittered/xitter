@@ -76,7 +76,7 @@ function homePage(req: Request, viewer: Viewer, message = "") {
 
 export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer | undefined): Promise<Response> {
 	const u = await localSuperadmin(viewer);
-	if (!u || !viewer) return new Response("not found", { status: 404 });
+	if (!u || !viewer) return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
 	if (req.method !== "POST") return homePage(req, viewer);
 	if (req.headers.get("sec-fetch-site") && req.headers.get("sec-fetch-site") !== "same-origin") return new Response("This request came from another site.", { status: 403 });
 	const form = await req.formData().catch(() => new FormData());
@@ -119,7 +119,7 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 		);
 		return homePage(req, viewer, `Sent. ${results.join(", ") || "No other instance to tell."} Instances that missed it pick it up within a minute.`);
 	}
-	return new Response("not found", { status: 404 });
+	return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
 export async function endSuperadminVisits() {

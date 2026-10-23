@@ -3,10 +3,17 @@
 // screens, and the announcement banner. CSS where an element has a stable link
 // or test id, a small script where only its text tells it apart.
 
-import { FEDERATION_ON } from "./federation";
+import { FEDERATION_ON, INSTANCE_ID } from "./federation";
 import { sql } from "./db";
 import { isOrganizationSql } from "./users";
 import { type Feature, feature, settings } from "./settings";
+import type { Viewer } from "./auth";
+import { staffGate } from "./staff-access";
+import { superadminOf } from "./superadmins";
+import { FRAMED_ROOTS, XITTER_SECTION } from "./owned-paths";
+import { publicMenuLinks, type ClientPayload, type MenuFacts, type MenuLink } from "./xitter-menu";
+
+export type { MenuLink };
 
 const links = (...hrefs: string[]) => hrefs.map((h) => `a[href="${h}"],a[href^="${h}?"]`);
 const ids = (...testIds: string[]) => testIds.map((t) => `[data-testid="${t}"]`);
@@ -48,9 +55,20 @@ const ALWAYS = [
 	'nav[aria-label="Footer"] > div:has(> a[href^="/i/jf/stories"])',
 ];
 
+// the frame over the column the client leaves empty (TIDY_SCRIPT's sync)
+export const FRAME_CSS = `#xitter-frame{position:fixed;display:none;visibility:hidden;border:0;margin:0;padding:0;z-index:0;background:transparent;color-scheme:normal}
+html[data-xitter-host] #xitter-frame{display:block}
+html[data-xitter-host] #xitter-frame[data-ready]{visibility:visible}
+html[data-xitter-host="pending"] #xitter-frame[data-ready]{visibility:hidden}
+html[data-xitter-host="settings"] [aria-label="Section details"]>*{display:none}
+html[data-xitter-host="pending"] main[role="main"]>*,html[data-xitter-host="settings-phone"] main[role="main"]>*,html[data-xitter-host="admin"] main[role="main"]>*{visibility:hidden}
+html[data-xitter-host="settings-phone"] [data-testid="TopNavBar"]{display:none}
+html[data-xitter-host],html[data-xitter-host] body{overflow:hidden}`;
+
 export function hideCss(): string {
 	const off = (Object.keys(BY_FEATURE) as Feature[]).filter((f) => !feature(f)).flatMap((f) => BY_FEATURE[f]);
-	return `${[...ALWAYS, ...off].join(",")}{display:none!important}
+	return `${FRAME_CSS}
+${[...ALWAYS, ...off].join(",")}{display:none!important}
 #xitter-announcement{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;background:var(--xt-accent-fill,var(--xt-accent,#1d9bf0));color:#fff;font:15px TwitterChirp,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 #xitter-announcement .xa-body{flex:1;min-width:0;display:grid;gap:10px}
 #xitter-announcement .xa-text{white-space:pre-wrap;overflow-wrap:break-word}
@@ -61,57 +79,54 @@ export function hideCss(): string {
 #xitter-announcement button{border:0;background:none;color:#fff;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}`;
 }
 
-// Our own account pages in the side bar's More menu, for the accounts they concern:
-// invites while members can make them (member-invites.ts), the organisation
-// page for organisations, their affiliates and people they asked (org-manage.ts)
-const TICKET = "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5V10a2 2 0 0 0 0 4v3.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5V14a2 2 0 0 0 0-4V6.5zM5 7v1.8a4 4 0 0 1 0 6.4V17h14v-1.8a4 4 0 0 1 0-6.4V7H5z";
-// Material Symbols "code"
-const CODE = "M320-240 80-480l240-240 57 57-184 184 183 183-56 56Zm320 0-57-57 184-184-183-183 56-56 240 240-240 240Z";
-const MOVE = "M3 11h13.2l-4.6-4.6L13 5l7 7-7 7-1.4-1.4 4.6-4.6H3v-2z";
-const BUILDING = "M4 21V3h11v4h5v14H4zm2-2h3v-3h2v3h2V5H6v14zm9 0h3V9h-3v10zM8 7h3v2H8V7zm0 4h3v2H8v-2z";
-const SHIELD = "M12 1.5 3.5 5v6c0 5.2 3.6 10 8.5 11.5 4.9-1.5 8.5-6.3 8.5-11.5V5L12 1.5zm0 2.2 6.5 2.7V11c0 4.2-2.8 8.2-6.5 9.4-3.7-1.2-6.5-5.2-6.5-9.4V6.4L12 3.7zM11 7h2v6h-2V7zm0 8h2v2h-2v-2z";
-const ROBOT = "M11 2h2v3h5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5V2zM6 7v11h12V7H6zm3 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-6 5h6v1.5H9V15z";
-// Material Symbols "upload"
-const UPLOAD = "M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z";
-// Material Symbols "public"
-const PALETTE = "M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 32.5-156t88-127Q256-817 330-848.5T488-880q80 0 151 27.5t124.5 76q53.5 48.5 85 115T880-518q0 115-70 176.5T640-280h-74q-9 0-12.5 5t-3.5 11q0 12 15 34.5t15 51.5q0 50-27.5 74T480-80Zm0-400Zm-220 40q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43q0 26 17 43t43 17Zm120-160q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43q0 26 17 43t43 17Zm200 0q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43q0 26 17 43t43 17Zm120 160q26 0 43-17t17-43q0-26-17-43t-43-17q-26 0-43 17t-17 43q0 26 17 43t43 17ZM480-160q9 0 14.5-5t5.5-13q0-14-15-33t-15-57q0-42 29-67t71-25h70q66 0 113-38.5T800-518q0-121-92.5-201.5T488-800q-136 0-232 93t-96 227q0 133 93.5 226.5T480-160Z";
-const TONE = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 1.8v14.4a7.2 7.2 0 0 0 0-14.4z";
-const CAT = "M5 3.5 9.2 7.6A9 9 0 0 1 12 7.2a9 9 0 0 1 2.8.4L19 3.5V12a7 7 0 0 1-14 0V3.5Zm4.5 8.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm5 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z";
-const KEY = "M280-400q-33 0-56.5-23.5T200-480q0-33 23.5-56.5T280-560q33 0 56.5 23.5T360-480q0 33-23.5 56.5T280-400Zm0 160q-100 0-170-70T40-480q0-100 70-170t170-70q67 0 121.5 33t86.5 87h352l120 120-180 180-80-60-80 60-85-60h-47q-32 54-86.5 87T280-240Zm0-80q56 0 98.5-34t56.5-86h125l58 41 82-61 71 55 75-75-40-40H435q-14-52-56.5-86T280-640q-66 0-113 47t-47 113q0 66 47 113t113 47Z";
-const GLOBE = "M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-40-82v-78q-33 0-56.5-23.5T360-320v-40L168-552q-3 18-5.5 36t-2.5 36q0 121 79.5 212T440-162Zm276-102q41-45 62.5-100.5T800-480q0-98-54.5-179T600-776v16q0 33-23.5 56.5T520-680h-80v80q0 17-11.5 28.5T400-560h-80v80h240q17 0 28.5 11.5T600-440v120h40q26 0 47 15.5t29 40.5Z";
-// Every link is a tab on the account pages. `where` adds it to the client too:
-// the More menu, Settings > Your account, or both. The menu keeps only what
-// someone may need to act on; the rest live in Settings.
-export type MenuLink = { href: string; text: string; description: string; icon: string; viewBox?: string; where: "menu" | "settings" | "both" | "tabs" };
-export async function menuLinks(userId: string): Promise<MenuLink[]> {
-	const links: MenuLink[] = [];
+// The More menu and Settings get a subset of these. `where` says which.
+async function accountMenuFacts(userId: string): Promise<MenuFacts> {
 	const s = settings();
-	links.push({ href: "/account/apps", text: "Connected apps", description: "Review and remove apps authorized to use your account.", icon: CODE, viewBox: "0 -960 960 960", where: "settings" });
-	if (s.invite_quota.enabled && s.signup_mode === "invite")
-		links.push({ href: "/account/invites", text: "Invites", description: `Invite people you know to ${s.instance_name}.`, icon: TICKET, where: "both" });
-	// the menu is for organisations, and for the people in or invited to one
 	const [u] = await sql`select ${isOrganizationSql(sql`u`)}
 			or exists (select 1 from affiliations where user_id = u.id) or exists (select 1 from affiliation_requests where user_id = u.id) as org,
 		exists (select 1 from staff_messages where user_id = u.id and revoked_at is null) or exists (select 1 from moderation_appeals where user_id = u.id) as notices,
-		coalesce(u.verified_type in ('business', 'government', 'government_individual'), false) as gold
+		coalesce(u.verified_type in ('business', 'government', 'government_individual'), false) as gold, u.instance
 		from users u where u.id = ${userId}::bigint`;
-	if (u?.org) links.push({ href: "/account/organisation", text: "Organisation", description: "Manage affiliates, or answer an organisation that asked to add you.", icon: BUILDING, where: "both" });
-	if (u?.gold) links.push({ href: "/account/decor", text: "Profile decor", description: "Dress your profile with a theme, background and avatar frame from Steam.", icon: PALETTE, viewBox: "0 -960 960 960", where: "settings" });
-	links.push({ href: "/account/theme", text: "Theme", description: "Dim, a preset, or your own colours for the client.", icon: TONE, where: "settings" });
-	links.push({ href: "/account/decoration", text: "Avatar decoration", description: "Put cat ears or a decoration around your avatar.", icon: CAT, where: "both" });
-	links.push({ href: "/account/automation", text: "Automation", description: "Name the account that runs this one.", icon: ROBOT, where: "tabs" });
-	if (u?.notices) links.push({ href: "/account/notices", text: "Staff notices", description: `Messages, warnings and strikes from the ${s.instance_name} team, and your appeals.`, icon: SHIELD, where: "both" });
-	if (FEDERATION_ON) links.push({ href: "/account/instances", text: "Other instances", description: "Hide accounts and organisations from other instances.", icon: GLOBE, viewBox: "0 -960 960 960", where: "settings" });
-	links.push({ href: "/account/passkeys", text: "Passkeys", description: "Sign in with your fingerprint, face or screen lock instead of a password.", icon: KEY, viewBox: "0 -960 960 960", where: "settings" });
-	if (feature("archive_import")) links.push({ href: "/account/import", text: "Import from X", description: "Bring your posts, photos and videos over from your X archive.", icon: UPLOAD, viewBox: "0 -960 960 960", where: "settings" });
-	links.push({ href: "/account/migrate", text: "Move account", description: "Bring your account here from another instance, or take it to another one.", icon: MOVE, where: "settings" });
-	links.push({ href: "/account/api", text: "API", description: "Make tokens that let scripts and bots use your account.", icon: CODE, viewBox: "0 -960 960 960", where: "settings" });
-	links.push({ href: "/account/notes/appeals", text: "Note appeals", description: "Appeal a Community Note or review appeals as staff.", icon: SHIELD, where: "settings" });
-	return links;
+	return {
+		role: null,
+		localSuperadmin: false,
+		instance: u?.instance ?? null,
+		org: !!u?.org,
+		gold: !!u?.gold,
+		notices: !!u?.notices,
+		invitesOpen: !!(s.invite_quota.enabled && s.signup_mode === "invite"),
+		federation: FEDERATION_ON,
+		archiveImport: feature("archive_import"),
+		staffGate: null,
+		instanceName: s.instance_name,
+	};
+}
+
+export async function loadMenuFacts(req: Request, viewer: Viewer): Promise<MenuFacts> {
+	const facts = await accountMenuFacts(viewer.id);
+	const role = viewer.role ?? null;
+	return {
+		...facts,
+		role,
+		localSuperadmin: role === "admin" && !viewer.instance && !!superadminOf(INSTANCE_ID, viewer.screen_name, viewer.id),
+		staffGate: role ? await staffGate(req, viewer) : null,
+	};
+}
+
+export async function menuLinks(userId: string): Promise<MenuLink[]> {
+	return publicMenuLinks(await accountMenuFacts(userId));
 }
 
 // what the script needs to know, as window.__XITTER__.tidy
-export function tidyData(links: MenuLink[] = []) {
+const XITTER_ROW = {
+	href: XITTER_SECTION,
+	text: "Xitter",
+	description: "Theme, profile decor, apps, and the other things this instance adds.",
+	icon: "M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z",
+	viewBox: "0 0 24 24",
+};
+
+export function tidyData(links: MenuLink[] = [], staff?: ClientPayload["staff"]) {
 	const s = settings();
 	const menuItems = ["Embed post"];
 	if (!feature("lists")) menuItems.push("Add/remove from Lists");
@@ -129,6 +144,10 @@ export function tidyData(links: MenuLink[] = []) {
 		instance: s.instance_name,
 		source: s.source_url,
 		links,
+		xitter: XITTER_ROW,
+		// the pages framed into the client's Settings (owned-paths.ts)
+		framed: FRAMED_ROOTS,
+		...(staff ? { staff } : {}),
 	};
 }
 
@@ -178,6 +197,11 @@ export const FRESH_SCRIPT = `(function(){
 	};
 	var push=history.pushState;
 	history.pushState=function(s,t,u){
+		if(u&&ownedPath(u)){
+			// the admin panel's back arrow returns here
+			try{if(new URL(String(u),location.origin).pathname.indexOf("/admin")===0)sessionStorage.setItem("xitter-admin-from",location.pathname+location.search)}catch(e){}
+			location.assign(String(u));return;
+		}
 		if(u&&stale.length&&due(u)&&!/\\/(compose\\/post$|i\\/flow|i\\/bookmarks\\/add)/.test(String(u))){
 			stale=[];
 			location.assign(u);
@@ -188,6 +212,14 @@ export const FRESH_SCRIPT = `(function(){
 	window.addEventListener("popstate",function(){
 		if(stale.length&&due(location.href)){stale=[];location.reload()}
 	});
+	function ownedPath(u){
+		var path="";
+		try{path=new URL(String(u),location.origin).pathname}catch(e){return false}
+		if(path==="/account"||path==="/account/switch"||path.indexOf("/account/not_my_account/")===0)return false;
+		if(path.indexOf("/account/")===0)return true;
+		if(path==="/admin"||path.indexOf("/admin/")===0)return true;
+		return path==="/federation/superadmin"||path.indexOf("/federation/superadmin/")===0;
+	}
 })();`;
 
 // The dialog's "Forgot password?" has no screen behind it here: it goes to our
@@ -223,85 +255,16 @@ export const FORGOT_SCRIPT = `(function(){
 
 export const TIDY_SCRIPT = `(function(){
 	var T=(window.__XITTER__||{}).tidy||{menuItems:[]};
-	// Our account pages open inside Settings: /settings/xitter/<page> shows
-	// /account/<page> in a frame where the client's own screen would be (its
-	// "page doesn't exist" pane, which any settings path it doesn't know gets)
-	var OWN="/settings/xitter/";
-	function own(href){
-		var u=new URL(href,location.href);
-		return u.pathname.indexOf("/account/")===0?OWN+u.pathname.slice(9)+u.search:u.pathname+u.search+u.hash;
-	}
-	// the client follows the address on popstate, so this moves it without a reload
-	function go(path,replace){
-		if(location.pathname+location.search+location.hash===path)return;
-		history[replace?"replaceState":"pushState"]({},"",path);
-		window.dispatchEvent(new PopStateEvent("popstate",{state:{}}));
-	}
-	window.__xitterGo=function(p){go(own(p))};
-	// where the client puts a header over the pane (narrow screens) it says "Not
-	// found": it takes the page's name, and the page's own header goes
-	function heading(f){
-		var name=f.getAttribute("data-name"),d;
-		try{d=f.contentDocument}catch(e){}
-		if(!name||!d)return;
-		var h=[].find.call(document.querySelectorAll('h2[role="heading"]'),function(h){return h.hasAttribute("data-xitter-head")||h.textContent==="Not found"});
-		var bar=d.querySelector(".bar");
-		if(bar)bar.hidden=!!h;
-		if(!h)return;
-		h.setAttribute("data-xitter-head","");
-		// the text node itself, so the client still finds its own when it moves on
-		var leaf=[].find.call(h.querySelectorAll("span"),function(s){return !s.childElementCount&&s.firstChild&&s.firstChild.nodeType===3});
-		if(leaf&&leaf.firstChild.nodeValue!==name)leaf.firstChild.nodeValue=name;
-	}
-	function pane(){
-		var p=location.pathname,f=document.getElementById("xitter-pane");
-		if(p.indexOf(OWN)!==0){if(f)f.remove();return}
-		var want="/account/"+p.slice(OWN.length)+location.search;
-		var err=document.querySelector('[data-testid="error-detail"]');
-		if(f&&f.getAttribute("data-src")!==want){f.setAttribute("data-src",want);f.contentWindow.location.replace(want)}
-		if(f&&f.title&&document.title!==f.title)document.title=f.title;
-		if(f)heading(f);
-		if(!err)return;
-		err.style.display="none";
-		if(f&&f.parentNode===err.parentNode)return;
-		if(f)f.remove();
-		f=document.createElement("iframe");
-		f.id="xitter-pane";f.src=want;f.setAttribute("data-src",want);
-		f.style.cssText="display:block;width:100%;height:100vh;border:0;background:transparent";
-		f.addEventListener("load",function(){
-			var w=f.contentWindow,d;
-			try{d=f.contentDocument}catch(e){}
-			if(!d||!d.body)return;
-			var at=w.location.pathname+w.location.search;
-			// a form sent inside the frame can land outside our pages
-			if(w.location.pathname.indexOf("/account/")!==0){f.remove();go(at,true);return}
-			// a look saved on the theme page only reaches the client on a fresh load
-			if(w.location.pathname==="/account/theme"&&f.getAttribute("data-was")==="/account/theme"){location.reload();return}
-			f.setAttribute("data-was",w.location.pathname);
-			// or on another of ours: the address follows
-			f.setAttribute("data-src",at);
-			if(location.pathname+location.search!==own(at))history.replaceState(history.state,"",own(at));
-			f.setAttribute("data-name",d.title.split(" · ")[0]);
-			f.title=f.getAttribute("data-name")+" / "+T.instance;
-			document.title=f.title;
-			heading(f);
-			// the body, as the document is never shorter than the frame itself
-			var fit=function(){f.style.height=Math.ceil(d.body.getBoundingClientRect().height)+"px"};
-			fit();
-			if(window.ResizeObserver)new ResizeObserver(fit).observe(d.body);
-		});
-		err.parentNode.insertBefore(f,err);
-	}
 	// X's old sign-up flow talks to its servers; ours is in the dialog on the signed-out home page
 	function ownScreens(){
 		var p=location.pathname;
 		if(p.indexOf("/i/flow/signup")===0)location.replace("/");
 		// Settings > Email's "Update email address": our page, not X's flow
-		if(p.indexOf("/i/flow/add_email")===0)go(OWN+"email",true);
+		if(p.indexOf("/i/flow/add_email")===0)go("/account/email");
 		// Settings > Automation's "Set up account automation" (automation.ts)
-		if(p.indexOf("/i/flow/enable_automated_account")===0)go(OWN+"automation",true);
+		if(p.indexOf("/i/flow/enable_automated_account")===0)go("/account/automation");
 		// Settings > Security's passkey screens and X's add-a-passkey flow talk to its servers (passkeys.ts)
-		if(/passkey/i.test(p)&&(p.indexOf("/settings/")===0||p.indexOf("/i/flow/")===0))go(OWN+"passkeys",true);
+		if(/passkey/i.test(p)&&p.indexOf("/settings/xitter/")!==0&&(p.indexOf("/settings/")===0||p.indexOf("/i/flow/")===0))location.replace("/account/passkeys");
 	}
 	// the signed-out footer ends with X's copyright (its name already the
 	// instance's, patch.ts): the instance's name and source instead
@@ -319,7 +282,7 @@ export const TIDY_SCRIPT = `(function(){
 	// the More menu's "Settings and privacy" copied for each of our pages; the
 	// copy has none of the client's handlers, so it moves the client itself
 	function leave(a,href){
-		var to=own(href);
+		var to=routeFor(new URL(href,location.origin).pathname)||href;
 		a.setAttribute("href",to);a.setAttribute("data-xitter-link","");
 		a.addEventListener("click",function(e){
 			e.preventDefault();e.stopPropagation();
@@ -356,21 +319,239 @@ export const TIDY_SCRIPT = `(function(){
 			row.parentNode.insertBefore(box,row);
 		});
 	}
-	function accountRows(){
-		var rows=(T.links||[]).filter(function(l){return l.where==="settings"||l.where==="both"});
-		var screen=document.querySelector('[data-testid="accountScreen"]');
-		if(!rows.length||!screen||screen.querySelector("[data-xitter-link]"))return;
-		var last=screen.querySelector('a[href="/settings/deactivate"]');
-		var all=screen.querySelectorAll('a[data-testid="pivot"]');
-		var row=(last||all[all.length-1]||{}).parentNode;
-		if(!row)return;
-		var next=last?row:row.nextSibling;
-		rows.forEach(function(l){
-			var box=row.cloneNode(true);
-			copy(box.querySelector("a"),l);
-			row.parentNode.insertBefore(box,next);
-		});
+	function xitterRow(){
+		var spec=T.xitter;
+		if(!spec||document.querySelector("a[data-xitter-settings]"))return;
+		var account=document.querySelector('a[href="/settings/account"]');
+		var sample=document.querySelector('a[href="/settings/monetization"]')||document.querySelector('a[href="/settings/privacy_and_safety"]')||account;
+		var accountBox=account&&account.parentElement;
+		var sampleBox=sample&&sample.parentElement;
+		if(!accountBox||!sampleBox||!accountBox.parentElement||accountBox.parentElement!==sampleBox.parentElement)return;
+		var box=sampleBox.cloneNode(true);
+		var link=box.querySelector("a");
+		if(!link)return;
+		link.setAttribute("href",spec.href);
+		link.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();spa(spec.href)},true);
+		link.removeAttribute("data-testid");
+		link.removeAttribute("aria-selected");
+		link.setAttribute("data-xitter-settings","");
+		var title=link.querySelector("span");
+		if(title)title.textContent=spec.text;
+		accountBox.parentElement.insertBefore(box,accountBox.nextSibling);
 	}
+	// the Settings list marks the open section by a class on the row's wrapper
+	// and an extra child (its edge); the Xitter row copies them from a row the
+	// client marked, remembered for when no row is marked
+	function activeRow(){
+		var mine=document.querySelector("a[data-xitter-settings]"),wrap=mine&&mine.parentElement;
+		var marked=[].find.call(document.querySelectorAll('[data-testid="activeRoute"]'),function(w){return w!==wrap&&w.children.length>1});
+		var seen=null;
+		if(marked){seen={wrap:marked.className,edge:marked.lastElementChild.className};try{localStorage.setItem("xitter-active-row",JSON.stringify(seen))}catch(e){}}
+		if(!wrap)return;
+		var on=location.pathname===T.xitter.href||location.pathname.indexOf(T.xitter.href+"/")===0;
+		if(on===wrap.hasAttribute("data-on"))return;
+		wrap.toggleAttribute("data-on",on);
+		var edge=wrap.querySelector("[data-xitter-edge]");
+		if(!on){if(edge)edge.remove();if(wrap.dataset.plain!==undefined)wrap.className=wrap.dataset.plain;wrap.style.backgroundColor="";return}
+		if(!seen)try{seen=JSON.parse(localStorage.getItem("xitter-active-row")||"null")}catch(e){}
+		wrap.dataset.plain=wrap.className;
+		edge=document.createElement("div");edge.setAttribute("data-xitter-edge","");
+		if(seen){wrap.className=seen.wrap;edge.className=seen.edge}
+		wrap.appendChild(edge);
+		// a client that never marked a row this session may not have the classes' rules yet
+		if(getComputedStyle(wrap).backgroundColor==="rgba(0, 0, 0, 0)"){
+			var bg=getComputedStyle(document.body).backgroundColor;
+			wrap.style.backgroundColor=getComputedStyle(document.documentElement).getPropertyValue("--xt-hover")||(bg==="rgb(255, 255, 255)"?"rgb(247, 249, 249)":bg==="rgb(21, 32, 43)"?"rgb(30, 39, 50)":"rgb(22, 24, 28)");
+			edge.style.cssText="position:absolute;inset:0;pointer-events:none;border-right:2px solid var(--xt-accent,rgb(29, 155, 240))";
+		}
+	}
+	function staffNav(){
+		var spec=T.staff&&T.staff.nav;
+		if(!spec)return;
+		var nav=document.querySelector('header[role="banner"] nav');
+		var home=nav&&nav.querySelector('a[href="/home"]');
+		var sample=nav&&(nav.querySelector('a[href="/explore"]')||nav.querySelector('a[href="/notifications"]')||home);
+		if(!sample||nav.querySelector('a[href="/admin"]'))return;
+		var item=sample.parentElement&&sample.parentElement!==nav?sample.parentElement:sample;
+		var box=item.cloneNode(true);
+		var link=box.querySelector("a")||box;
+		link.setAttribute("href",spec.href);link.setAttribute("data-xitter-link","");
+		link.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();spa(spec.href)},true);
+		link.removeAttribute("data-testid");
+		link.removeAttribute("aria-current");
+		var active=location.pathname==="/admin"||location.pathname.indexOf("/admin/")===0;
+		var weight=active?"700":"400";
+		link.style.fontWeight=weight;
+		link.setAttribute("aria-label",spec.text);
+		var named=false;
+		[].forEach.call(link.querySelectorAll("span"),function(n){
+			n.style.fontWeight=weight;
+			if(named||n.childElementCount||!n.textContent.trim())return;
+			n.textContent=spec.text;
+			named=true;
+		});
+		var svg=link.querySelector("svg");
+		var path=svg&&svg.querySelector("path");
+		if(path){svg.setAttribute("viewBox","0 0 24 24");path.setAttribute("d","M12 1.5 3.5 5v6c0 5.2 3.6 10 8.5 11.5 4.9-1.5 8.5-6.3 8.5-11.5V5L12 1.5zm0 2.2 6.5 2.7V11c0 4.2-2.8 8.2-6.5 9.4-3.7-1.2-6.5-5.2-6.5-9.4V6.4L12 3.7z")}
+		var more=nav.querySelector('[data-testid="AppTabBar_More_Menu"]');
+		var before=more&&more.parentElement&&more.parentElement!==nav?more.parentElement:more;
+		var homeItem=home&&home.parentElement&&home.parentElement!==nav?home.parentElement:home;
+		var parent=homeItem&&homeItem.parentElement;
+		if(before&&parent&&before.parentElement===parent)parent.insertBefore(box,before);
+		else if(parent)parent.appendChild(box);
+		else item.parentElement.appendChild(box);
+	}
+	// Xitter's settings pages and the admin panel sit in the client's own
+	// layout: the client draws its nav and its Settings list, and the page
+	// (served at its /account or /admin address) fills a frame over the
+	// column the client leaves empty. Links in the frame move the client.
+	var ROOTS=T.framed||[];
+	function chrome(p){return ROOTS.some(function(r){return p===r||p.indexOf(r+"/")===0})}
+	function routeFor(p){
+		if(p==="/account/xitter")return "/settings/xitter";
+		if(p==="/federation/superadmin")return "/settings/xitter/superadmin";
+		if(p.indexOf("/account/")===0&&chrome(p))return "/settings/xitter/"+p.slice(9);
+		return null;
+	}
+	function framedFor(p){
+		if(p==="/settings/xitter")return "/account/xitter";
+		if(p==="/settings/xitter/superadmin")return "/federation/superadmin";
+		if(p.indexOf("/settings/xitter/")!==0)return null;
+		var page="/account/"+p.slice(17);
+		return chrome(page)?page:null;
+	}
+	var nativePush=History.prototype.pushState,nativeReplace=History.prototype.replaceState;
+	// the client's router follows popstate, so a pushed address plus one renders it
+	function spa(path){
+		if(path===location.pathname+location.search+location.hash)return;
+		if(framedFor(path.split("?")[0])||path.split("#")[0]==="/admin")document.documentElement.setAttribute("data-xitter-host","pending");
+		nativePush.call(history,{},"",path);
+		dispatchEvent(new PopStateEvent("popstate",{state:{}}));
+		sync();
+	}
+	function go(path){
+		var u;try{u=new URL(path,location.origin)}catch(e){return}
+		if(u.origin!==location.origin){location.assign(u.href);return}
+		var r=routeFor(u.pathname);
+		if(r){spa(r+u.search);return}
+		if(u.pathname==="/admin"&&T.staff&&T.staff.nav){spa("/admin"+u.hash);return}
+		if(u.pathname.indexOf("/account/")===0||u.pathname.indexOf("/admin")===0||u.pathname.indexOf("/federation/")===0||u.pathname.indexOf("/oauth/")===0||u.pathname.indexOf("/media/")===0){location.assign(u.href);return}
+		spa(u.pathname+u.search+u.hash);
+	}
+	window.__xitterGo=go;
+	var frame=null,frameAt="",look=null,lastOut="",watched=null,frameTitle="",frameLoaded=false;
+	var boot=window.__XITTER__||{},checkingLook=false,checkLookAgain=false,reloadingLook=false,appearanceAt="";
+	function reloadLook(){if(!reloadingLook){reloadingLook=true;location.reload()}}
+	function checkLook(){
+		if(!boot.csrf||!boot.savedLook||reloadingLook)return;
+		if(checkingLook){checkLookAgain=true;return}
+		checkingLook=true;
+		fetch("/i/api/xitter/theme",{credentials:"same-origin",cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(saved){
+			if(saved&&JSON.stringify(saved)!==JSON.stringify(boot.savedLook))reloadLook();
+		}).catch(function(){}).finally(function(){checkingLook=false;if(checkLookAgain){checkLookAgain=false;checkLook()}});
+	}
+	addEventListener("focus",checkLook);
+	addEventListener("pageshow",checkLook);
+	document.addEventListener("visibilitychange",function(){if(!document.hidden)checkLook()});
+	if(framedFor(location.pathname)||(location.pathname==="/admin"&&T.staff&&T.staff.nav))document.documentElement.setAttribute("data-xitter-host","pending");
+	// the client lays a column out again after a resize (the rail narrowing,
+	// the settings list dropping to one column) without adding nodes, so the
+	// frame follows the column and the rail by size, not only by mutations
+	var ro=window.ResizeObserver?new ResizeObserver(function(){sync()}):null;
+	function place(host,kind,phone){
+		var r=host.getBoundingClientRect();
+		var bar=document.querySelector('[data-testid="BottomBar"]'),bb=bar&&bar.getBoundingClientRect();
+		var bottom=bb&&bb.height>0&&bb.top>0?bb.top:innerHeight;
+		var top=Math.max(0,r.top),left=r.left+(host.clientLeft||0),width=host.clientWidth||r.width;
+		if(phone&&kind==="settings"){
+			// with one column (a phone, or a narrow window) the page takes
+			// over from the top, with its own header where X puts one on its
+			// single-column settings pages
+			top=0;
+		}
+		var css="left:"+left+"px;top:"+top+"px;width:"+width+"px;height:"+Math.max(0,bottom-top)+"px";
+		if(frame.getAttribute("data-at")!==css){frame.setAttribute("data-at",css);frame.style.cssText=css}
+		// X's chat button floats over the bottom right of the column: the
+		// page's floating save controls keep clear of it
+		var chat=document.querySelector('[data-testid="chat-drawer-main"]'),cr=chat&&chat.getBoundingClientRect(),dock=0;
+		if(cr&&cr.width&&cr.left<left+width&&cr.right>left&&cr.top<bottom&&cr.bottom>top)dock=Math.ceil(left+width-cr.left)+8;
+		try{var de=frame.contentDocument.documentElement;if(de.style.getPropertyValue("--xt-dock")!==dock+"px")de.style.setProperty("--xt-dock",dock+"px")}catch(e){}
+	}
+	function sync(){
+		var p=location.pathname,kind=null,want=null,f=framedFor(p);
+		var appearancePath=p+location.search+location.hash;
+		if(appearanceAt!==appearancePath){appearanceAt=appearancePath;checkLook()}
+		if(f){kind="settings";want=f+location.search}
+		else if(p==="/admin"&&T.staff&&T.staff.nav){kind="admin";want="/admin"+location.hash}
+		var html=document.documentElement;
+		if(!kind){
+			if(html.hasAttribute("data-xitter-host"))html.removeAttribute("data-xitter-host");
+			frameTitle="";
+			var here=p+location.search;
+			if(here!==lastOut){lastOut=here;try{sessionStorage.setItem("xitter-admin-from",here)}catch(e){}}
+			return;
+		}
+		var host=kind==="settings"?document.querySelector('[aria-label="Section details"]'):null;
+		var phone=!host;
+		if(kind==="settings"&&!host&&!document.querySelector('[data-testid="error-detail"]'))return;
+		host=host||document.querySelector('main[role="main"]');
+		if(!host)return;
+		if(ro&&watched!==host){
+			watched=host;ro.disconnect();ro.observe(host);
+			var rail=document.querySelector('header[role="banner"]');
+			if(rail)ro.observe(rail);
+		}
+		var mode=kind+(phone&&kind==="settings"?"-phone":"");
+		if(html.getAttribute("data-xitter-host")!==mode)html.setAttribute("data-xitter-host",mode);
+		// the frame waits for #layers, its home: moving an iframe reloads it
+		var layers=document.getElementById("layers");
+		if(!layers)return;
+		if(!frame){
+			frame=document.createElement("iframe");
+			frame.id="xitter-frame";
+			frame.title=kind==="admin"?"Admin":"Xitter";
+			frame.src=want;frameAt=want;
+			frame.addEventListener("load",function(){frameLoaded=true;sync()});
+		}else if(frameAt!==want){
+			var was=frameAt;frameAt=want;
+			if(kind==="admin"&&was.indexOf("/admin")===0){try{frame.contentWindow.location.hash=location.hash}catch(e){frame.src=want}}
+			else{frameLoaded=false;frame.removeAttribute("data-ready");try{frame.contentWindow.location.replace(want)}catch(e){frame.src=want}}
+		}
+		// first inside X's #layers, so its menus, dialogs and chat drawer (added
+		// after it) paint on top. Not beside #layers: the client renders that
+		// container again while it boots and drops nodes it does not own
+		if(frame.parentElement!==layers)layers.insertBefore(frame,layers.firstChild);
+		place(host,kind,phone);
+		if(frameLoaded&&!frame.hasAttribute("data-ready"))frame.setAttribute("data-ready","");
+		// the client titles a route it does not know "Page not found"
+		if(frameTitle&&document.title!==frameTitle)document.title=frameTitle;
+		// the client's empty-page screen is taller than the window; framed, the
+		// page itself never scrolls (the frame does)
+		if(scrollY)scrollTo(0,0);
+	}
+	addEventListener("scroll",function(){if(scrollY&&document.documentElement.hasAttribute("data-xitter-host"))scrollTo(0,0)},{passive:true});
+	addEventListener("popstate",function(){setTimeout(sync,0)});
+	addEventListener("resize",function(){sync()});
+	addEventListener("message",function(e){
+		if(e.origin!==location.origin||!frame||e.source!==frame.contentWindow||!e.data||!e.data.xitter)return;
+		var d=e.data;
+		if(d.type==="go")go(d.path);
+		else if(d.type==="back")go(sessionStorage.getItem("xitter-admin-from")||"/settings/xitter");
+		else if(d.type==="title"&&d.title){frameTitle=d.title;document.title=d.title}
+		else if(d.type==="look")checkLook();
+		else if(d.type==="hash"){
+			if(location.pathname==="/admin"&&location.hash!==d.hash){frameAt="/admin"+d.hash;nativeReplace.call(history,history.state,"","/admin"+d.hash)}
+		}else if(d.type==="page"){
+			// the frame moved on its own (a form, a redirect): the address follows
+			var u=new URL(d.path,location.origin),r=routeFor(u.pathname);
+			frameAt=u.pathname+u.search;
+			if(r&&r+u.search!==location.pathname+location.search)nativeReplace.call(history,history.state,"",r+u.search);
+			if(d.title){frameTitle=d.title;document.title=d.title}
+			// a saved theme or decoration: the client shows it after a reload
+			if(look===null)look=d.look;else if(d.look&&d.look!==look)reloadLook();
+			checkLook();
+		}
+	});
 	function twoFactorRow(){
 		var a=document.querySelector('a[href="/settings/account/login_verification"]');
 		if(!a)return;
@@ -382,7 +563,7 @@ export const TIDY_SCRIPT = `(function(){
 	// from staff) open in this one
 	var open=window.open;
 	window.open=function(u){
-		try{var a=new URL(u,location.href);if(a.origin===location.origin&&a.pathname.indexOf("/account/")===0){go(own(a.href));return null}}catch(e){}
+		try{var a=new URL(u,location.href);if(a.origin===location.origin&&a.pathname.indexOf("/account/")===0){go(a.href);return null}}catch(e){}
 		return open.apply(window,arguments);
 	};
 	// the code boxes cut a paste to their length before dropping what isn't a
@@ -435,10 +616,14 @@ export const TIDY_SCRIPT = `(function(){
 			else if(text&&text.indexOf("To identify notes that are helpful to a wide range of people, note statuses require agreement")===0)n.textContent="Notes appear on posts after at least three ratings, when two thirds rate them Helpful. Authors cannot rate their own notes.";
 		});
 		ownScreens();
-		pane();
 		footer();
 		menuLinks();
-		accountRows();
+		xitterRow();
+		activeRow();
+		var adm=document.querySelector('header[role="banner"] a[href="/admin"][data-xitter-link]');
+		if(adm){var w=location.pathname==="/admin"?"700":"400";if(adm.style.fontWeight!==w){adm.style.fontWeight=w;[].forEach.call(adm.querySelectorAll("span"),function(n){n.style.fontWeight=w})}}
+		staffNav();
+		sync();
 		twoFactorRow();
 		navWidth();
 		announce();
