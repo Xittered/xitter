@@ -79,6 +79,7 @@ jobs:
           bun scripts/test-api-token-security.ts
           bun scripts/test-oauth.ts
           bun scripts/test-money-api.ts
+          bun scripts/test-pronouns.ts
           bun scripts/test-api-badges.ts
           bun scripts/test-scheduled-threads.ts
           bun scripts/test-scheduled-quota.ts

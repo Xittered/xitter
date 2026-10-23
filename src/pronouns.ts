@@ -34,12 +34,18 @@ export async function pronounsFor(url: URL): Promise<Response> {
 	].slice(0, 100);
 	const out: Record<string, string> = {};
 	if (names.length) {
+		// the client asks with handle@instance for a remote account and reads the
+		// answer under that same key; a bare handle is a local one
 		const rows =
-			await sql`select lower(screen_name) as name, pronouns from users where lower(screen_name) = any(${sql.array(names, "TEXT")}) and pronouns is not null
-			and status <> 'suspended' and not instance_blocked`;
+			await sql`select lower(screen_name) as name, lower(instance) as instance, pronouns from users
+			where (lower(screen_name) = any(${sql.array(names, "TEXT")}) or lower(screen_name || '@' || instance) = any(${sql.array(names, "TEXT")}))
+			and pronouns is not null and status <> 'suspended' and not instance_blocked`;
 		for (const r of rows) {
 			const p = pronounsValue(r.pronouns);
-			if (p) out[r.name] = p;
+			if (!p) continue;
+			if (names.includes(r.name)) out[r.name] = p;
+			const remote = r.instance ? `${r.name}@${r.instance}` : null;
+			if (remote && names.includes(remote)) out[remote] = p;
 		}
 	}
 	return Response.json(out, {
