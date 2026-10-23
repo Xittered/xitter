@@ -19,6 +19,7 @@ import { bootAccentCss, bootCss, fontLinks, pageChromeCss, steamMotion, type Bac
 import { DEFAULT_ACCENT, swatches, themeColorOf, type Accent } from "./themes/presets";
 import { clientLook, themeForClient, type Look } from "./themes/validate";
 import { NOTICE_SCRIPT } from "./automod-notice";
+import { RESOURCE_NOTICE_SCRIPT } from "./notices";
 import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-picker";
 import { PRONOUNS_CSS, PRONOUNS_SCRIPT, pronounsData } from "./pronouns";
 import { PUBLIC_ORIGIN } from "./config";
@@ -285,6 +286,7 @@ ${signedIn ? THEME_SCRIPT : ""}
 ${signedIn ? DECOR_SCRIPT : ""}
 ${DECORATIONS_SCRIPT}
 ${signedIn ? NOTICE_SCRIPT : ""}
+${RESOURCE_NOTICE_SCRIPT}
 ${PWA_SCRIPT}`;
 let boot: { body: Buffer; path: string }[] | undefined;
 const boots = () =>
@@ -292,7 +294,7 @@ const boots = () =>
 		const body = Buffer.from(BOOT_SCRIPTS(signedIn));
 		return { body, path: `/i/xitter/boot-${Bun.hash(body).toString(36)}.js` };
 	}));
-const bootFor = (signedIn: boolean) => boots()[signedIn ? 1 : 0];
+export const bootFor = (signedIn: boolean) => boots()[signedIn ? 1 : 0];
 export const bootScript = (path: string): Buffer | undefined => boots().find((b) => b.path === path)?.body;
 
 // With no user the client boots signed out, for the sign-in dialog.

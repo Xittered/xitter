@@ -1,5 +1,7 @@
 // Steam Points Shop items: identity, file names, and the one fetch themes and decor share.
 
+import { CappedRead, readJson } from "./federation";
+
 const SHOP = "https://api.steampowered.com/ILoyaltyRewardsService/QueryRewardItems/v1/";
 
 export const FILE_RE = /^[0-9a-f]{40}\.(png|jpg|gif|webm|mp4)$/;
@@ -75,7 +77,12 @@ function toItem(d: any): Item | undefined {
 async function shop(params: URLSearchParams): Promise<any> {
 	const r = await fetch(`${SHOP}?${params}`, { signal: AbortSignal.timeout(10_000) });
 	if (!r.ok) throw new Error(`Steam answered ${r.status}`);
-	return (await r.json())?.response ?? {};
+	try {
+		return (await readJson(r, 2 * 1024 * 1024))?.response ?? {};
+	} catch (e) {
+		if (e instanceof CappedRead || e instanceof SyntaxError) return {};
+		throw e;
+	}
 }
 
 async function steamDefs(defids: number[]): Promise<any[]> {

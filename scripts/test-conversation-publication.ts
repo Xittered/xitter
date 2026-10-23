@@ -38,7 +38,7 @@ async function fixture() {
 		return typeof strings === "string" ? strings : query;
 	}
 	Object.assign(sql, { array: (array: any[]) => ({ array }), begin: (action: any) => action(sql) });
-	mock.module("../src/db", () => ({ sql }));
+	mock.module("../src/db", () => ({ sql, DATABASE_SENTENCE: "The database is unavailable right now. Try again later.", DatabaseOutage: class DatabaseOutage extends Error { kind = "outage"; }, databaseOutage: () => undefined }));
 	graphql = await import("../src/graphql");postModule = await import("../src/posts");
 	response = await graphql.runOperation("CreateTweet", { id: "1", postSource: "Xitter for Web" } as any, { tweet_text: "", media: { media_entities: [{ media_id: "100" }] }, xitter_conversation_card: { choices: [{ hashtag: "Cats" }] } });
 	body = await response.json();

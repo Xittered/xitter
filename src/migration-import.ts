@@ -13,7 +13,8 @@
 
 import { lookup } from "node:dns/promises";
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
+import { putFile } from "./disk";
 import { isIP } from "node:net";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
@@ -344,10 +345,10 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						if (!image) throw new MigrationError("not an image this instance takes");
 						({ mime, width, height } = image);
 					} else if (bytes.toString("latin1", 4, 8) !== "ftyp") throw new MigrationError("not an MP4 video");
-					writeFileSync(file, bytes);
+					await putFile(file, bytes);
 					if (kind === "video") {
 						const poster = await call(source, code, `media/${m.id}?poster=1`).catch(() => undefined);
-						if (poster?.ok) writeFileSync(posterFile(MEDIA_DIR, id), Buffer.from(await readLimited(poster, 10 * 1024 * 1024)));
+						if (poster?.ok) await putFile(posterFile(MEDIA_DIR, id), Buffer.from(await readLimited(poster, 10 * 1024 * 1024)));
 					}
 					const warning = arr(m.sensitive_warning).filter((w) => ["adult_content", "graphic_violence", "other"].includes(w));
 					await sql.begin(async (tx) => {

@@ -22,6 +22,7 @@ import { allows } from "./staff-permissions";
 import { BACKUP_DIR, createBackup, deleteBackup, listBackups } from "./backups";
 import { clientStatus, latestSha, rollbackClient, updateClient } from "./client-update";
 import { decideImport, pendingImports } from "./archive-import";
+import { space } from "./disk";
 
 const STANDINGS = ["active", "restricted", "limited", "suspended"];
 
@@ -534,12 +535,14 @@ export const toolActions: Record<string, Action> = {
 		run: async () => {
 			const started = performance.now();
 			const [db] = await sql`select pg_database_size(current_database())::text as bytes`;
+			const disk = await space().catch(() => undefined);
 			return {
 				runtime: Bun.version,
 				uptime: Math.floor(process.uptime()),
 				memory: process.memoryUsage().rss,
 				database: { bytes: db.bytes, latency_ms: Math.round(performance.now() - started) },
 				client_build: loadBuild()?.build.sha ?? null,
+				disk: disk ? { free: Number(disk.free), total: Number(disk.total), warn: disk.warn } : null,
 			};
 		},
 	},

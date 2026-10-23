@@ -1,9 +1,11 @@
 // The instance's logo and icons, uploaded from the admin panel. Each slot
 // replaces one of the shipped files in public/ under the same name.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { StorageFailure, putFile } from "./disk";
+import { STORAGE_SENTENCE } from "./notices";
 
-const DIR = process.env.BRANDING_DIR ?? "data/branding";
+const dir = () => process.env.BRANDING_DIR ?? "data/branding";
 
 export const SLOTS = {
 	"logo-dark": "Word mark on dark themes (wide sidebar, sign-in page)",
@@ -22,7 +24,7 @@ const TYPES: [string, number[]][] = [
 ];
 const sniff = (b: Uint8Array) => TYPES.find(([, magic]) => magic.every((m, i) => b[i] === m))?.[0];
 
-const path = (slot: string) => `${DIR}/${slot}`;
+const path = (slot: string) => `${dir()}/${slot}`;
 
 // the uploaded file for a public/ name like "logo-dark.png"
 export function brandingFile(name: string) {
@@ -38,8 +40,12 @@ export async function saveBranding(slot: string, data: Uint8Array): Promise<stri
 	if (data.length > 2 * 1024 * 1024) return "Images are up to 2 MB.";
 	// raster only: an SVG could carry script
 	if (!sniff(data)) return "Use a PNG, JPEG or WebP image.";
-	mkdirSync(DIR, { recursive: true });
-	await Bun.write(path(slot), data);
+	try {
+		await putFile(path(slot), data);
+	} catch (e) {
+		if (e instanceof StorageFailure) return STORAGE_SENTENCE;
+		throw e;
+	}
 }
 
 export function resetBranding(slot: string) {

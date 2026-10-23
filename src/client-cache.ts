@@ -1,8 +1,10 @@
 // Local archive of the pinned web client. Files are stored exactly as the CDN
 // served them; patching happens at serve time so the archive stays pristine.
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, normalize } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { putFile } from "./disk";
+import { CappedRead, readLimited } from "./federation";
+import { join, normalize } from "node:path";
 
 export const CLIENT_DIR = process.env.CLIENT_DIR ?? "client";
 export const CDN_ORIGIN = "https://abs.twimg.com";
@@ -31,10 +33,17 @@ export async function getClientFile(cdnPath: string, allowFetch = true): Promise
 		pending = (async () => {
 			const res = await fetch(CDN_ORIGIN + cdnPath);
 			if (!res.ok) return undefined;
-			const buf = Buffer.from(await res.arrayBuffer());
-			mkdirSync(dirname(p), { recursive: true });
-			writeFileSync(p, buf);
-			return buf;
+			try {
+				const buf = Buffer.from(await readLimited(res, 16 * 1024 * 1024));
+				await putFile(p, buf);
+				return buf;
+			} catch (e) {
+				if (e instanceof CappedRead) {
+					console.warn("skipped an oversized client file");
+					return undefined;
+				}
+				throw e;
+			}
 		})();
 		downloads.set(p, pending);
 		void pending.then(() => downloads.delete(p), () => downloads.delete(p));

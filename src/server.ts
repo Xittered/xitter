@@ -1,7 +1,7 @@
 import { type Viewer, getViewer, parseCookies, csrfCookie } from "./auth";
 import { getClientFile, getClientFilePath } from "./client-cache";
 import { PORT, PUBLIC_ORIGIN } from "./config";
-import { migrate, sql } from "./db";
+import { DatabaseOutage, databaseOutage, migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
 import { brandingFile } from "./branding";
 import { handleLogin, maintenancePage, rulesPage } from "./login";
@@ -12,6 +12,9 @@ import { flagSvg } from "./flags";
 import { onboarding } from "./onboarding";
 import { cachedPatch, patchFile, patchText } from "./patch";
 import { clientError, recordError } from "./errors";
+import { failFor } from "./failure";
+import { watchDisk } from "./disk";
+import { noticeHeadersFor } from "./notices";
 import { asRequest, markStaff, setRequestLanguage, staffGate } from "./staff-access";
 import { backupPath, startBackups } from "./backups";
 import { memberInvitesRoute } from "./member-invites";
@@ -124,7 +127,7 @@ const API_PREFIX = /^\/(i\/api\/|i\/jfapi\/|i\/media\/|1\.1\/|2\/|v2\/|graphql\/
 const unknown = new Map<string, number>();
 const MAX_UNKNOWN_PATHS = 1000;
 
-const apiError = (status: number, code: number, message: string) => Response.json({ errors: [{ code, message }] }, { status });
+const apiError = (status: number, code: number, message: string) => Response.json({ errors: [{ code, message }] }, { status, headers: noticeHeadersFor(message) });
 
 // a hash of each patched file, for its tags
 const etags = new WeakMap<Buffer, string>();
@@ -312,8 +315,19 @@ async function handle(req: Request): Promise<Response | undefined> {
 		const res = await asRequest(() => route(req));
 		return res && (await compressResponse(req, res, new URL(req.url).pathname));
 	} catch (e) {
+		const err = databaseOutage(e) ?? e;
 		const viewer = await getViewer(req).catch(() => undefined);
-		await recordError("server", e, { path: `${req.method} ${new URL(req.url).pathname}`, userId: viewer?.id });
+		const res = failFor(req, err);
+		if (!(err instanceof DatabaseOutage)) {
+			await Promise.race([
+				recordError("server", err, { path: `${req.method} ${new URL(req.url).pathname}`, userId: viewer?.id }),
+				Bun.sleep(200),
+			]);
+		}
+		if (res) {
+			console.error(`${req.method} ${new URL(req.url).pathname}:`, err instanceof Error ? err.cause ?? err : err);
+			return res;
+		}
 		throw e;
 	}
 }
@@ -556,5 +570,6 @@ startScheduler();
 await startFederation();
 startMailDigests();
 startBackups();
+watchDisk();
 startPush();
 console.log(`xitter listening on ${PUBLIC_ORIGIN}`);

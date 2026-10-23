@@ -5,6 +5,7 @@
 // Without a key the composer's GIF button is hidden.
 
 import type { Viewer } from "./auth";
+import { CappedRead, readJson } from "./federation";
 
 const KLIPY = { id: "klipy", display_name: "Klipy", api: process.env.KLIPY_API_URL ?? "https://api.klipy.com/v2", key: process.env.KLIPY_API_KEY ?? "", hosts: /(^|\.)klipy\.com$/ };
 const TENOR = { id: "tenor", display_name: "Tenor", api: process.env.TENOR_API_URL ?? "https://tenor.googleapis.com/v2", key: process.env.TENOR_API_KEY ?? "", hosts: /(^|\.)tenor\.com$|^tenor\.googleapis\.com$/ };
@@ -50,7 +51,12 @@ async function provider(path: string, params: Record<string, string>) {
 	for (const [k, v] of Object.entries({ key, client_key: "xitter", media_filter: "gif,tinygif,gifpreview", contentfilter: "medium", ...params })) url.searchParams.set(k, v);
 	const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
 	if (!r.ok) throw new Error(`${SOURCE.id} ${r.status}`);
-	return (await r.json()) as { results?: any[]; next?: string };
+	try {
+		return (await readJson(r, 2 * 1024 * 1024)) as { results?: any[]; next?: string };
+	} catch (e) {
+		if (e instanceof CappedRead) return { results: [], next: "" };
+		throw e;
+	}
 }
 
 const slice = (data: { results?: any[]; next?: string }) => ({

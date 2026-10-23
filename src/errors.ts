@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { DatabaseOutage, sql } from "./db";
 
 type Source = "server" | "client" | "job";
 const KEEP = 2000;
@@ -13,6 +13,10 @@ const KEEP = 2000;
 const shape = (s: string) => s.replace(/\b[0-9a-f]{8,}\b|\d+/gi, "#");
 
 export async function recordError(source: Source, error: unknown, at: { path?: string; userId?: string } = {}) {
+	if (error instanceof DatabaseOutage) {
+		console.error(error);
+		return;
+	}
 	const e = error instanceof Error ? error : new Error(String(error));
 	const message = (e.message || e.name || "Error").slice(0, 1000);
 	const stack = e.stack?.slice(0, 4000) ?? null;

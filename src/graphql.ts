@@ -20,7 +20,9 @@ import { scheduledHandlers } from "./scheduled";
 import { noteHandlers } from "./notes";
 import { sessionsList, usernameAvailable } from "./account-settings";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { DATABASE_SENTENCE, DatabaseOutage, databaseOutage, sql } from "./db";
+import { STORAGE_SENTENCE, StorageFailure } from "./disk";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { trendScope } from "./explore-settings";
 import { activeCards, cardsEntry } from "./explore-cards";
 import { isBlockedEitherWay, blockedIds, blockedFor, outOfView, protectedFor } from "./blocks";
@@ -318,7 +320,15 @@ const bookmarks: Handler = async (viewer, vars) => {
 	};
 };
 
+const injected = new AsyncLocalStorage<unknown>();
+// tests fail a post the way a full disk or a dead database would, without unplugging postgres
+export function failOperation<T>(error: unknown, run: () => Promise<T>): Promise<T> {
+	return Promise.resolve(injected.run(error, run));
+}
+
 const createTweet: Handler = async (viewer, vars) => {
+	const fault = injected.getStore();
+	if (fault) throw fault;
 	let conversation: ReturnType<typeof conversationCard> | undefined, creative: any, sharedConversation: Awaited<ReturnType<typeof getPost>>, sharedId: string | undefined, id: string, post: Awaited<ReturnType<typeof getPost>>, text: string;
 	const mediaIds: string[] = (Array.isArray(vars.media?.media_entities) ? vars.media.media_entities : [])
 		.map((m: any) => String(m?.media_id ?? ""))
@@ -1141,6 +1151,16 @@ export async function runOperation(name: string, viewer: Viewer, vars: Vars): Pr
 	try {
 		return Response.json(await handlers[name](viewer, vars));
 	} catch (e) {
+		const err = databaseOutage(e) ?? e;
+		if (err instanceof StorageFailure || err instanceof DatabaseOutage) {
+			console.error(`graphql ${name}:`, err.cause ?? err);
+			const message = err instanceof StorageFailure ? STORAGE_SENTENCE : DATABASE_SENTENCE;
+			return Response.json({
+				errors: [{ message: `Error: ${message}`, code: 85, kind: "Validation",
+					extensions: { name: "GenericError", source: "Server", code: 85, kind: "Validation" } }],
+				data: {},
+			});
+		}
 		if (e instanceof RateLimitError) return limitedResponse(e.hit);
 		// the chat app reads these as they are
 		if (e instanceof ChatError) return Response.json({ errors: [{ message: e.message, code: e.code }], data: {} });

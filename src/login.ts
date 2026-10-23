@@ -80,6 +80,23 @@ export async function handleLogin(req: Request): Promise<Response> {
 	return signedIn(session);
 }
 
+export function outagePage(sentence: string): Response {
+	const res = html(
+		layout(
+			"Trouble",
+			`<form>
+	<img class="logo" src="/public/logo-dark.png" alt="">
+	<h1>Xitter is having trouble right now</h1>
+	<p class="rules">${esc(sentence)}</p>
+	<p class="alt"><a href="/">Retry</a></p>
+</form>`,
+		),
+		503,
+	);
+	res.headers.set("retry-after", "60");
+	return res;
+}
+
 // shown while an admin has maintenance mode on: to signed-in accounts, and to
 // guests, who get a way to the sign-in form so staff can still get in
 export function maintenancePage(staffLink = false): Response {

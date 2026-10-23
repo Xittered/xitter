@@ -1,8 +1,11 @@
 // Google Fonts, kept on disk under MEDIA_DIR/fonts and served from this origin.
 // Family names are a tight whitelist; CSS we emit never includes raw input.
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { StorageFailure, putFile } from "./disk";
+import { readLimited } from "./federation";
+import { STORAGE_SENTENCE } from "./notices";
 
 const FAMILY_RE = /^[A-Za-z0-9 ]{1,40}$/;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -129,15 +132,7 @@ function isWoff2(buf: Buffer) {
 async function fetchBuf(url: string, timeout: number, max: number): Promise<Buffer> {
 	const r = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(timeout), headers: { "user-agent": CHROME_UA } });
 	if (!r.ok || !r.body) throw new Error(`http ${r.status}`);
-	if (Number(r.headers.get("content-length") ?? 0) > max) throw new Error("too big");
-	const parts: Uint8Array[] = [];
-	let size = 0;
-	for await (const chunk of r.body as unknown as AsyncIterable<Uint8Array>) {
-		size += chunk.length;
-		if (size > max) throw new Error("too big");
-		parts.push(chunk);
-	}
-	return Buffer.concat(parts);
+	return Buffer.from(await readLimited(r, max));
 }
 
 function familiesKept(): number {
@@ -196,8 +191,14 @@ async function downloadFamily(family: string): Promise<FontResult> {
 		files.push({ name: `${f.weight}-${f.subset}.woff2`, buf, unicodeRange: f.unicodeRange, weight: f.weight, subset: f.subset });
 	}
 	mkdirSync(dir, { recursive: true });
-	for (const f of files) writeFileSync(join(dir, f.name), f.buf);
-	writeFileSync(cssPath, fontCss(family, slug, files), "utf8");
+	try {
+		for (const f of files) await putFile(join(dir, f.name), f.buf);
+		await putFile(cssPath, Buffer.from(fontCss(family, slug, files)));
+	} catch (e) {
+		rmSync(dir, { recursive: true, force: true });
+		failed.set(slug, Date.now());
+		return { ok: false, error: e instanceof StorageFailure ? STORAGE_SENTENCE : `couldn't load ${family}` };
+	}
 	failed.delete(slug);
 	return { ok: true, family, slug };
 }

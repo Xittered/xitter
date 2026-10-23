@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { readLimited } from "./federation";
 import { DISCORD_DECORATIONS } from "./decoration-presets";
 import { STAFF_HANDLE } from "./invites";
 
@@ -105,8 +106,8 @@ async function discordArt(
 	).catch(() => undefined);
 	if (!r?.ok || !r.headers.get("content-type")?.startsWith("image/"))
 		return undefined;
-	const bytes = new Uint8Array(await r.arrayBuffer());
-	if (bytes.length > 4 * 1024 * 1024) return undefined;
+	const bytes = await readLimited(r, 4 * 1024 * 1024).catch(() => undefined);
+	if (!bytes) return undefined;
 	memory.set(key, bytes);
 	memoryBytes += bytes.length;
 	for (const [k, v] of memory) {

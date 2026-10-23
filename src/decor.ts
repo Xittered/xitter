@@ -6,7 +6,9 @@
 // and file names, checked against Steam when they're picked, and the files come
 // through /public/steam/ so viewers never talk to Steam themselves.
 
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { StorageFailure, putFile } from "./disk";
+import { declaredLength, readJson, readLimited } from "./federation";
 import { join } from "node:path";
 import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
@@ -79,7 +81,7 @@ let building: Promise<Apps> | undefined;
 async function buildApps(): Promise<Apps> {
 	const r = await fetch("https://api.steampowered.com/ILoyaltyRewardsService/GetEligibleApps/v1/", { signal: AbortSignal.timeout(20_000) });
 	if (!r.ok) throw new Error(`Steam answered ${r.status}`);
-	const all: any[] = ((await r.json())?.response?.apps ?? []).filter((a: any) => Number.isSafeInteger(a?.appid));
+	const all: any[] = ((await readJson(r, 2 * 1024 * 1024))?.response?.apps ?? []).filter((a: any) => Number.isSafeInteger(a?.appid));
 	const names = new Map<number, string>();
 	const chunks: number[][] = [];
 	for (let i = 0; i < all.length; i += 100) chunks.push(all.slice(i, i + 100).map((a) => a.appid as number));
@@ -90,7 +92,7 @@ async function buildApps(): Promise<Apps> {
 				const params = new URLSearchParams({ language: "0" });
 				chunk.forEach((id, j) => params.set(`appids[${j}]`, String(id)));
 				const got: any = await fetch(`https://api.steampowered.com/ICommunityService/GetApps/v1/?${params}`, { signal: AbortSignal.timeout(20_000) })
-					.then((x) => (x.ok ? x.json() : {}))
+					.then((x) => (x.ok ? readJson(x, 2 * 1024 * 1024) : {}))
 					.catch(() => ({}));
 				for (const a of got?.response?.apps ?? []) if (typeof a?.name === "string" && a.name.trim()) names.set(a.appid, a.name.trim().slice(0, 80));
 			}),
@@ -108,8 +110,12 @@ async function buildApps(): Promise<Apps> {
 		.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 	const built = { at: Date.now(), events, games };
 	if (games.length) {
-		mkdirSync(STEAM_DIR, { recursive: true });
-		await Bun.write(APPS_FILE, JSON.stringify(built));
+		try {
+			await putFile(APPS_FILE, Buffer.from(JSON.stringify(built)));
+		} catch (e) {
+			if (!(e instanceof StorageFailure)) throw e;
+			console.error(e);
+		}
 	}
 	return built;
 }
@@ -221,7 +227,10 @@ export async function steamFile(req: Request, appid: string, file: string, thumb
 			headers: range ? { range } : {},
 			signal: AbortSignal.timeout(15_000),
 		}).catch(() => undefined);
-		if (!r?.ok || Number(r.headers.get("content-length") ?? 0) > MAX_FILE) return new Response("not found", { status: 404 });
+		if (!r?.ok || declaredLength(r.headers.get("content-length"), MAX_FILE) === undefined) {
+			await r?.body?.cancel().catch(() => {});
+			return new Response("not found", { status: 404 });
+		}
 		const headers: Record<string, string> = { "content-type": type, "cache-control": "private, max-age=86400" };
 		for (const h of ["content-length", "content-range", "accept-ranges"]) if (r.headers.get(h)) headers[h] = r.headers.get(h)!;
 		return new Response(r.body, { status: r.status, headers });
@@ -232,12 +241,14 @@ export async function steamFile(req: Request, appid: string, file: string, thumb
 		if (!job) {
 			job = (async () => {
 				const r = await fetch(`${FILES}/${appid}/${file}`, { signal: AbortSignal.timeout(60_000) }).catch(() => undefined);
-				if (!r?.ok || Number(r.headers.get("content-length") ?? 0) > MAX_FILE) return false;
-				const body = await r.arrayBuffer();
-				if (body.byteLength > MAX_FILE) return false;
-				mkdirSync(join(STEAM_DIR, appid), { recursive: true });
-				await Bun.write(`${path}.part`, body);
-				renameSync(`${path}.part`, path);
+				if (!r?.ok) return false;
+				let body: Uint8Array;
+				try {
+					body = await readLimited(r, MAX_FILE);
+				} catch {
+					return false;
+				}
+				await putFile(path, Buffer.from(body));
 				return true;
 			})().finally(() => fetching.delete(key));
 			fetching.set(key, job);
