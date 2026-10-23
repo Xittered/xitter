@@ -8,12 +8,13 @@ import { isId } from "./ids";
 import { noteStatus } from "./note-score";
 import { hit, limitedResponse } from "./ratelimit";
 import { staffGate } from "./staff-access";
+import { allows } from "./staff-permissions";
 
-const staff = (v: Viewer) => v.role === "admin" || v.role === "moderator";
+const canReviewNotes = (v: Viewer) => allows(v.role, "note_appeals");
 
 export async function noteAppealsRoute(req: Request, viewer: Viewer): Promise<Response> {
 	let message = "";
-	const canReview = staff(viewer) && !(await staffGate(req, viewer));
+	const canReview = canReviewNotes(viewer) && !(await staffGate(req, viewer));
 	if (req.method === "POST") {
 		const limit = hit("write", viewer.id);
 		if (!limit.ok) return limitedResponse(limit);

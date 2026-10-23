@@ -20,7 +20,7 @@ form.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1
 @media (hover:hover){.pick:hover:not(:disabled){background:var(--hover)}}
 .choice{display:flex;align-items:center;gap:8px;color:var(--text);margin:0;font-size:15px}
 .choice input{width:20px;min-height:20px;height:20px;margin:0;padding:0;accent-color:var(--accent)}
-form.editor{display:grid;gap:16px;width:100%;max-width:100%;min-width:0;justify-items:stretch}
+form.editor{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;width:100%;max-width:100%;min-width:0;justify-items:stretch}
 .toks{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;width:100%;min-width:0}
 @media (max-width:520px){.toks{grid-template-columns:1fr}}
 .tok{display:grid;grid-template-columns:minmax(0,1fr) 40px 28px 28px;gap:6px;align-items:center;margin:0;min-width:0}
@@ -109,8 +109,6 @@ ${pageChromeRules(PREVIEW_CHROME_SLOTS)}
 .warns{display:grid;gap:4px}
 .warns p{color:#8a5800;font-size:13px}
 :root[data-theme="dark"] .warns p,:root[data-theme="dim"] .warns p{color:#e6b800}
-.savebar{display:flex;gap:8px;align-items:center;width:100%;padding:4px 0 0}
-.savebar button[type=submit]{flex:1}
 #steam-shop{width:min(720px,calc(100vw - 32px));max-height:80vh;overflow:auto;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);padding:16px}
 #steam-shop::backdrop{background:rgb(0 0 0 / .6)}
 .shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}

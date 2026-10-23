@@ -202,6 +202,16 @@ export const INK = "#0f1419";
 const REPOST = "#00ba7c";
 const LIKE = "#f91880";
 
+// Text on an accent-filled button. X keeps white on its own accents (blue
+// included, which a pure contrast pick would flip to ink), and only the
+// light ones (yellow) take ink; the client uses the same cut.
+export function accentTextOn(hex: string): string {
+	const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+	if (!m) return WHITE;
+	const [r, g, b] = [m[1]!, m[2]!, m[3]!].map((v) => parseInt(v, 16)) as [number, number, number];
+	return (r * 299 + g * 587 + b * 114) / 1000 > 160 ? INK : WHITE;
+}
+
 export function readableOn(bgs: string[]): string {
 	const score = (t: string) => Math.min(...bgs.map((bg) => contrast(t, bg)));
 	return score(WHITE) >= score(INK) ? WHITE : INK;

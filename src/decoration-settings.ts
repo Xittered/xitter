@@ -37,10 +37,10 @@ const CSS = `
 .choice:has(input:checked){border-color:var(--text)}
 .ears{display:grid;gap:16px;margin-top:8px}
 .styles{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
-.styles label{display:grid;justify-items:center;gap:4px;border:1px solid var(--border);border-radius:12px;padding:8px;cursor:pointer}
+.styles label{position:relative;display:grid;justify-items:center;gap:4px;border:1px solid var(--border);border-radius:12px;padding:8px;cursor:pointer}
 .styles label:has(input:checked){border-color:var(--text)}
-.styles input,.gallery input{position:absolute;opacity:0;pointer-events:none}
-.styles img{width:96px;height:40px;object-fit:cover;object-position:top}
+.styles input,.gallery input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+.styles img{width:100%;max-width:96px;height:40px;object-fit:cover;object-position:top}
 .colours{display:flex;flex-wrap:wrap;gap:16px}
 .colours label{display:grid;gap:4px;font-size:14px;color:var(--muted)}
 .colours input[type=color]{width:56px;height:40px;border:1px solid var(--outline);border-radius:8px;background:none;padding:2px;cursor:pointer}
@@ -53,7 +53,6 @@ const CSS = `
 .search{display:grid;gap:6px;margin-top:8px;font-size:14px;color:var(--muted)}
 .search input{color:var(--text)}
 #deco-count:empty{display:none}
-.save{position:sticky;bottom:0;padding:12px 0;background:var(--bg)}
 @media (hover:hover){.choice:hover,.styles label:hover,.gallery label:hover{background:var(--hover)}}
 `;
 

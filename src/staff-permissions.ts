@@ -20,6 +20,7 @@ export const PERMISSIONS: Record<string, Permission> = {
 	standing: { group: "Moderation", label: "Restrict, limit, suspend and reinstate accounts, for a while or until lifted, one at a time or many", role: "moderator", actions: ["setStatus", "setTemporaryStatus", "bulkStatus"] },
 	reports: { group: "Moderation", label: "Close reports", role: "moderator", actions: ["resolveReport"] },
 	appeals: { group: "Moderation", label: "See and answer appeals", role: "moderator", actions: ["appeals", "resolveAppeal"] },
+	note_appeals: { group: "Moderation", label: "Review Community Note appeals", role: "moderator", actions: [] },
 	messages: { group: "Moderation", label: "Send messages, warnings and strikes, and withdraw strikes", role: "moderator", actions: ["sendStaffMessage", "revokeStrike"] },
 	delete_posts: { group: "Moderation", label: "Delete posts", role: "moderator", actions: ["deletePost"] },
 	post_visibility: { group: "Moderation", label: "Hide posts and articles, mark them sensitive, label them", role: "moderator", actions: ["setPostVisibility", "setPostNotice", "setArticleVisibility"] },
@@ -57,6 +58,11 @@ export const PERMISSIONS: Record<string, Permission> = {
 
 const PERMISSION_OF = new Map(Object.entries(PERMISSIONS).flatMap(([key, p]) => p.actions.map((a) => [a, key] as const)));
 export const permissionOf = (action: string) => PERMISSION_OF.get(action);
+
+export function actionNeed(action: string, needs: Role): string {
+	const key = permissionOf(action);
+	return key ? PERMISSIONS[key].label : `the ${needs} role`;
+}
 
 // the permissions each role has now: the defaults with the admin's choices over them
 export function rolePermissions(role: GrantableRole): Record<string, boolean> {

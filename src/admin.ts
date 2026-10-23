@@ -37,7 +37,7 @@ import { switchActions } from "./feature-switches";
 import { AFFILIATION_LIMIT } from "./org-manage";
 import { staffGate } from "./staff-access";
 import { countryCode, countryName } from "./countries";
-import { GRANTABLE, PERMISSIONS, RANK, type Role, allows, mayRun, permissionOf, rolePermissions } from "./staff-permissions";
+import { GRANTABLE, PERMISSIONS, RANK, type Role, actionNeed, allows, mayRun, permissionOf, rolePermissions } from "./staff-permissions";
 
 export class AdminError extends Error {
 	constructor(
@@ -290,7 +290,9 @@ const ACTIONS: Record<string, Action> = {
 	// `allowed`: the actions this account may run, for the panel to show only those
 	me: { role: "support", run: async (a) => ({ id: a.id, screen_name: a.screen_name, role: a.role, superadmin: !!a.superadmin,
 		superadmin_home: !a.instance && a.role === "admin" && !!superadminOf(INSTANCE_ID, a.screen_name, a.id),
-		allowed: Object.entries(ACTIONS).filter(([name, x]) => mayRun(a.role, name, x.role)).map(([name]) => name) }) },
+		allowed: Object.entries(ACTIONS).filter(([name, x]) => mayRun(a.role, name, x.role)).map(([name]) => name),
+		labels: Object.fromEntries(Object.entries(ACTIONS).map(([name, x]) => [name, actionNeed(name, x.role)])),
+	}) },
 
 	staffPermissions: { role: "admin", run: async () => ({
 		permissions: Object.entries(PERMISSIONS).map(([key, p]) => ({ key, group: p.group, label: p.label, default_role: p.role })),

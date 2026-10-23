@@ -3,7 +3,7 @@
 import { fontSlug } from "../fonts";
 import { STEAM_STILL_PATH, STEAM_VIDEO_PATH, steamStillPath, steamVideoPath } from "../steam-items";
 import { CHIRP, fillOfAccent, type Accent, type BgFit, type BgPosition, type BgRepeat, type BgScale, type BlurPx, type Dim, type PanelOpacity, type Theme } from "./presets";
-import { INK, WHITE, derived, fillCss, mixHex, readableOn, rgba, solidOf } from "./validate";
+import { INK, WHITE, accentTextOn, derived, fillCss, mixHex, rgba, solidOf } from "./validate";
 
 export type BackgroundPaint = {
 	readonly image: string;
@@ -118,7 +118,7 @@ export function accentVars(accent: Accent): string {
 	const fill = fillOfAccent(accent);
 	const solid = solidOf(fill);
 	const hover = mixHex(solid, INK, 0.12);
-	return `--xt-accent:${solid};--xt-accent-fill:${fillCss(fill)};--xt-accent-soft:${rgba(solid, 0.1)};--xt-accent-hover:${hover};--accent:${solid};--accent-fill:${fillCss(fill)};--accent-hover:${hover};--accent-text:${readableOn([solid])}`;
+	return `--xt-accent:${solid};--xt-accent-fill:${fillCss(fill)};--xt-accent-soft:${rgba(solid, 0.1)};--xt-accent-hover:${hover};--accent:${solid};--accent-fill:${fillCss(fill)};--accent-hover:${hover};--accent-text:${accentTextOn(solid)}`;
 }
 
 export function accountVars(theme: Theme): string {
@@ -138,7 +138,10 @@ export function accountVars(theme: Theme): string {
 		accent: tkn.accent,
 		"accent-fill": d.accentFill,
 		"accent-hover": tkn.accentHover,
-		"accent-text": /^#[0-9a-f]{6}$/i.test(tkn.accent) ? readableOn([tkn.accent]) : WHITE,
+		"accent-text": accentTextOn(tkn.accent),
+		primary: theme.id === "custom" ? d.button : d.accentFill,
+		"primary-text": theme.id === "custom" ? d.buttonText : accentTextOn(tkn.accent),
+		"primary-hover": theme.id === "custom" ? d.buttonHover : tkn.accentHover,
 	};
 	if (tkn.font) rows.font = tkn.font;
 	return Object.entries(rows)
