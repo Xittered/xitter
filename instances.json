@@ -1,7 +1,14 @@
 {
 	"version": 1,
-	"sequence": 23,
+	"sequence": 24,
 	"instances": [
+		{	
+			"id": "xittertest.natolix.me",
+			"name": "Xit",
+			"source_url": "https://github.com/Xittered/xitter",
+			"public_key": "buxzRN1JZpHM3-9r6KjIT7IgqvxD7kT1_7GdvDp_lrM",
+			"state": "active"
+		},
 		{
 			"id": "a.aagaming.me",
 			"name": "A",
