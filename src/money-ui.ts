@@ -94,7 +94,10 @@ export const MONEY_UI_SCRIPT = `(function(){
 		range.selectNodeContents(editor);range.collapse(false);
 		sel.removeAllRanges();sel.addRange(range);
 		var before=(editor.innerText||"").replace(/\\n+$/,"");
-		document.execCommand("insertText",false,(before&&!/\\s$/.test(before)?" ":"")+text);
+		var pad=!!before&&!/\\s$/.test(before);
+		// the space is ours, so it goes again with the link (cover()); one typed before it stays
+		editor.__xmPad=pad?text:null;
+		document.execCommand("insertText",false,(pad?" ":"")+text);
 	}
 	function pending(){
 		var text;try{text=sessionStorage.getItem("xitter-compose")}catch(e){}
@@ -239,27 +242,72 @@ export const MONEY_UI_SCRIPT = `(function(){
 		return m?base+m[0]:null;
 	}
 	function plain(t){return String(t||"").split(ZW).join("").replace(/\\s+/g," ").trim()}
-	// selects the text inside the editor, across the editor's own spans
-	function select(editor,text){
+	// the editor's text across its own spans, and where each span starts in it
+	function textOf(editor){
 		var walk=document.createTreeWalker(editor,NodeFilter.SHOW_TEXT),nodes=[],all="",n;
 		while((n=walk.nextNode())){nodes.push([n,all.length]);all+=n.nodeValue}
-		var at=all.indexOf(text);
-		if(at<0)return false;
-		function spot(i){for(var k=nodes.length-1;k>=0;k--)if(nodes[k][1]<=i)return [nodes[k][0],i-nodes[k][1]]}
-		var a=spot(at),b=spot(at+text.length);
+		return {nodes:nodes,all:all};
+	}
+	function spot(t,i){for(var k=t.nodes.length-1;k>=0;k--)if(t.nodes[k][1]<=i)return [t.nodes[k][0],i-t.nodes[k][1]]}
+	function selectAt(t,from,to){
+		var a=spot(t,from),b=spot(t,to);
 		var range=document.createRange();range.setStart(a[0],a[1]);range.setEnd(b[0],b[1]);
 		var sel=getSelection();sel.removeAllRanges();sel.addRange(range);
+	}
+	function select(editor,text){
+		var t=textOf(editor),at=t.all.indexOf(text);
+		if(at<0)return false;
+		selectAt(t,at,at+text.length);
 		return true;
+	}
+	// each line of the editor is a block of its own
+	function line(t,i){var s=spot(t,i);return s&&s[0].parentElement&&s[0].parentElement.closest('[data-block="true"]')}
+	// What to paste over a link: the link, the space insert() put before it, and the
+	// character next to it on its line, which comes back as the paste, so
+	// nothing is left behind. Alone on its line, the link gives way to the
+	// invisible character, which keeps an otherwise empty post's Post button on.
+	function cover(editor,url){
+		var t=textOf(editor),all=t.all,at=all.indexOf(url);
+		if(at<0)return null;
+		var end=at+url.length,from=at,home=line(t,at);
+		if(editor.__xmPad===url&&all.charAt(from-1)===" "&&line(t,from-1)===home)from--;
+		if(from>0&&line(t,from-1)===home){
+			// a character outside the basic plane is two halves, kept together
+			var s=from-1;if(s>0&&/[\\uDC00-\\uDFFF]/.test(all.charAt(s)))s--;
+			return {t:t,from:s,to:end,text:all.slice(s,from)};
+		}
+		if(end<all.length&&line(t,end)===home){
+			var e=end+1;if(e<all.length&&/[\\uD800-\\uDBFF]/.test(all.charAt(end)))e++;
+			return {t:t,from:at,to:e,text:all.slice(end,e)};
+		}
+		return {t:t,from:at,to:end,text:ZW};
+	}
+	// The editor (Draft) keeps its own copy of the text. Deleting the link from
+	// the page under it, across the link's own span, leaves that copy behind: it
+	// draws the link again, or loses its place, and then every key lands twice.
+	// A paste goes through the editor, so the link is pasted over instead.
+	function paste(editor,text){
+		var data=new DataTransfer();data.setData("text/plain",text);
+		editor.dispatchEvent(new ClipboardEvent("paste",{clipboardData:data,bubbles:true,cancelable:true}));
 	}
 	var attached=[];
 	function attachmentOf(editor){return attached.find(function(a){return a.editor===editor})}
 	function take(editor,url){
-		editor.focus();
-		if(!select(editor,url))return;
-		document.execCommand("delete");
 		var a=attachmentOf(editor);
-		if(a){a.url=url;a.key=keyOf(url)}else attached.push({editor:editor,url:url,key:keyOf(url)});
-		setTimeout(function(){if(!plain(editor.textContent))document.execCommand("insertText",false,ZW)},0);
+		if(a&&a.taking)return;
+		editor.focus();
+		var c=cover(editor,url);
+		if(!c)return;
+		selectAt(c.t,c.from,c.to);
+		if(a){a.url=url;a.key=keyOf(url)}else attached.push(a={editor:editor,url:url,key:keyOf(url)});
+		a.taking=true;
+		// the editor takes up a selection made from script on the next selectionchange
+		setTimeout(function(){
+			a.taking=false;
+			var c=cover(editor,url);
+			if(c){selectAt(c.t,c.from,c.to);paste(editor,c.text)}
+			editor.__xmPad=null;
+		},30);
 	}
 	function untake(editor){
 		attached=attached.filter(function(a){return a.editor!==editor});
