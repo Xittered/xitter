@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"sequence": 25,
+	"sequence": 26,
 	"instances": [
 		{
 			"id": "a.aagaming.me",
@@ -114,6 +114,13 @@
 			"public_key": "C_9Cz5GkJjtSvWngLyVhfSTscLdcYo6Omx_EpSzQU5w",
 			"state": "active"
 		},
+		{
+  			"id": "xitter.lab-xp.ovh",
+  			"name": "Larptter",
+  			"source_url": "https://github.com/Xittered/xitter",
+  			"public_key": "2pHoUdvi8EZwE0EH8HhjROsBT0JZk0OzN_XZVnvT6fQ",
+  			"state": "active"
+        },
 		{
 			"id": "xittertest.natolix.me",
 			"name": "Xit",
