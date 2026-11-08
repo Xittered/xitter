@@ -1,13 +1,12 @@
 # Instances
 
-Generated from [instances.json](instances.json), sequence 25. Edit that file, then run
+Generated from [instances.json](instances.json), sequence 26. Edit that file, then run
 `bun scripts/check-instances.ts --write-md` to update this one.
 
 | Instance | Name | State | Key | Source |
 | --- | --- | --- | --- | --- |
 | [a.aagaming.me](https://a.aagaming.me) | A | federating | `obUhcaAS7l8STOxRhPjs1tWq40B7qVmdwEysNitkpXc` | [code](https://github.com/Xittered/xitter) |
 | [cro.corvine.vip](https://cro.corvine.vip) | CRO | federating | `OJiGKsH5eTlfBzKyWCe2G0uHIOESe6QV-9sSmVP-iVk` | [code](https://github.com/Xittered/xitter) |
-| [giggleshitter.gay](https://giggleshitter.gay) | giggleshitter | federating | `IXb5UsVkUbxH0a_Rub1PEJumKBufBtwwNtM5RZffwB0` | [code](https://github.com/Xittered/xitter) |
 | [social.opsex.best](https://social.opsex.best) | Xitter | federating | `aE7RikVEmC2lKQPAkfVtNk1GpJtx87H7PYaLxHxbZTM` | [code](https://github.com/gabytz777/xitter) |
 | [testing.xitter.space](https://testing.xitter.space) | Xitter Testing | federating | `MtOOU2p-wazLBbp3goandZk5MLD_BPKT9IikJcIFm5c` | [code](https://github.com/Xittered/xitter) |
 | [twitter.meowing.zip](https://twitter.meowing.zip) | NOT Twitter | federating | `umKV5puos6jxSWboWpvR3vgXcvVB-1EAx7U-nSFAW8E` | [code](https://github.com/10kbcat/xitter) |
