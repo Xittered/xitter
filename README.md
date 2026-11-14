@@ -335,6 +335,7 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `DB_STATEMENT_TIMEOUT`, `DB_LOCK_TIMEOUT` | `30s`, `10s` | A query running or waiting on a lock longer than this is cancelled, so one stuck query can't hold every connection (the migration at start-up has no limit) |
 | `PORT` | `3000` | Listen port |
 | `PUBLIC_ORIGIN` | `http://localhost:$PORT` | Address browsers use to reach the instance |
+| `PASSKEY_ORIGINS` | none | Other https sites of this instance, comma separated, that may make and use its passkeys (subdomains of `PUBLIC_ORIGIN`'s host only) |
 | `CLIENT_DIR` | `client` | Where the pinned client is stored |
 | `MEDIA_DIR` | `media` | Uploaded images and videos |
 | `BRANDING_DIR` | `data/branding` | Logos uploaded in the admin panel |

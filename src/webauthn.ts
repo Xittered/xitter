@@ -94,7 +94,8 @@ function spki(cose: Map<number, any>): { key: Uint8Array; alg: number } {
 	return { key: new Uint8Array(createPublicKey({ key: jwk, format: "jwk" }).export({ type: "spki", format: "der" })), alg };
 }
 
-export type Expected = { challenge: string; origin: string; rpId: string };
+// origin: the site the ceremony may come from, or any of several
+export type Expected = { challenge: string; origin: string | string[]; rpId: string };
 
 function clientData(json: Uint8Array, type: string, expected: Expected) {
 	let c: any;
@@ -105,7 +106,7 @@ function clientData(json: Uint8Array, type: string, expected: Expected) {
 	}
 	if (c?.type !== type) throw new Error("wrong ceremony");
 	if (c.challenge !== expected.challenge) throw new Error("wrong challenge");
-	if (c.origin !== expected.origin) throw new Error("wrong origin");
+	if (![expected.origin].flat().includes(c.origin)) throw new Error("wrong origin");
 	if (c.crossOrigin === true) throw new Error("made inside another site's frame");
 }
 

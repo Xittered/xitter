@@ -12,7 +12,7 @@
 import { signInCookies } from "./accounts";
 import { accountPage, esc } from "./account-page";
 import { startSession, type Viewer } from "./auth";
-import { PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
+import { PASSKEY_ORIGINS, PUBLIC_HOSTNAME } from "./config";
 import { sql } from "./db";
 import { requestIp } from "./login-history";
 import { hit, passwordTry } from "./ratelimit";
@@ -21,7 +21,7 @@ import { ALGORITHMS, b64url, challengeOf, unb64url, verifyAssertion, verifyRegis
 
 const MAX_PASSKEYS = 10;
 const TIMEOUT = 5 * 60 * 1000;
-const expected = (challenge: string) => ({ challenge, origin: PUBLIC_ORIGIN, rpId: PUBLIC_HOSTNAME });
+const expected = (challenge: string) => ({ challenge, origin: PASSKEY_ORIGINS, rpId: PUBLIC_HOSTNAME });
 const fail = (error: string, status = 400) => Response.json({ error }, { status, headers: { "cache-control": "no-store" } });
 
 // one challenge per ceremony, used once; for adding a passkey it belongs to the account
@@ -41,7 +41,7 @@ async function spend(challenge: string | undefined, userId: string | null): Prom
 
 // a same-site page's own request; SameSite=Lax cookies already keep other
 // sites out, this is the belt to those braces
-const sameOrigin = (req: Request) => req.headers.get("origin") === PUBLIC_ORIGIN;
+const sameOrigin = (req: Request) => PASSKEY_ORIGINS.includes(req.headers.get("origin") ?? "");
 
 async function body(req: Request): Promise<Record<string, unknown>> {
 	if ((Number(req.headers.get("content-length")) || 0) > 64 * 1024) return {};

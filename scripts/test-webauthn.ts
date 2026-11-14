@@ -45,6 +45,14 @@ describe("passkeys", () => {
 		expect(() => verifyRegistration(elsewhere.create(), expected)).toThrow("another site");
 	});
 
+	test("takes any of the instance's listed origins, and only those", () => {
+		const a = authenticator(KINDS.ES256!);
+		const listed = { ...expected, origin: ["https://xit.example", "https://m.xit.example"] };
+		const stored = verifyRegistration(a.create(), listed);
+		expect(verifyAssertion(a.get(1, 0x05, { origin: "https://m.xit.example" }), stored, listed)).toBe(1);
+		expect(() => verifyAssertion(a.get(2, 0x05, { origin: "https://evil.example" }), stored, listed)).toThrow("wrong origin");
+	});
+
 	test("needs the person verified", () => {
 		const a = authenticator(KINDS.ES256!);
 		expect(() => verifyRegistration(a.create(0x41), expected)).toThrow("didn't verify");
