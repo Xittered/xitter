@@ -10,6 +10,7 @@ import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { mailEnabled, sendMail } from "./mail";
+import { passwordTry } from "./ratelimit";
 import { settings } from "./settings";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -130,7 +131,11 @@ export async function emailRoute(req: Request, url: URL, viewer: Viewer | undefi
 	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return emailPage(req, viewer, current, "", "That form is out of date. Try again.");
 	const email = String(f?.get("email") ?? "").trim().toLowerCase();
 	if (!EMAIL.test(email) || email.length > 254) return emailPage(req, viewer, current, "", "Enter a valid email address.");
+	// a session someone took mustn't be a place to guess the password from
+	const refund = passwordTry(viewer.screen_name.toLowerCase());
+	if (!refund) return emailPage(req, viewer, current, "", "Too many tries for this account. Wait 15 minutes.");
 	if (!(await Bun.password.verify(String(f?.get("password") ?? ""), u.password_hash).catch(() => false))) return emailPage(req, viewer, current, "", "That password isn't right.");
+	refund();
 	if ((await sql`select 1 from users where lower(email) = ${email} and id <> ${viewer.id}::bigint`).length) return emailPage(req, viewer, current, "", "That email is already used by another account.");
 	if (!mailEnabled()) return emailPage(req, viewer, current, "", "This instance can't send mail, so it can't confirm a new address. Ask its staff.");
 	try {

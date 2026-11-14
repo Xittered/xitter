@@ -86,6 +86,13 @@ export type Viewer = User & {
 };
 
 export const SECURE = PUBLIC_ORIGIN.startsWith("https:") ? "; Secure" : "";
+// A site on a sibling subdomain can set a cookie for the whole domain, and so
+// plant its own session in a visitor's browser. Browsers refuse a __Host-
+// cookie from anywhere but this exact host, so the session cookies carry the
+// prefix wherever they can (it needs Secure, so not on plain http).
+const HOST_ONLY = SECURE ? "__Host-" : "";
+export const SESSION_COOKIE = `${HOST_ONLY}auth_token`;
+export const MULTI_COOKIE = `${HOST_ONLY}auth_multi`;
 const YEAR = 60 * 60 * 24 * 365;
 // a session unused this long is over, whatever its cookie's Max-Age says
 export const SESSION_IDLE_DAYS = 90;
@@ -184,7 +191,7 @@ const MAX_TOUCHED = 50_000;
 const touched = new Map<string, number>();
 
 async function loadViewer(req: Request): Promise<Viewer | undefined> {
-	const token = parseCookies(req).auth_token;
+	const token = parseCookies(req)[SESSION_COOKIE];
 	if (!token) return undefined;
 	const [row] = await sql`select ${viewerCols()}, s.csrf, s.token, s.superadmin
 		from sessions s join users u on u.id = s.user_id
@@ -222,7 +229,7 @@ export function csrfCookie(csrf: string): string {
 export function sessionCookies(s: { token: string; csrf: string; userId: string }): string[] {
 	const base = `Path=/; Max-Age=${YEAR}; SameSite=Lax${SECURE}`;
 	return [
-		`auth_token=${s.token}; HttpOnly; ${base}`,
+		`${SESSION_COOKIE}=${s.token}; HttpOnly; ${base}`,
 		// the client reads these two itself
 		csrfCookie(s.csrf),
 		`twid=u%3D${s.userId}; ${base}`,
@@ -230,5 +237,6 @@ export function sessionCookies(s: { token: string; csrf: string; userId: string 
 }
 
 export function clearedCookies(): string[] {
-	return ["auth_token", "ct0", "twid"].map((n) => `${n}=; Path=/; Max-Age=0; SameSite=Lax${SECURE}`);
+	// the unprefixed name too: a session cookie from before the prefix
+	return [...new Set([SESSION_COOKIE, "auth_token", "ct0", "twid"])].map((n) => `${n}=; Path=/; Max-Age=0; SameSite=Lax${SECURE}`);
 }

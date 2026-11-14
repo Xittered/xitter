@@ -992,7 +992,7 @@ export async function adminApi(req: Request, action: string, viewer: Viewer | un
 		await audit(viewer, "upload_branding", null, { slot });
 		return Response.json({});
 	}
-	const a = ACTIONS[action];
+	const a = Object.hasOwn(ACTIONS, action) ? ACTIONS[action] : undefined;
 	if (!a) return fail("Unknown action.", 404);
 	if (!mayRun(viewer.role, action, a.role)) return fail(permissionOf(action) ? "An admin hasn't given your role permission to do that." : `Needs the ${a.role} role.`, 403);
 	const body = await req.json().catch(() => ({}));

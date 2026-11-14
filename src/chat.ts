@@ -14,7 +14,7 @@
 // instance signs. Voice and video calls are not offered.
 
 import { affiliateChecked, pictureShape, remoteCheckHidden, shownVerifiedType } from "./model";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { ServerWebSocket } from "bun";
 import type { User, Viewer } from "./auth";
@@ -65,8 +65,17 @@ function jwt(header: object, claims: object, key: string): string {
 	return `${body}.${createHmac("sha256", key).update(body).digest("base64url")}`;
 }
 // the chat socket's token, from GenerateXChatTokenMutation
-const socketToken = (userId: string) => jwt({ alg: "HS256", typ: "JWT" }, { sub: userId, exp: Math.floor(Date.now() / 1000) + 86400 }, secrets.tokenKey);
-export const socketUser = (token: string): string | undefined => verifyChatToken(token, secrets.tokenKey)?.sub as string | undefined;
+// `sid` ties it to the session that asked: signed out (or reset), the token
+// stops opening sockets instead of working for the rest of its day
+const sessionId = (sessionToken: string) => createHash("sha256").update(sessionToken).digest("hex");
+const socketToken = (userId: string, sessionToken: string) =>
+	jwt({ alg: "HS256", typ: "JWT" }, { sub: userId, exp: Math.floor(Date.now() / 1000) + 86400, ...(sessionToken ? { sid: sessionId(sessionToken) } : {}) }, secrets.tokenKey);
+// `sid` is missing from tokens made before it existed; they run out within a day
+export function socketUser(token: string): { userId: string; sid?: string } | undefined {
+	const claims = verifyChatToken(token, secrets.tokenKey);
+	if (!claims) return undefined;
+	return { userId: claims.sub as string, sid: typeof claims.sid === "string" && /^[0-9a-f]{64}$/.test(claims.sid) ? claims.sid : undefined };
+}
 
 // what the realm accepts: kid tenant:version, iss tenant, aud realm, sub user
 const realmToken = (userId: string) =>
@@ -678,7 +687,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const [me] = await userResults(v.id, [v.id]);
 		return { data: { viewer: { claims: [], is_active_creator: false, user_results: { id: Buffer.from(`User:${v.id}`).toString("base64"), ...me } } } };
 	},
-	GenerateXChatTokenMutation: (v) => ({ data: { user_get_x_chat_auth_token: { __typename: "XChatGetAuthTokenResponse", token: socketToken(v.id) } } }),
+	GenerateXChatTokenMutation: (v) => ({ data: { user_get_x_chat_auth_token: { __typename: "XChatGetAuthTokenResponse", token: socketToken(v.id, v.token) } } }),
 
 	GetPublicKeysQuery: async (v, vars) => ({
 		data: {
@@ -940,7 +949,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 	},
 };
 
-export const knownChatOperation = (name: string) => name in chatHandlers;
+export const knownChatOperation = (name: string) => Object.hasOwn(chatHandlers, name);
 
 // the browser's way to the Juicebox realm
 export async function juiceboxProxy(req: Request, path: string): Promise<Response> {

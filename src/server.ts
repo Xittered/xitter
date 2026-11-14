@@ -1,4 +1,4 @@
-import { type Viewer, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
+import { MULTI_COOKIE, type Viewer, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
 import { clientPathAllowed, getClientFile, getClientFilePath, hasClientFile } from "./client-cache";
 import { PORT, PUBLIC_ORIGIN } from "./config";
 import { migrate, sql } from "./db";
@@ -408,9 +408,11 @@ async function route(req: Request): Promise<Response | undefined> {
 	// chat: the live socket (its token from GenerateXChatTokenMutation) and
 	// the way to the key backup realm
 	if (p === "/xchat/ws") {
-		const userId = socketUser(url.searchParams.get("token") ?? "");
-		if (!userId) return new Response("bad token", { status: 401 });
-		const [account] = await sql`select 1 from users where id = ${userId}::bigint and status <> 'suspended'`;
+		const claims = socketUser(url.searchParams.get("token") ?? "");
+		if (!claims) return new Response("bad token", { status: 401 });
+		const { userId, sid } = claims;
+		const [account] = await sql`select 1 from users u where u.id = ${userId}::bigint and u.status <> 'suspended'
+			and (${sid ?? null}::text is null or exists (select 1 from sessions s where s.user_id = u.id and encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = ${sid ?? null}))`;
 		if (!account) return new Response("suspended", { status: 403 });
 		return server.upgrade(req, { data: { userId } }) ? undefined : new Response("expected a websocket", { status: 400 });
 	}
@@ -592,7 +594,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	const look = prefs.look;
 	const painted = look?.kind === "painted" ? look.theme : null;
 	const paint = viewer && painted ? await resolveBackground(viewer.id, painted) : undefined;
-	const page = shell(viewer ?? null, !!parseCookies(req).auth_multi, communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf);
+	const page = shell(viewer ?? null, !!parseCookies(req)[MULTI_COOKIE], communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf);
 	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": PAGE_CSP });
 	// a guest token left from the signed-out page makes the signed-in client act
 	// as a guest (no csrf header, every write refused)

@@ -126,6 +126,8 @@ function checkNote(note: string) {
 // returns the transfer it already made. Paying a request checks it is still
 // open, for this payer, to its requester, for its amount.
 export async function sendMoney(senderId: string, handle: string, amountCents: number, note: string, idem: string, requestId?: string): Promise<{ id: string; to: string; repeated: boolean }> {
+	const [me] = await sql`select status from users where id = ${senderId}::bigint`;
+	if (me?.status === "restricted") throw new MoneyError("Your account can't send money right now.");
 	if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new MoneyError("Enter an amount over $0.");
 	const max = economy().max_transfer_cents;
 	if (amountCents > max) throw new MoneyError(`You can send up to ${formatCents(max)} at a time.`);

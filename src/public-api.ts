@@ -632,6 +632,8 @@ export async function publicApi(req: Request, url: URL): Promise<Response> {
 	}
 	if (!route || !match) return withCors(fail(404, "No such endpoint. See /api for the list."));
 	if (route.scope === "write" && scope !== "write") return withCors(fail(403, "This token can only read."));
+	// the same standing as in the app (restricted-page.ts): reading goes on, nothing else
+	if (route.scope === "write" && viewer.status === "restricted") return withCors(fail(403, "Your account can't interact right now."));
 	if (settings().operations.maintenance) return withCors(fail(503, settings().operations.message || "The instance is under maintenance."));
 
 	const where = `api ${route.method} ${route.pattern.source}`;

@@ -11,7 +11,7 @@
 //                                            one, if any, takes its place
 
 import { recordSignIn } from "./login-history";
-import { SECURE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies } from "./auth";
+import { MULTI_COOKIE, SECURE, SESSION_COOKIE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies } from "./auth";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { sql } from "./db";
 import { avatarUrl } from "./model";
@@ -25,9 +25,9 @@ const max = () => Math.min(Math.max(Math.trunc(Number(settings().switch_override
 type Session = { token: string; csrf: string; userId: string };
 
 const multiCookie = (tokens: string[]) =>
-	tokens.length ? `auth_multi=${tokens.join(",")}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax${SECURE}` : `auth_multi=; Path=/; Max-Age=0; SameSite=Lax${SECURE}`;
+	tokens.length ? `${MULTI_COOKIE}=${tokens.join(",")}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax${SECURE}` : `${MULTI_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${SECURE}`;
 
-const multiTokens = (req: Request) => (parseCookies(req).auth_multi ?? "").split(",").filter(Boolean);
+const multiTokens = (req: Request) => (parseCookies(req)[MULTI_COOKIE] ?? "").split(",").filter(Boolean);
 
 // The given tokens' sessions that still exist, in that order, one per account
 // and none of `except`'s.
@@ -50,7 +50,7 @@ async function live(tokens: string[], except?: string): Promise<Session[]> {
 // the others it had, stay signed in behind the new one.
 export async function signInCookies(req: Request, session: Session): Promise<string[]> {
 	await recordSignIn(req, session);
-	const before = parseCookies(req).auth_token;
+	const before = parseCookies(req)[SESSION_COOKIE];
 	const others = await live([...(before ? [before] : []), ...multiTokens(req)], session.userId);
 	return [...sessionCookies(session), multiCookie(others.slice(0, max() - 1).map((s) => s.token))];
 }

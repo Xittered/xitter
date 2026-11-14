@@ -1183,7 +1183,8 @@ Object.assign(handlers, {
 } satisfies Record<string, Handler>);
 Object.assign(handlers, automationHandlers);
 
-export const knownOperation = (name: string) => name in handlers;
+// own names only: "constructor" is in every object, and called it hands the viewer back
+export const knownOperation = (name: string) => Object.hasOwn(handlers, name);
 
 // an operation's result as the client would get it, for the public API
 // (public-api.ts); errors are thrown as they are

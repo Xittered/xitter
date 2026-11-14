@@ -7,7 +7,7 @@ import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { superadminNameHere } from "./superadmins";
 import { sql } from "./db";
-import type { Viewer } from "./auth";
+import { type Viewer, clearedCookies } from "./auth";
 import { passwordTry } from "./ratelimit";
 
 const error = (code: number, message: string, status = 400) => Response.json({ errors: [{ code, message }] }, { status });
@@ -135,7 +135,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		await sql`update users set status = 'suspended', deactivated_at = now() where id = ${viewer.id}::bigint`;
 		await shutOut(viewer.id);
 		const headers = new Headers();
-		for (const n of ["auth_token", "ct0"]) headers.append("set-cookie", `${n}=; Path=/; Max-Age=0`);
+		for (const c of clearedCookies()) headers.append("set-cookie", c);
 		return Response.json({ status: "ok" }, { headers });
 	}
 	return undefined;

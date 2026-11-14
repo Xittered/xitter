@@ -61,6 +61,8 @@ function homePage(req: Request, viewer: Viewer, message = "") {
 <form method="post" action="/federation/superadmin/enter">
 <input type="hidden" name="csrf" value="${esc(viewer.csrf)}">
 <label>Instance <select name="instance" required>${options}</select></label>
+<label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+<label>Two-factor code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
 <button>Open admin panel</button>
 </form>
 <h1>Emergency defederation</h1>
@@ -90,6 +92,10 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 		if (String(form.get("csrf") ?? "") !== viewer.csrf) return homePage(req, viewer, "That form is out of date. Try again.");
 		const h = hit("auth", `superadmin:${viewer.id}`);
 		if (!h.ok) return limitedResponse(h);
+		// the ticket is an admin session on another instance: a session someone
+		// took here must not be enough to sign one
+		const refused = await reauthenticate(u, form.get("password"), form.get("code"));
+		if (refused) return homePage(req, viewer, refused);
 		const now = Math.floor(Date.now() / 1000);
 		const ticket = seal({ typ: "xitter-superadmin-v1", iss: INSTANCE_ID, aud: instance, sub: viewer.screen_name, sub_id: viewer.id, name: viewer.name, iat: now, exp: now + TICKET_SECONDS, nonce: b64url(randomBytes(18)) });
 		return accountPage({
