@@ -1,13 +1,12 @@
 # Instances
 
-Generated from [instances.json](instances.json), sequence 25. Edit that file, then run
+Generated from [instances.json](instances.json), sequence 26. Edit that file, then run
 `bun scripts/check-instances.ts --write-md` to update this one.
 
 | Instance | Name | State | Key | Source |
 | --- | --- | --- | --- | --- |
 | [a.aagaming.me](https://a.aagaming.me) | A | federating | `obUhcaAS7l8STOxRhPjs1tWq40B7qVmdwEysNitkpXc` | [code](https://github.com/Xittered/xitter) |
 | [cro.corvine.vip](https://cro.corvine.vip) | CRO | federating | `OJiGKsH5eTlfBzKyWCe2G0uHIOESe6QV-9sSmVP-iVk` | [code](https://github.com/Xittered/xitter) |
-| [giggleshitter.gay](https://giggleshitter.gay) | giggleshitter | federating | `IXb5UsVkUbxH0a_Rub1PEJumKBufBtwwNtM5RZffwB0` | [code](https://github.com/Xittered/xitter) |
 | [social.opsex.best](https://social.opsex.best) | Xitter | federating | `aE7RikVEmC2lKQPAkfVtNk1GpJtx87H7PYaLxHxbZTM` | [code](https://github.com/gabytz777/xitter) |
 | [testing.xitter.space](https://testing.xitter.space) | Xitter Testing | federating | `MtOOU2p-wazLBbp3goandZk5MLD_BPKT9IikJcIFm5c` | [code](https://github.com/Xittered/xitter) |
 | [twitter.meowing.zip](https://twitter.meowing.zip) | NOT Twitter | federating | `umKV5puos6jxSWboWpvR3vgXcvVB-1EAx7U-nSFAW8E` | [code](https://github.com/10kbcat/xitter) |
@@ -18,7 +17,7 @@ Generated from [instances.json](instances.json), sequence 25. Edit that file, th
 | [xit.pixelatedaria.space](https://xit.pixelatedaria.space) | xit | federating | `Y0cHJS-cafemUL2VtqitM9IaETXLYAzy54c1drovxPk` | [code](https://github.com/xittered/xitter) |
 | [xitt.flex.pm](https://xitt.flex.pm) | Xittor | federating | `954Dw1wqqWqe4XIXEaMx9wmUUBRiChbbl_vPzahgxfY` | [code](https://github.com/FlexKleks/xitter) |
 | [xitter.charl1e39.win](https://xitter.charl1e39.win) | Xitter | federating | `bDH0kpDYJBQSgiQtPnUfOgOgDyBKR9PtCCare8XB0n8` | [code](https://github.com/Xittered/xitter) |
-| [xitter.girlskissing.gay](https://xitter.girlskissing.gay) | xitter: lesbian edition | federating | `kgTDVqZmPWxdWqkSo_cuWcYYmkFnk-YqWMz2RYwKY4w` | [code](https://git.iambrdn.dev/braiden/xitter-custom) |
+| [xitter.lab-xp.ovh](https://xitter.lab-xp.ovh) | Larptter | federating | `2pHoUdvi8EZwE0EH8HhjROsBT0JZk0OzN_XZVnvT6fQ` | [code](https://github.com/Xittered/xitter) |
 | [xitter.plunkinator.org](https://xitter.plunkinator.org) | Xitter | federating | `ovmWzg0FxZlqKk8oaBL6hjK-XGAhUFuh_JnAsW9M8ng` | [code](https://github.com/Xittered/xitter) |
 | [xitter.space](https://xitter.space) | Xit | federating | `C_9Cz5GkJjtSvWngLyVhfSTscLdcYo6Omx_EpSzQU5w` | [code](https://github.com/Xittered/xitter) |
 | [xittertest.natolix.me](https://xittertest.natolix.me) | Xit | federating | `buxzRN1JZpHM3-9r6KjIT7IgqvxD7kT1_7GdvDp_lrM` | [code](https://github.com/Xittered/xitter) |
