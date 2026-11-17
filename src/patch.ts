@@ -94,7 +94,8 @@ const RULES: [RegExp, string][] = [
 	[/(\w+)=\w+\.isAnyPremiumSubscriber,(\(\(\{handleDownloadVideo:)/g, "$1=!0,$2"],
 	// the router's profile addresses: staff can give a handle any characters up
 	// to 50 (invites.ts STAFF_HANDLE), which the address carries percent-encoded
-	[/screenName:"\[a-zA-Z0-9_\]\{1,26\}"/g, 'screenName:"[^/]{1,200}"'],
+	// (the 2020 client's is {1,20}); remote accounts' user@host go through it too
+	[/screenName:"\[a-zA-Z0-9_\]\{1,2[06]\}"/g, 'screenName:"[^/]{1,200}"'],
 	[
 		/(descriptionTextParts:\((\w+),(\w+),(\w+)\)=>\{let \w+=)(\w+)\(\(0,(\w+\.A)\)\(\2\),(\w+\.A\.MENTION)\)([\s\S]{0,600}?;let \w+=\3&&\3\.description&&\3\.description\.urls;if\(\w+&&\w+\.length\)\{let \3=\5\(\w+\.map\(\3=>\(\{\.\.\.\3,indices:\4\?\.isUTF16EntityIndices\?\3\.indices:\(0,(\w+\.A)\)\(\2,)/g,
 		"$1(Array.isArray($3?.description?.user_mentions)?$5($3.description.user_mentions.map($3=>({...$3,screenName:$3.screen_name,indices:$4?.isUTF16EntityIndices?$3.indices:(0,$9)($2,$3.indices[0],$3.indices[1])})),$7):$5((0,$6)($2),$7))$8",
@@ -162,6 +163,15 @@ export function brandText(text: string, name: string, code = false): string {
 	return text.replace(STRING, (s) => (!code || (PROSE.test(s) && WORDS.test(s)) ? s.replace(BRAND, () => literal) : s));
 }
 
+// only the 2020 client's files (client-web-legacy)
+const LEGACY_RULES: [RegExp, string][] = [
+	// its only checkmark, painted from `verified` (adaptive.ts):
+	// gold for organisations, grey for governments
+	[/(\w+)\.isVerified&&(\w+)\.push\((\w+)\.createElement\((\w+\.a),\{accessibilityLabel:(\w+),style:\[(\w+)\.marginLeft,\6\.defaultBadgeColor,(\w+)\]\}\)\)/g, '$1.isVerified&&$2.push($3.createElement($4,{accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,$1.isVerified==="business"?{color:"rgb(226,183,25)"}:$1.isVerified==="government"?{color:"rgb(130,154,171)"}:null]}))'],
+	// the profile header and user cells cast `verified` to a boolean first
+	[/isVerified:!!(\w+)\.verified(?![\w$])/g, "isVerified:$1.verified"],
+];
+
 export function patchText(text: string, chat = false): string {
 	let out = text;
 	let re: RegExp, to: string;
@@ -203,6 +213,7 @@ export function patchFile(key: string, raw: Buffer, build = ""): Buffer {
 	let hit = cachedPatch(key, build);
 	if (!hit) {
 		let text = patchText(raw.toString("utf8"), key.startsWith("/x-web/xchat/"));
+		if (key.includes("/client-web-legacy/")) for (const [re, to] of LEGACY_RULES) text = text.replace(re, to);
 		if (js) text = brandText(text, name, !I18N.test(key));
 		hit = Buffer.from(text);
 		if (hit.byteLength <= MAX_PATCH_CACHE_BYTES) {

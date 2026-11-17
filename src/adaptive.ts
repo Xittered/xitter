@@ -70,8 +70,9 @@ function legacyFromResult(u: Obj): Obj {
 		favourites_count: u.action_counts?.favorites_count ?? 0,
 		statuses_count: u.tweet_counts?.tweets ?? 0,
 		media_count: u.tweet_counts?.media_tweets ?? 0,
-		// the old client has only the one checkmark
-		verified: !!u.is_blue_verified,
+		// the old client has only the one checkmark: a string paints it (patch.ts)
+		// gold for organisations, grey for governments
+		verified: !u.is_blue_verified ? false : (u.verification?.verified_type ?? u.verified_type) === "Business" ? "business" : (u.verification?.verified_type ?? u.verified_type) === "Government" ? "government" : true,
 		profile_image_url_https: u.avatar?.image_url,
 		...(u.banner?.image_url ? { profile_banner_url: u.banner.image_url } : {}),
 		pinned_tweet_ids_str: u.pinned_items?.tweet_ids_str ?? [],
@@ -204,7 +205,11 @@ export function legacyGraphql(json: unknown, depth = 0): unknown {
 		const unwrapped = k === "user" && v && typeof v === "object" && "result" in v && Object.keys(v).length === 1 ? (v as Obj).result : v;
 		out[k] = legacyGraphql(unwrapped, depth + 1);
 	}
-	if (o.__typename === "User" && o.rest_id) out.legacy = { ...legacyFromResult(o), ...(o.legacy ?? {}) };
+	if (o.__typename === "User" && o.rest_id) {
+		const old = legacyFromResult(o);
+		// our `legacy` has the plain boolean checkmark; the old client's (gold, grey) wins
+		out.legacy = { ...old, ...(o.legacy ?? {}), verified: old.verified };
+	}
 	// 2020 timeline items carry user_result / tweet_result (the object itself),
 	// where the current shape has user_results / tweet_results wrapping it in result
 	for (const kind of ["user", "tweet"]) {
