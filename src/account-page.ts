@@ -196,16 +196,21 @@ export async function accountPage({ req, title, body, viewer, status = 200, back
 	const night = parseCookies(req).night_mode;
 	let look: ReturnType<typeof readPrefs>["look"] = null;
 	let extra = "";
-	if (viewer) {
+	// From the 2020 client these pages take its look, which it keeps to itself:
+	// its pages note the theme they show as they link here (shell.ts OLD_PAGES)
+	const old = !!loadBuild()?.build.stateBase;
+	const oldTheme = parseCookies(req).xitter_old_theme;
+	if (old) extra = ":root{--accent:rgb(29 161 242);--accent-fill:rgb(29 161 242);--accent-hover:rgb(26 145 218)}";
+	else if (viewer) {
 		const [row] = await sql`select preferences from users where id = ${viewer.id}::bigint`;
 		const prefs = readPrefs(row?.preferences);
 		look = prefs.look;
 		extra = look?.kind === "painted" ? `:root[data-theme]{${accountVars(look.theme)}}` : `:root{${accentVars(prefs.accent)}}`;
 	}
-	const theme = paletteOf(look, night);
+	const theme = old ? (oldTheme === "dim" || oldTheme === "dark" || oldTheme === "light" ? oldTheme : "light") : paletteOf(look, night);
 	// the 2020 client opens these pages whole, not framed in its Settings
 	const index = /^\/account\/?$/.test(new URL(req.url).pathname);
-	const home = !loadBuild()?.build.stateBase ? { href: "/settings/xitter", label: "Back to Xitter settings" } : index ? { href: "/settings", label: "Back to Settings" } : { href: "/account/", label: "Back to Xitter settings" };
+	const home = !old ? { href: "/settings/xitter", label: "Back to Xitter settings" } : index ? { href: "/settings", label: "Back to Settings" } : { href: "/account/", label: "Back to Xitter settings" };
 	const to = back ?? (viewer ? home : { href: "/", label: `Back to ${name}` });
 	const html = `<!doctype html>
 <html lang="en"${theme ? ` data-theme="${theme}"` : ""}>

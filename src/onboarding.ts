@@ -321,7 +321,10 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 		const token = String(f.session_token ?? "");
 		const s = await pending(token);
 		if (!s) return respond(fieldError("username", STALE));
-		const fieldOf = (e: Error) => (/email/i.test(e.message) ? "email" : /password/i.test(e.message) ? "password" : /name/i.test(e.message) && !/user/i.test(e.message) ? "name" : "username");
+		// the setup screen (jf/setup.json) shows errors under name, username and
+		// password, and anything else in its message line; one sent to a field it
+		// doesn't have (email) was never seen
+		const fieldOf = (e: Error) => (/email/i.test(e.message) ? "message" : /password/i.test(e.message) ? "password" : /name/i.test(e.message) && !/user/i.test(e.message) ? "name" : /username/i.test(e.message) ? "username" : "message");
 		// with mail set up, the address is proven first: the checked form waits for the code
 		if (mailEnabled()) {
 			const given = { code: s.code, screenName: String(f.username ?? s.username), name: String(f.name ?? ""), password: String(f.password ?? ""), email: String(f.email ?? ""), ip: requestIp(req) };
@@ -335,11 +338,11 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: requestCountry(req) ?? null };
 			// a code sent for an earlier address mustn't confirm this one
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb, email_code_hash = null where token = ${token}::uuid`;
-			if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("email", "Too many codes sent from here. Wait an hour."));
+			if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("message", "Too many codes sent from here. Wait an hour."));
 			try {
 				await sendSignupCode(token, checked.email);
 			} catch (e: any) {
-				return respond(fieldError("email", `We couldn't send a code to that address: ${e.message}`));
+				return respond(fieldError("message", `We couldn't send a code to that address: ${e.message}`));
 			}
 			return respond(fill(templates.twoFactor, { session_token: token }, emailCodeTexts(checked.email)));
 		}
@@ -356,8 +359,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			});
 		} catch (e) {
 			if (!(e instanceof SignupError)) throw e;
-			const field = /email/i.test(e.message) ? "email" : /password/i.test(e.message) ? "password" : /name/i.test(e.message) && !/user/i.test(e.message) ? "name" : "username";
-			return respond(fieldError(field, e.message));
+			return respond(fieldError(fieldOf(e), e.message));
 		}
 		await sql`delete from signup_sessions where token = ${token}::uuid`;
 		const session = await login(String(f.username ?? s.username), String(f.password ?? ""));

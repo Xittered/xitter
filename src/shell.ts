@@ -24,7 +24,7 @@ import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-pick
 import { PRONOUNS_CSS, PRONOUNS_SCRIPT, pronounsData } from "./pronouns";
 import { CLASSIC_DETAIL_CSS, CLASSIC_DETAIL_SCRIPT } from "./classic-detail";
 import { PUBLIC_ORIGIN } from "./config";
-import { legacyUser } from "./model";
+import { SQUARE_MARK, legacyUser } from "./model";
 import { patchText } from "./patch";
 import { PWA_SCRIPT, pwaHead } from "./pwa";
 import { MONEY_UI_CSS, MONEY_UI_SCRIPT } from "./money-ui";
@@ -345,7 +345,11 @@ const oldMenu = (links: MenuLink[]) => [
 ];
 // Our pages can't sit inside the 2020 client the way tidy.ts frames them in the
 // current one, so links to them load the page itself instead of a client route
-const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0))return;e.preventDefault();e.stopPropagation();location.assign(p+u.search)},true);`;
+const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0))return;e.preventDefault();e.stopPropagation();var b=getComputedStyle(document.body).backgroundColor;document.cookie="xitter_old_theme="+(b==="rgb(0, 0, 0)"?"dark":b.indexOf("rgb(21, 32, 43")===0?"dim":"light")+"; Path=/; Max-Age=31536000; SameSite=Lax";location.assign(p+u.search)},true);`;
+// An organisation's avatar is square, as on X: the 2020 client draws every
+// avatar round (its r-sdzlij class), and its picture's address carries
+// SQUARE_MARK (model.ts oldAvatar) where it should not be
+const OLD_SQUARE = `.r-sdzlij:has(img[src*="${SQUARE_MARK}"]){border-radius:10%!important}`;
 // Home's tabs for the 2020 client (patch.ts puts them atop its timeline): For
 // you and Following are its own top/latest switch, which the sparkle button's
 // component reports in __xitterHome; All is the built-in list. Made with the
@@ -391,7 +395,7 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />
 <meta name="theme-color" content="#ffffff" /><title>${esc(settings().instance_name)}</title>
 <link rel="icon" type="image/png" href="/public/favicon.png" />
-<style>html,body{height:100%}body{margin:0}</style>
+<style>html,body{height:100%}body{margin:0}${OLD_SQUARE}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
 ${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};${OLD_PAGES}${OLD_TABS}</script>` : ""}

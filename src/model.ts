@@ -316,6 +316,9 @@ export function oldVerified(blue: boolean, type: string | undefined, label: any)
 	return { t: check, img, name: label.description ?? "", ...(org ? { org } : {}) };
 }
 const oldClient = () => !!loadBuild()?.build.stateBase;
+// a fragment, so the picture loads as ever; shell.ts squares what carries it
+export const SQUARE_MARK = "#square";
+export const oldAvatar = (url: string | undefined, shape: string | undefined) => (url && shape === "Square" ? url + SQUARE_MARK : url);
 
 // older REST-style user record, used inside the page's initial state
 export function legacyUser(u: User) {
@@ -351,7 +354,7 @@ export function legacyUser(u: User) {
 		verified_user_profiles: { super_follows_user_profile: { is_active: false } },
 		verified: oldClient() ? oldVerified(isVerified(u), verification(u).verified_type, (badgeLabel(u) as any).label) : false,
 		protected: !!u.protected,
-		profile_image_url_https: absolute(u.avatar_url) ?? DEFAULT_AVATAR,
+		profile_image_url_https: oldClient() ? oldAvatar(absolute(u.avatar_url) ?? DEFAULT_AVATAR, pictureShape(u)) : (absolute(u.avatar_url) ?? DEFAULT_AVATAR),
 		...(u.banner_url ? { profile_banner_url: absolute(u.banner_url) } : {}),
 		can_media_tag: true,
 		// with a default avatar and no bio or banner the client offers its "Set up
