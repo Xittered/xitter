@@ -9,6 +9,8 @@ import type { Viewer } from "./auth";
 import { trendScope } from "./explore-settings";
 import { callOperation } from "./graphql";
 import { cachedTrends } from "./search";
+import { legacyDmRoute, legacyUnreadCount } from "./legacy-dm";
+import { restRoute } from "./rest";
 
 type Obj = Record<string, any>;
 type Globals = { tweets: Obj; users: Obj; notifications: Obj };
@@ -76,7 +78,8 @@ function legacyFromResult(u: Obj): Obj {
 		default_profile: false,
 		default_profile_image: false,
 		has_extended_profile: false,
-		can_dm: false,
+		// 2020 DMs (legacy-dm.ts) take anyone not blocked; sending checks that
+		can_dm: true,
 		can_media_tag: true,
 		following: !!rel.following,
 		followed_by: !!rel.followed_by,
@@ -312,6 +315,17 @@ const page = (q: URLSearchParams) => ({ count: Number(q.get("count")) || 20, ...
 
 export async function adaptiveRoute(method: string, path: string, viewer: Viewer, req: Request): Promise<Response | undefined> {
 	if (!path.startsWith("/2/") && !path.startsWith("/1.1/")) return undefined;
+	// its direct messages (legacy-dm.ts)
+	const dm = await legacyDmRoute(method, path, viewer, req);
+	if (dm) return dm;
+	// the people search under New message only offers those with can_dm
+	if (method === "GET" && path === "/1.1/search/typeahead.json") {
+		const res = await restRoute(method, path, viewer, req);
+		if (!res?.ok) return res;
+		const body: any = await res.json();
+		for (const u of body.users ?? []) u.can_dm = !u.blocking && !u.blocked_by;
+		return Response.json(body);
+	}
 	const q = new URL(req.url).searchParams;
 	if (method === "GET") {
 		for (const [re, to] of TIMELINES) {
@@ -380,25 +394,12 @@ export async function adaptiveRoute(method: string, path: string, viewer: Viewer
 		}
 		// no saved searches yet; the client sorts this list, so it must be one
 		if (path === "/1.1/saved_searches/list.json") return Response.json([]);
-		// Direct messages: xitter's chats are end-to-end encrypted (XChat), which this
-		// client can't read, so its inbox is empty, in the shape it polls for
-		if (path === "/1.1/dm/inbox_initial_state.json")
-			return Response.json({
-				inbox_initial_state: {
-					last_seen_event_id: "0",
-					trusted_last_seen_event_id: "0",
-					untrusted_last_seen_event_id: "0",
-					cursor: "0",
-					inbox_timelines: { trusted: { status: "AT_END" }, untrusted: { status: "AT_END" }, untrusted_low_quality: { status: "AT_END" } },
-					entries: [],
-					users: {},
-					conversations: {},
-				},
-			});
-		if (path === "/1.1/dm/user_updates.json") return Response.json({ user_events: { cursor: q.get("cursor") ?? "0", last_seen_event_id: "0", trusted_last_seen_event_id: "0", untrusted_last_seen_event_id: "0", entries: [], users: {}, conversations: {} } });
 		// Settings > Display language; the client sorts this list as well
 		if (path === "/1.1/help/languages.json") return Response.json([{ code: "en", name: "English", local_name: "English", status: "production", debug: false }]);
-		if (path === "/2/badge_count/badge_count.json") return Response.json({ ntab_unread_count: 0, dm_unread_count: 0, total_unread_count: 0, is_from_urt: true });
+		if (path === "/2/badge_count/badge_count.json") {
+			const dms = await legacyUnreadCount(viewer.id);
+			return Response.json({ ntab_unread_count: 0, dm_unread_count: dms, total_unread_count: dms, is_from_urt: true });
+		}
 		return undefined;
 	}
 	if (method !== "POST") return undefined;

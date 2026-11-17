@@ -1835,3 +1835,26 @@ create table if not exists circle_members (
 create index if not exists circle_members_member_idx on circle_members (member_id);
 alter table posts add column if not exists circle_owner_id bigint references users (id) on delete cascade;
 create index if not exists posts_circle_owner_idx on posts (circle_owner_id) where circle_owner_id is not null;
+
+-- Direct messages of the 2020 web client (legacy-dm.ts). Unencrypted, unlike
+-- XChat, which that client can't read; these chats exist only in old clients.
+-- A one-to-one conversation's id is "<smaller user id>-<larger user id>".
+create table if not exists legacy_dm_participants (
+	conversation_id text not null,
+	user_id bigint not null references users (id) on delete cascade,
+	last_read_event_id bigint not null default 0,
+	-- left the conversation: hidden from the inbox until a new message arrives
+	left_at_event_id bigint,
+	primary key (conversation_id, user_id)
+);
+create index if not exists legacy_dm_participants_user_idx on legacy_dm_participants (user_id);
+create table if not exists legacy_dm_events (
+	id bigint primary key,
+	conversation_id text not null,
+	sender_id bigint not null references users (id) on delete cascade,
+	text text not null,
+	request_id text,
+	created_at timestamptz not null default now()
+);
+create index if not exists legacy_dm_events_conversation_idx on legacy_dm_events (conversation_id, id);
+alter table users add column if not exists legacy_dm_last_seen bigint not null default 0;
