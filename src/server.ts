@@ -5,7 +5,7 @@ import { PORT, PUBLIC_ORIGIN } from "./config";
 import { migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
 import { brandingFile } from "./branding";
-import { handleLogin, handleOldSessions, maintenancePage, rulesPage } from "./login";
+import { handleLogin, handleOldCode, handleOldSessions, maintenancePage, rulesPage } from "./login";
 import { adminApi, audit } from "./admin";
 import { loadSettings, settings } from "./settings";
 import { flagPickerData } from "./flag-picker";
@@ -471,6 +471,11 @@ async function route(req: Request): Promise<Response | undefined> {
 		const h = hit("auth", requestIp(req) ?? "unknown");
 		if (!h.ok) return limitedResponse(h);
 		return handleOldSessions(req);
+	}
+	if (p === "/sessions/code" && (req.method === "GET" || req.method === "POST") && loadBuild()?.build.stateBase) {
+		const h = req.method === "POST" ? hit("auth", requestIp(req) ?? "unknown") : undefined;
+		if (h && !h.ok) return limitedResponse(h);
+		return handleOldCode(req);
 	}
 	if (p === "/rules" || p === "/tos" || p === "/privacy") return rulesPage();
 	// X's sign-in screens (jf.x.com), answered here

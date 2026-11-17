@@ -79,7 +79,8 @@ async function conversations(viewerId: string, only?: string[]): Promise<Obj> {
 	);
 }
 
-// messages the viewer can see, newest first; `after` for updates, `before` for older pages
+// messages the viewer can see, newest first; `before` for older pages. With
+// `after` (updates) the oldest come first, so a long gap is caught up in order
 async function events(viewerId: string, opts: { after?: string; before?: string; conversationId?: string; limit?: number }) {
 	return await sql`select e.id::text, e.conversation_id, e.sender_id::text, e.text, e.request_id, e.created_at
 		from legacy_dm_events e join legacy_dm_participants p on p.conversation_id = e.conversation_id and p.user_id = ${viewerId}::bigint and not e.hidden
@@ -87,7 +88,16 @@ async function events(viewerId: string, opts: { after?: string; before?: string;
 			${opts.conversationId ? sql`and e.conversation_id = ${opts.conversationId}` : sql``}
 			${opts.after ? sql`and e.id > ${opts.after}::bigint` : sql``}
 			${opts.before ? sql`and e.id < ${opts.before}::bigint` : sql``}
-		order by e.id desc limit ${opts.limit ?? PAGE}`;
+		order by e.id ${opts.after ? sql`asc` : sql`desc`} limit ${opts.limit ?? PAGE}`;
+}
+
+// the newest message of each of the viewer's conversations, so the inbox lists
+// them all, however many messages the busiest ones hold
+async function newestOfEach(viewerId: string) {
+	return await sql`select distinct on (e.conversation_id) e.id::text, e.conversation_id, e.sender_id::text, e.text, e.request_id, e.created_at
+		from legacy_dm_events e join legacy_dm_participants p on p.conversation_id = e.conversation_id and p.user_id = ${viewerId}::bigint and not e.hidden
+		where (p.left_at_event_id is null or e.id > p.left_at_event_id)
+		order by e.conversation_id, e.id desc limit 500`;
 }
 
 async function box(viewerId: string, rows: Obj[], only?: string[]) {
@@ -154,7 +164,13 @@ export async function legacyDmRoute(method: string, path: string, viewer: Viewer
 	const q = new URL(req.url).searchParams;
 	if (method === "GET") {
 		if (path === "/1.1/dm/inbox_initial_state.json") {
-			const rows = await events(viewer.id, {});
+			const recent = await events(viewer.id, {});
+			const have = new Set(recent.map((r: Obj) => r.id));
+			const rows = [...recent, ...(await newestOfEach(viewer.id)).filter((r: Obj) => !have.has(r.id))].sort((a: Obj, b: Obj) => (BigInt(a.id) < BigInt(b.id) ? 1 : -1));
+			const state = await box(viewer.id, rows);
+			// a conversation whose first message isn't among these has more to load
+			const shown = new Set(rows.map((r: Obj) => r.id));
+			for (const c of Object.values(state.conversations) as Obj[]) if (!shown.has(c.min_entry_id)) c.status = "HAS_MORE";
 			return Response.json({
 				inbox_initial_state: {
 					last_seen_event_id: await lastSeen(viewer.id),
@@ -162,13 +178,13 @@ export async function legacyDmRoute(method: string, path: string, viewer: Viewer
 					untrusted_last_seen_event_id: "0",
 					cursor: await newestId(viewer.id),
 					inbox_timelines: { trusted: { status: "AT_END" }, untrusted: { status: "AT_END" }, untrusted_low_quality: { status: "AT_END" } },
-					...(await box(viewer.id, rows)),
+					...state,
 				},
 			});
 		}
 		if (path === "/1.1/dm/user_updates.json") {
 			const cursor = isId(q.get("cursor") ?? "") ? q.get("cursor")! : undefined;
-			const rows = cursor ? (await events(viewer.id, { after: cursor, limit: 200 })).reverse() : [];
+			const rows = cursor ? await events(viewer.id, { after: cursor, limit: 200 }) : [];
 			return Response.json({
 				user_events: { cursor: rows.length ? rows[rows.length - 1].id : (cursor ?? (await newestId(viewer.id))), last_seen_event_id: await lastSeen(viewer.id), trusted_last_seen_event_id: await lastSeen(viewer.id), untrusted_last_seen_event_id: "0", ...(await box(viewer.id, rows)) },
 			});

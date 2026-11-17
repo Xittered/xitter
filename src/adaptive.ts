@@ -7,7 +7,11 @@
 
 import type { Viewer } from "./auth";
 import { trendScope } from "./explore-settings";
+import { ArticleError } from "./articles";
 import { callOperation } from "./graphql";
+import { PostError } from "./posts";
+import { RateLimitError, limitedResponse } from "./ratelimit";
+import { ReplyControlError } from "./reply-controls";
 import { cachedTrends } from "./search";
 import { legacyDmRoute, legacyUnreadCount } from "./legacy-dm";
 import { restRoute } from "./rest";
@@ -317,7 +321,21 @@ const TIMELINES: [RegExp, (m: RegExpExecArray, q: URLSearchParams) => [string, O
 ];
 const page = (q: URLSearchParams) => ({ count: Number(q.get("count")) || 20, ...(q.get("cursor") ? { cursor: q.get("cursor") } : {}) });
 
+// The operations refuse by throwing (a blocked word, a post that's gone, a
+// limit used up); as 1.1 errors, which this client shows
 export async function adaptiveRoute(method: string, path: string, viewer: Viewer, req: Request): Promise<Response | undefined> {
+	try {
+		return await route(method, path, viewer, req);
+	} catch (e) {
+		if (e instanceof RateLimitError) return limitedResponse(e.hit);
+		if (e instanceof PostError || e instanceof ReplyControlError || e instanceof ArticleError)
+			return Response.json({ errors: [{ code: e.code, message: e.message }] }, { status: e.code === 144 ? 404 : 403 });
+		if (e instanceof URIError) return Response.json({ errors: [{ code: 214, message: "Bad request." }] }, { status: 400 });
+		throw e;
+	}
+}
+
+async function route(method: string, path: string, viewer: Viewer, req: Request): Promise<Response | undefined> {
 	if (!path.startsWith("/2/") && !path.startsWith("/1.1/")) return undefined;
 	// its direct messages (legacy-dm.ts)
 	const dm = await legacyDmRoute(method, path, viewer, req);

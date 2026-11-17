@@ -165,6 +165,9 @@ export function brandText(text: string, name: string, code = false): string {
 
 // only the 2020 client's files (client-web-legacy)
 const LEGACY_RULES: [RegExp, string][] = [
+	// its cookies (night_mode among them: Display's dim and lights out) are set
+	// for .twitter.com, which the browser drops here, so a reload forgot them
+	[/domain:"\.twitter\.com"/g, `domain:"${PUBLIC_HOSTNAME}"`],
 	// its only checkmark, painted from `verified` (model.ts oldVerified): gold
 	// for organisations, grey for governments, blue for the rest (the 2020
 	// client drew its one check white on a dark theme); then an affiliate badge

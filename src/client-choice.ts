@@ -41,7 +41,8 @@ export async function switchByQuery(url: URL, viewer: Viewer | undefined): Promi
 	if (id === null) return undefined;
 	const rest = new URL(url);
 	rest.searchParams.delete("client");
-	const headers = new Headers({ location: rest.pathname + rest.search, "cache-control": "no-store" });
+	// a path of "//host/..." would be read as another site's address
+	const headers = new Headers({ location: rest.pathname.replace(/^[/\\]+/, "/") + rest.search, "cache-control": "no-store" });
 	const build = clientBuild(id);
 	if (build && choiceAllowed()) {
 		if (viewer) await saveClient(viewer, build.id);
