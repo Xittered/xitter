@@ -177,6 +177,9 @@ const LEGACY_RULES: [RegExp, string][] = [
 	// Settings: Xitter settings above Additional resources (shell.ts loads our
 	// pages whole when their links are clicked)
 	[/(([\w$]+)\.createElement\(([\w$]+),\{label:[\w$]+,link:"\/settings\/about")/g, '$2.createElement($3,{label:"Xitter settings",link:"/settings/xitter"}),$1'],
+	// Home's sparkle menu switches top and latest Tweets (For you and Following);
+	// All, every post here, is the built-in list (lists.ts)
+	[/(_getActionMenuItems",\(function\(\)\{var [\w$]+=[\w$]+\.props\.useLatest,[\w$]+=[^;]{1,20};return\[\{text:[^}]{1,80},Icon:([\w$]+\.a),subText:[\w$]+\},)/g, '$1{link:"/i/lists/1",text:"See all Tweets",subText:"Every Tweet on this instance, newest first.",Icon:$2},'],
 	// More menu entries for what Xitter doesn't run: Topics, and the sites
 	// Twitter had for ads, analytics and media (they lead to x.com)
 	[/(_render(?:Topics|TwitterAds|Analytics|MediaStudio)Item",\(function\([\w$]*\)\{)return /g, "$1return null;"],
