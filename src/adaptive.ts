@@ -138,6 +138,10 @@ function convertEntry(g: Globals, e: Obj): Obj[] {
 			content: { item: { content: { notification: { id: addNotification(g, n), ...(n.notification_url ? { url: { ...n.notification_url, url: ownLink(n.notification_url.url) } } : {}) } }, clientEventInfo: c.clientEventInfo } },
 		}];
 	}
+	if (c.itemContent?.__typename === "TimelineUser") {
+		const id = addUser(g, c.itemContent.user_results?.result);
+		return id ? [{ entryId: e.entryId, sortIndex: e.sortIndex, content: { item: { content: { user: { id, displayType: "UserDetailed" } } } } }] : [];
+	}
 	if (c.itemContent) {
 		const id = addTweet(g, c.itemContent.tweet_results?.result);
 		return id ? [tweetEntry(id, e.sortIndex, e.entryId)] : [];
@@ -215,8 +219,21 @@ const USER_TIMELINE_KEYS: Record<string, string> = {
 	FollowersYouKnow: "friends_following_timeline",
 };
 
+// list mutations: 2020 reads each answer under its own key, the current one under `list`
+const LIST_KEYS: Record<string, string> = {
+	CreateList: "list_create",
+	ListAddMember: "list_member_add_v2",
+	ListRemoveMember: "list_member_remove_v2",
+	ListSubscribe: "list_subscribe_v2",
+	ListUnsubscribe: "list_unsubscribe_v2",
+	ListPinOne: "list_pin",
+	ListUnpinOne: "list_unpin",
+};
+
 export function legacyOperation(name: string, json: unknown): unknown {
 	const out = legacyGraphql(json) as Obj;
+	const listKey = LIST_KEYS[name];
+	if (listKey && out?.data?.list && !(listKey in out.data)) out.data[listKey] = out.data.list;
 	const key = USER_TIMELINE_KEYS[name];
 	const user = out?.data?.user;
 	if (key && user && "timeline" in user && !(key in user)) {
@@ -224,6 +241,44 @@ export function legacyOperation(name: string, json: unknown): unknown {
 		delete user.timeline;
 	}
 	return out;
+}
+
+// the GIF picker's category tiles; each opens a search for its name
+const GIF_CATEGORIES = ["trending", "Agree", "Applause", "Awww", "Dance", "Facepalm", "Happy", "High five", "Hugs", "Mic drop", "No", "OMG", "Thumbs up", "Yes"];
+
+// a GIF result of gifs.ts as a 2020 foundmedia item
+function oldGif(it: Obj): Obj {
+	const [provider, ...rest] = String(it.id ?? "").split("_");
+	return {
+		// the picker keys its rows by these, so each must be unique
+		id: it.id,
+		url: it.full_image?.url,
+		alt_text: it.alt_text ?? "",
+		provider: { name: it.provider?.id ?? provider, display_name: it.provider?.display_name ?? provider },
+		found_media_origin: { provider: it.provider?.id ?? provider, id: rest.join("_") },
+		original_image: it.full_image,
+		preview_image: it.preview_image,
+		thumbnail_images: it.thumbnail_images ?? [it.preview_image],
+	};
+}
+
+// a GraphQL list as the 1.1 list record (lists/members/create answers with one)
+function restList(l: Obj): Obj {
+	const owner = l.user_results?.result;
+	return {
+		id: Number(l.id_str),
+		id_str: l.id_str,
+		name: l.name,
+		uri: owner ? `/${owner.core?.screen_name}/lists/${l.id_str}` : `/i/lists/${l.id_str}`,
+		slug: l.id_str,
+		description: l.description ?? "",
+		mode: String(l.mode ?? "Public").toLowerCase(),
+		member_count: l.member_count ?? 0,
+		subscriber_count: l.subscriber_count ?? 0,
+		created_at: new Date(Number(l.created_at) || Date.now()).toUTCString(),
+		following: !!l.following,
+		user: owner ? legacyFromResult(owner) : undefined,
+	};
 }
 
 async function form(req: Request): Promise<Record<string, string>> {
@@ -248,6 +303,8 @@ const TIMELINES: [RegExp, (m: RegExpExecArray, q: URLSearchParams) => [string, O
 	[/^\/2\/timeline\/favorites\/(\d{1,19})\.json$/, (m, q) => ["Likes", { ...page(q), userId: m[1] }, `favorites-${m[1]}`]],
 	[/^\/2\/timeline\/conversation\/(\d{1,19})\.json$/, (m, q) => ["TweetDetail", { focalTweetId: m[1], ...(q.get("cursor") ? { cursor: q.get("cursor") } : {}) }, `conversation-${m[1]}`]],
 	[/^\/2\/timeline\/bookmark\.json$/, (_, q) => ["Bookmarks", page(q), "bookmarks"]],
+	[/^\/2\/timeline\/list\.json$/, (_, q) => ["ListLatestTweetsTimeline", { ...page(q), listId: q.get("list_id") ?? "" }, `list-${q.get("list_id")}`]],
+	[/^\/2\/timeline\/list_recommended_users\.json$/, (_, q) => (q.get("list_id") ? ["ListEditRecommendedUsers", { ...page(q), listId: q.get("list_id") }, "list-recommended"] : ["ListCreationRecommendedUsers", page(q), "list-recommended"])],
 	[/^\/2\/notifications\/(all|mentions|verified)\.json$/, (m, q) => ["NotificationsTimeline", { ...page(q), timeline_type: m[1] === "all" ? "All" : m[1] === "mentions" ? "Mentions" : "Verified" }, `notifications-${m[1]}`]],
 	[/^\/2\/search\/adaptive\.json$/, (_, q) => ["SearchTimeline", { ...page(q), rawQuery: q.get("q") ?? "", product: q.get("tweet_search_mode") === "live" ? "Latest" : q.get("result_filter") === "user" ? "People" : q.get("result_filter") === "image" ? "Media" : "Top" }, "search"]],
 ];
@@ -264,6 +321,33 @@ export async function adaptiveRoute(method: string, path: string, viewer: Viewer
 			return Response.json(adaptive(await callOperation(op, viewer, vars), id));
 		}
 		// Explore and the trends box: nothing to show yet, in the shape that says so
+		// GIF picker ("foundmedia"): the instance's GIF provider through the same
+		// operations the current client uses, in the 2020 shape
+		const gifs = /^\/1\.1\/foundmedia\/(categories|categories\/([^/]+)|search)\.json$/.exec(path);
+		if (gifs) {
+			if (gifs[1] === "categories") {
+				const slice: any = await callOperation("GifEnumerateCategory", viewer, { category: "trending", count: GIF_CATEGORIES.length });
+				const stills = (slice?.data?.gif_enumerate_category_slice?.items ?? []).map((it: Obj) => it.full_image);
+				return Response.json({
+					data: { groups: GIF_CATEGORIES.map((name, i) => ({ type: "category", id: name, display_name: name === "trending" ? "Trending" : name, original_image: stills[i % Math.max(stills.length, 1)] ?? { url: "", still_image_url: "", width: 1, height: 1 } })) },
+				});
+			}
+			const cursor = q.get("cursor") ?? undefined;
+			const answer: any = gifs[2]
+				? await callOperation("GifEnumerateCategory", viewer, { category: decodeURIComponent(gifs[2]), count: q.get("count") ?? 20, cursor })
+				: await callOperation("GifSearch", viewer, { rawQuery: q.get("q") ?? "", count: q.get("count") ?? 20, cursor });
+			const slice = answer?.data?.gif_enumerate_category_slice ?? answer?.data?.gif_search_slice ?? {};
+			return Response.json({ data: { items: (slice.items ?? []).map(oldGif) }, cursor: slice.slice_info?.next_cursor ? { next: slice.slice_info.next_cursor } : {} });
+		}
+		// Moments: Xitter has none; an empty timeline, with the cursors that tell the client it's done
+		if (/^\/2\/moments\/[\w/]+\.json$/.test(path)) {
+			const empty = adaptive({}, "moments");
+			empty.timeline.instructions[0].addEntries!.entries.push(
+				{ entryId: `cursor-top-${Date.now()}`, sortIndex: String(Date.now()), content: { operation: { cursor: { value: "top", cursorType: "Top" } } } },
+				{ entryId: "cursor-bottom-0", sortIndex: "0", content: { operation: { cursor: { value: "bottom", cursorType: "Bottom", stopOnEmptyResponse: true } } } },
+			);
+			return Response.json(empty);
+		}
 		// Explore and the "What's happening" box: the week's top hashtags as 2020
 		// trend items. With no entries at all Explore says "page doesn't exist", and
 		// without cursors it keeps spinning.
@@ -319,6 +403,17 @@ export async function adaptiveRoute(method: string, path: string, viewer: Viewer
 	}
 	if (method !== "POST") return undefined;
 	if (path === "/1.1/branch/init.json") return Response.json({});
+	// adding to / removing from a list; user_id may be a comma list (members/create_all)
+	const listMember = /^\/1\.1\/lists\/members\/(create|create_all|destroy|destroy_all)\.json$/.exec(path);
+	if (listMember) {
+		const f = { ...Object.fromEntries(q), ...(await form(req)) };
+		const listId = f.list_id ?? "";
+		const op = listMember[1].startsWith("create") ? "ListAddMember" : "ListRemoveMember";
+		let answer: any;
+		for (const userId of String(f.user_id ?? "").split(",").filter(Boolean)) answer = await callOperation(op, viewer, { listId, userId });
+		const list = answer?.data?.list ?? (await callOperation("ListByRestId", viewer, { listId }) as any)?.data?.list;
+		return Response.json(list ? restList(list) : {});
+	}
 	const act: Record<string, (f: Record<string, string>) => Promise<string>> = {
 		"/1.1/favorites/create.json": async (f) => (await callOperation("FavoriteTweet", viewer, { tweet_id: f.id }), f.id),
 		"/1.1/favorites/destroy.json": async (f) => (await callOperation("UnfavoriteTweet", viewer, { tweet_id: f.id }), f.id),
@@ -329,6 +424,8 @@ export async function adaptiveRoute(method: string, path: string, viewer: Viewer
 				tweet_text: f.status ?? "",
 				...(f.in_reply_to_status_id ? { reply: { in_reply_to_tweet_id: f.in_reply_to_status_id, exclude_reply_user_ids: [] } } : {}),
 				...(f.attachment_url ? { attachment_url: f.attachment_url } : {}),
+				// a poll: the card made beforehand by /v2/cards/create.json
+				...(f.card_uri ? { card_uri: f.card_uri } : {}),
 				...(f.media_ids ? { media: { media_entities: f.media_ids.split(",").map((media_id) => ({ media_id, tagged_users: [] })) } } : {}),
 			});
 			return r?.data?.create_tweet?.tweet_results?.result?.rest_id ?? "";

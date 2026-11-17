@@ -161,8 +161,16 @@ export async function vote(viewerId: string, form: FormData): Promise<Record<str
 	if (!Number.isInteger(choice) || choice < 1 || choice > poll.choices.length) throw new PollError("Pick one of the choices.");
 	if (poll.ends_at.getTime() <= Date.now()) throw new PollError("This poll has ended.");
 	await sql`insert into poll_votes (poll_id, user_id, choice) values (${id}::bigint, ${viewerId}::bigint, ${choice}) on conflict do nothing`;
+	const card = await pollCardById(viewerId, id);
+	if (!card) throw new PollError("Unknown card.", 404);
+	return card;
+}
+
+// a poll's card with its current counts, as the vote answer and the card
+// refresh (GET capi/passthrough) return it
+export async function pollCardById(viewerId: string, id: string): Promise<Record<string, unknown> | undefined> {
 	const fresh = (await pollsByIds(viewerId, [id])).get(id);
-	if (!fresh) throw new PollError("Unknown card.", 404);
+	if (!fresh) return undefined;
 	return {
 		card: {
 			name: cardName(fresh),

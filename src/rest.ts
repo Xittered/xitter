@@ -15,7 +15,7 @@ import { pronounsProblem } from "./pronouns";
 import { isId } from "./ids";
 import { isVerified, legacyUser, tweetResult } from "./model";
 import { markSeen } from "./notifications";
-import { PollError, createCard, vote } from "./polls";
+import { PollError, createCard, pollCardById, vote } from "./polls";
 import { placeById, searchPlaces } from "./places";
 import { reportFlow } from "./reports";
 import { settingsFor } from "./shell";
@@ -172,6 +172,11 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 		const id = /^card:\/\/(\d{1,19})$/.exec(params["twitter:string:card_uri"] ?? params.status ?? "")?.[1];
 		const post = id && isId(id) ? await getPost(viewer.id, id) : undefined;
 		const card = post?.conversationCard ? (tweetResult(post, false).card as any)?.legacy : undefined;
+		if (!card && id && isId(id) && method === "GET") {
+			// a poll's own card id: the 2020 client refreshes poll results this way
+			const poll = await pollCardById(viewer.id, id);
+			if (poll) return Response.json(poll);
+		}
 		if (!card) return Response.json({ errors: [{ code: 144, message: "That conversation card is unavailable." }] }, { status: 404 });
 		return Response.json({ card: { ...card, binding_values: Object.fromEntries(card.binding_values.map((entry: any) => [entry.key, entry.value])) } });
 	}
