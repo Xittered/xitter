@@ -346,6 +346,22 @@ const oldMenu = (links: MenuLink[]) => [
 // Our pages can't sit inside the 2020 client the way tidy.ts frames them in the
 // current one, so links to them load the page itself instead of a client route
 const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0))return;e.preventDefault();e.stopPropagation();location.assign(p+u.search)},true);`;
+// Home's tabs for the 2020 client (patch.ts puts them atop its timeline): For
+// you and Following are its own top/latest switch, which the sparkle button's
+// component reports in __xitterHome; All is the built-in list. Made with the
+// client's React, passed in, and drawn in the colours its page shows.
+const OLD_TABS = `window.__xitterTabs=function(R){if(window.__xitterTabsC)return window.__xitterTabsC;
+var F='system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",sans-serif';
+function Tabs(p){var s=R.useState(window.__xitterHome||{}),st=s[0],set=s[1],ref=R.useRef(null);
+R.useEffect(function(){function on(){set(Object.assign({},window.__xitterHome))}window.addEventListener("xitter:home",on);on();return function(){window.removeEventListener("xitter:home",on)}},[]);
+R.useEffect(function(){var el=ref.current,h=document.querySelector('[data-testid="primaryColumn"] h2');if(!el||!h)return;var c=getComputedStyle(h).color,b=getComputedStyle(document.body).backgroundColor;el.style.color=c;el.style.background=b&&b!=="rgba(0, 0, 0, 0)"?b:"";});
+var latest=!!st.useLatest;
+function tab(label,on,go){return R.createElement("div",{key:label,role:"tab","aria-selected":on,tabIndex:0,onClick:go,onKeyDown:function(e){if(e.key==="Enter")go()},style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",minHeight:53,position:"relative",cursor:"pointer",fontWeight:on?700:500,opacity:on?1:.6,userSelect:"none"}},label,on?R.createElement("div",{style:{position:"absolute",bottom:0,height:4,width:56,borderRadius:9999,background:"rgb(29,161,242)"}}):null)}
+return R.createElement("div",{ref:ref,role:"tablist",style:{display:"flex",position:"sticky",top:53,zIndex:2,borderBottom:"1px solid rgba(128,128,128,.25)",fontFamily:F,fontSize:15}},
+tab("For you",!latest,function(){if(latest&&st.toggle)st.toggle()}),
+tab("Following",latest,function(){if(!latest&&st.toggle)st.toggle()}),
+tab("All",false,function(){p.history&&p.history.push("/i/lists/1")}))}
+return window.__xitterTabsC=Tabs};`;
 
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
@@ -378,7 +394,7 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 <style>html,body{height:100%}body{margin:0}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
-${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};${OLD_PAGES}</script>` : ""}
+${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};${OLD_PAGES}${OLD_TABS}</script>` : ""}
 <script id="nonce-csp"></script>
 <script>${runtimeText}</script>
 <script>${oldLoader(build.sha, build.scripts.map((p) => `${PUBLIC_ORIGIN}/abs${p}`))}</script>

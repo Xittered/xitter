@@ -180,6 +180,13 @@ const LEGACY_RULES: [RegExp, string][] = [
 	// Home's sparkle menu switches top and latest Tweets (For you and Following);
 	// All, every post here, is the built-in list (lists.ts)
 	[/(_getActionMenuItems",\(function\(\)\{var [\w$]+=[\w$]+\.props\.useLatest,[\w$]+=[^;]{1,20};return\[\{text:[^}]{1,80},Icon:([\w$]+\.a),subText:[\w$]+\},)/g, '$1{link:"/i/lists/1",text:"See all Tweets",subText:"Every Tweet on this instance, newest first.",Icon:$2},'],
+	// ...and Home gets For you / Following / All tabs (shell.ts OLD_TABS) atop its
+	// timeline, which take over from that button: its component now only says
+	// which timeline is on and how to switch
+	[/("_renderPrimaryContent",\(function\(\)\{var [\w$]+=[\w$]+\.props,([\w$]+)=[\w$]+\.history,[^;]{0,200};return ([\w$]+)\.createElement\(\3\.Fragment,null,)/g, "$1window.__xitterTabs?$3.createElement(window.__xitterTabs($3),{history:$2}):null,"],
+	[/(key:"render",value:function\(\)\{var ([\w$]+)=this\.props\.useLatest;)return [\w$]+\.createElement\([\w$]+,\{onContentPreferencesSelect:this\._handleContentPreferencesSelect,onPress:this\._handleSwitchPress,onToggle:this\._handleToggle,useLatest:\2\}\)/g, '$1var xs=this;window.__xitterHome={useLatest:$2,toggle:function(){xs._handleToggle()}};setTimeout(function(){window.dispatchEvent(new Event("xitter:home"))});return null'],
+	// the header says Home on every tab, not "Latest Tweets"
+	[/(=this\._latestTimelineSwitchEnabled&&[\w$]+\?)[\w$]+:([\w$]+)(?=[,;])/g, "$1$2:$2"],
 	// More menu entries for what Xitter doesn't run: Topics, and the sites
 	// Twitter had for ads, analytics and media (they lead to x.com)
 	[/(_render(?:Topics|TwitterAds|Analytics|MediaStudio)Item",\(function\([\w$]*\)\{)return /g, "$1return null;"],
