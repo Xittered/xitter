@@ -68,7 +68,7 @@ try {
 	check("removing needs the form's csrf token", (await remove({ id: key.id })).status === 403 && (await signIn(25)).ok);
 	check("removes it", (await remove({ id: key.id, csrf })).status === 303 && (await signIn(30)).status === 400);
 
-	// changing the password takes every passkey with it
+	// changing the password keeps the passkeys
 	const again = await (await post("/account/passkeys/options", { password: "testpass123" }, cookies)).json();
 	const second = authenticator(KINDS.EdDSA!, { challenge: again.challenge, origin, rpId: PUBLIC_HOSTNAME });
 	check("adds another", (await post("/account/passkeys/add", encode(second.create()), cookies)).ok);
@@ -78,7 +78,7 @@ try {
 		body: new URLSearchParams({ current_password: "testpass123", new_password: "newpass456", password_confirmation: "newpass456" }),
 	});
 	const [{ left }] = await sql`select count(*)::int as left from passkeys where user_id = ${id}::bigint`;
-	check("a password change removes the passkeys", changed.ok && left === 0, { status: changed.status, left });
+	check("a password change keeps the passkeys", changed.ok && left === 1, { status: changed.status, left });
 
 	// and so does a reset by email link
 	const fresh = await fetch(`${origin}/login`, { method: "POST", body: new URLSearchParams({ username: name, password: "newpass456" }), redirect: "manual" });
@@ -89,7 +89,7 @@ try {
 	await sql`insert into password_resets (token_hash, user_id) values (${createHash("sha256").update(token).digest("hex")}, ${id}::bigint)`;
 	const reset = await fetch(`${origin}/account/reset`, { method: "POST", body: new URLSearchParams({ token, password: "another789", confirm: "another789" }) });
 	const [{ after }] = await sql`select count(*)::int as after from passkeys where user_id = ${id}::bigint`;
-	check("a password reset removes the passkeys", reset.ok && after === 0, { status: reset.status, after });
+	check("a password reset keeps the passkeys", reset.ok && after === 2, { status: reset.status, after });
 } finally {
 	await sql`delete from users where id = ${id}::bigint`;
 	await sql.close();

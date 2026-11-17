@@ -95,7 +95,7 @@ export async function passkeySignInRoute(req: Request, path: string): Promise<Re
 		// the account lock first, as password changes and two-factor sign-ins take it
 		const [u] = await tx`select status, deactivated_at, deactivated_at > now() - interval '30 days' as returning
 			from users where id = ${key.user_id}::bigint for update`;
-		// a password change or reset may have removed it while this was checked
+		// it may have been removed (or the account reset by an admin) while this was checked
 		const [still] = await tx`select sign_count from passkeys where id = ${id} and user_id = ${key.user_id}::bigint`;
 		if (!u || !still) return { error: "This passkey isn't on any account here. It may have been removed.", status: 400 };
 		// A counter that didn't move forward means a copied authenticator
@@ -327,7 +327,7 @@ export async function passkeysRoute(req: Request, url: URL, viewer: Viewer): Pro
 		title: "Passkeys",
 		body: `<h1>Passkeys</h1>
 <p>A passkey signs you in with your fingerprint, face or screen lock instead of your password and two-factor code. It's kept by your device or password manager and only works on ${esc(PUBLIC_HOSTNAME)}, so it can't be phished.</p>
-<p class="dim">Changing or resetting your password removes all your passkeys, so nobody else who added one keeps a way in.</p>
+<p class="dim">Changing or resetting your password keeps your passkeys. If you see one you didn't add, remove it.</p>
 ${list}
 <h2>Add a passkey</h2>
 <form id="add"><label for="pk-name">Name (optional)</label><input id="pk-name" name="name" maxlength="50" placeholder="${esc(deviceName(req))}" autocomplete="off">
