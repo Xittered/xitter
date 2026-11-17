@@ -46,6 +46,7 @@ import { gifProxy } from "./gifs";
 import { accountIndexRoute } from "./account-page";
 import { gifSettingsRoute } from "./gif-settings";
 import { classicDetailRoute, postCounts } from "./classic-detail";
+import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
 import { cardImage } from "./explore-cards";
 import { rememberIp, requestIp } from "./login-history";
@@ -574,6 +575,8 @@ async function route(req: Request): Promise<Response | undefined> {
 	if ((p === "/account/money" || p.startsWith("/account/money/")) && viewer) return moneyRoute(req, viewer);
 	if (p === "/account/merchant" && viewer) return merchantRoute(req, viewer);
 	if (p.startsWith("/i/ton/data/xchat_media/")) return chatMediaRoute(req, viewer, url);
+	const activity = /^\/i\/tfb\/v1\/quick_promote\/lite\/(\d{1,19})$/.exec(p);
+	if (activity && req.method === "GET") return legacyAnalyticsPage(req, activity[1]!, viewer ?? undefined);
 	// pictures and oEmbed for previews of public posts in other apps (embeds.ts)
 	if (p.startsWith("/embed/")) return embedImage(p);
 	if (p === "/oembed") return oembed(url);

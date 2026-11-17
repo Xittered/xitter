@@ -11,6 +11,7 @@ import { callOperation } from "./graphql";
 import { cachedTrends } from "./search";
 import { legacyDmRoute, legacyUnreadCount } from "./legacy-dm";
 import { restRoute } from "./rest";
+import { oldVerified } from "./model";
 
 type Obj = Record<string, any>;
 type Globals = { tweets: Obj; users: Obj; notifications: Obj };
@@ -70,9 +71,7 @@ function legacyFromResult(u: Obj): Obj {
 		favourites_count: u.action_counts?.favorites_count ?? 0,
 		statuses_count: u.tweet_counts?.tweets ?? 0,
 		media_count: u.tweet_counts?.media_tweets ?? 0,
-		// the old client has only the one checkmark: a string paints it (patch.ts)
-		// gold for organisations, grey for governments
-		verified: !u.is_blue_verified ? false : (u.verification?.verified_type ?? u.verified_type) === "Business" ? "business" : (u.verification?.verified_type ?? u.verified_type) === "Government" ? "government" : true,
+		verified: oldVerified(!!u.is_blue_verified, u.verification?.verified_type ?? u.verified_type, u.affiliates_highlighted_label?.label),
 		profile_image_url_https: u.avatar?.image_url,
 		...(u.banner?.image_url ? { profile_banner_url: u.banner.image_url } : {}),
 		pinned_tweet_ids_str: u.pinned_items?.tweet_ids_str ?? [],

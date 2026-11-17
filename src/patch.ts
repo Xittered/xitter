@@ -165,9 +165,12 @@ export function brandText(text: string, name: string, code = false): string {
 
 // only the 2020 client's files (client-web-legacy)
 const LEGACY_RULES: [RegExp, string][] = [
-	// its only checkmark, painted from `verified` (adaptive.ts):
-	// gold for organisations, grey for governments
-	[/(\w+)\.isVerified&&(\w+)\.push\((\w+)\.createElement\((\w+\.a),\{accessibilityLabel:(\w+),style:\[(\w+)\.marginLeft,\6\.defaultBadgeColor,(\w+)\]\}\)\)/g, '$1.isVerified&&$2.push($3.createElement($4,{accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,$1.isVerified==="business"?{color:"rgb(226,183,25)"}:$1.isVerified==="government"?{color:"rgb(130,154,171)"}:null]}))'],
+	// its only checkmark, painted from `verified` (model.ts oldVerified): gold
+	// for organisations, grey for governments; then an affiliate's badge
+	[
+		/(\w+)\.isVerified&&(\w+)\.push\((\w+)\.createElement\((\w+\.a),\{accessibilityLabel:(\w+),style:\[(\w+)\.marginLeft,\6\.defaultBadgeColor,(\w+)\]\}\)\)/g,
+		'(function(xv){var xt=xv&&typeof xv=="object"?xv.t:xv;xt&&$2.push($3.createElement($4,{key:"xc",accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,xt==="business"?{color:"rgb(226,183,25)"}:xt==="government"?{color:"rgb(130,154,171)"}:null]}));xv&&xv.img&&$2.push($3.createElement("img",{key:"xa",src:xv.img,alt:xv.name,title:xv.name,style:{width:"1.05em",height:"1.05em",borderRadius:3,marginLeft:4,verticalAlign:"-0.15em",objectFit:"cover",flexShrink:0}}))})($1.isVerified)',
+	],
 	// the profile header and user cells cast `verified` to a boolean first
 	[/isVerified:!!(\w+)\.verified(?![\w$])/g, "isVerified:$1.verified"],
 ];
