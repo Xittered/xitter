@@ -644,7 +644,8 @@ async function route(req: Request): Promise<Response | undefined> {
 	// as a guest (no csrf header, every write refused)
 	if (viewer && /(?:^|;\s*)gt=/.test(req.headers.get("cookie") ?? "")) headers.append("set-cookie", "gt=; Path=/; Max-Age=0");
 	if (viewer && parseCookies(req).ct0 !== viewer.csrf) headers.append("set-cookie", csrfCookie(viewer.csrf));
-	for (const c of nightModeCookies(look)) headers.append("set-cookie", c);
+	// (the 2020 client keeps its own night_mode, set from its Display settings)
+	if (!client?.old) for (const c of nightModeCookies(look)) headers.append("set-cookie", c);
 	if (!page) return new Response("no pinned client build: run scripts/fetch-client.ts --token or --har", { status: 500, headers });
 	return new Response(page, { headers });
 }

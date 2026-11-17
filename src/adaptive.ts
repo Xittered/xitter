@@ -331,7 +331,9 @@ export async function adaptiveRoute(method: string, path: string, viewer: Viewer
 		return Response.json(body);
 	}
 	const q = new URL(req.url).searchParams;
-	if (method === "GET") {
+	// Home's next pages come as a POST that lists the posts already seen
+	const homePage = method === "POST" && /^\/2\/timeline\/home(?:_latest)?\.json$/.test(path);
+	if (method === "GET" || homePage) {
 		for (const [re, to] of TIMELINES) {
 			const m = re.exec(path);
 			if (!m) continue;
