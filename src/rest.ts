@@ -245,7 +245,8 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 	const friendship = /^\/1\.1\/friendships\/(create|destroy)\.json$/.exec(path);
 	if (friendship && method === "POST") {
 		const form = await req.formData().catch(() => undefined);
-		const target = form?.get("user_id");
+		// the 2020 client (client/old/) sends `id` from Who to follow, user_id elsewhere
+		const target = form?.get("user_id") ?? form?.get("id") ?? new URL(req.url).searchParams.get("user_id");
 		if (!isId(target)) return Response.json({ errors: [{ code: 50, message: "User not found." }] }, { status: 404 });
 		await setFollow(viewer.id, target, friendship[1] === "create");
 		const user = await userById(viewer.id, target);

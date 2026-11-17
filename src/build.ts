@@ -13,6 +13,9 @@ export type Build = {
 	// page metadata minus anything about the account it was taken from
 	meta: Record<string, unknown>;
 	fetchedAt: string;
+	// Older builds (client/old/) read a differently shaped __INITIAL_STATE__: the
+	// captured one, signed-out parts and all, under ours (shell.ts)
+	stateBase?: Record<string, any>;
 };
 
 export const BUILD_FILE = join(CLIENT_DIR, "build.json");

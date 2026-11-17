@@ -67,8 +67,21 @@ async function fields(req: Request): Promise<Record<string, string>> {
 // For scripts and tests; people sign in through X's own dialog (onboarding.ts).
 export async function handleLogin(req: Request): Promise<Response> {
 	const f = await fields(req);
-	const username = (f.username ?? "").replace(/^@/, "").trim();
-	const password = f.password ?? "";
+	return passwordLogin(req, f.username ?? "", f.password ?? "");
+}
+
+// The 2020 client's own sign-in form (client/old/): POST /sessions with
+// session[username_or_email] and session[password]. A wrong password goes back
+// to its sign-in page, which shows the error, as twitter.com did.
+export async function handleOldSessions(req: Request): Promise<Response> {
+	const f = await fields(req);
+	const res = await passwordLogin(req, f["session[username_or_email]"] ?? "", f["session[password]"] ?? "");
+	if (res.status !== 401) return res;
+	return new Response(null, { status: 303, headers: { location: `/login/error?username_or_email=${encodeURIComponent(f["session[username_or_email]"] ?? "")}` } });
+}
+
+async function passwordLogin(req: Request, typed: string, password: string): Promise<Response> {
+	const username = typed.replace(/^@/, "").trim();
 	const account = username.toLowerCase();
 	const refund = username ? passwordTry(account) : () => {};
 	if (!refund) return new Response("Too many tries for this account. Wait 15 minutes.", { status: 429 });

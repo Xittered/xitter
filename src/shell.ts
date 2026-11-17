@@ -265,6 +265,27 @@ function initialState(user: User | null, fs: NonNullable<ReturnType<typeof loadB
 	};
 }
 
+const OLD_ACCENTS = ["blue", "yellow", "red", "purple", "orange", "green", "magenta"];
+
+// 2020-era builds keep the switches at featureSwitch.config and want slices the
+// current one dropped; the captured state fills those, ours wins where both have one
+function onBase(base: Record<string, any> | undefined, state: ReturnType<typeof initialState>) {
+	if (!base) return state;
+	const merge = (a: any, b: any): any =>
+		a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)
+			? Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((k) => [k, k in b ? merge(a[k], b[k]) : a[k]]))
+			: b;
+	const out = merge(base, state);
+	out.featureSwitch.config = state.featureSwitch.user.config;
+	// accents were plain names then ("blue", not "blue500"); an unknown one leaves the theme without colours
+	const color = String(out.settings?.local?.themeColor ?? "").replace(/\d+$/, "");
+	out.settings.local.themeColor = OLD_ACCENTS.includes(color) ? color : "blue";
+	return out;
+}
+
+// the one-off notice an old build shows at the top of a page (its sign-in page after a wrong password)
+const withFlash = (state: any, flash?: string) => (flash ? { ...state, session: { ...state.session, flashMessage: flash } } : state);
+
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 // JSON placed inside a <script> must not be able to close it
@@ -307,7 +328,7 @@ export const bootScript = (path: string): Buffer | undefined => boots().find((b)
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
 // asks for them.
-export function shell(user: User | null, multi = false, inCommunity = false, educationFlags: Record<string, number> = {}, links: MenuLink[] = [], look: Look | null = null, accent: Accent = DEFAULT_ACCENT, paint?: BackgroundPaint, csrf?: string): string | undefined {
+export function shell(user: User | null, multi = false, inCommunity = false, educationFlags: Record<string, number> = {}, links: MenuLink[] = [], look: Look | null = null, accent: Accent = DEFAULT_ACCENT, paint?: BackgroundPaint, csrf?: string, flash?: string): string | undefined {
 	const theme = look?.kind === "painted" ? look.theme : null;
 	const clientTheme = theme ? themeForClient(theme) : null;
 	const loaded = loadBuild();
@@ -321,6 +342,20 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 	const scripts = build.scripts
 		.map((p) => `<script defer charset="utf-8" crossorigin="anonymous" src="${PUBLIC_ORIGIN}/abs${p}"></script>`)
 		.join("");
+	// an old build gets the page it came with: Xitter's CSS and scripts are written
+	// against the current client's markup and would only get in its way
+	if (build.stateBase)
+		return `<!DOCTYPE html><html dir="ltr" lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" /><title>${esc(settings().instance_name)}</title>
+<link rel="icon" type="image/png" href="/public/favicon.png" />
+<style>html,body{height:100%}body{margin:0}</style>
+</head><body><div id="react-root" style="height:100%;display:flex;"></div>
+<script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
+<script id="nonce-csp"></script>
+<script>${runtimePatched.text}</script>
+${scripts}
+</body></html>`;
 	return `<!DOCTYPE html><html dir="ltr" lang="en"${theme ? ` data-xitter-theme="${esc(theme.id)}"` : ""} data-xitter-accent="${esc(accent.kind === "named" ? accent.id : "custom")}"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />
 <meta name="theme-color" content="${theme ? esc(theme.bg.stops[0] ?? "#000000") : "#000000"}" /><title>${esc(settings().instance_name)}</title>
@@ -338,7 +373,7 @@ ${user ? MONEY_UI_CSS : ""}
 ${user?.classic_post_details ? CLASSIC_DETAIL_CSS : ""}
 [data-testid="sidebarColumn"] div:has(> [data-testid="emptyState"]),[data-testid="sidebarColumn"] div:has(> div > aside) ~ div:empty{display:none}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
-<script>window.__INITIAL_STATE__=${inline(initialState(user, build.featureSwitch, inCommunity, educationFlags, accent))};window.__META_DATA__=${inline(meta)};</script>
+<script>window.__INITIAL_STATE__=${inline(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)))};window.__META_DATA__=${inline(meta)};</script>
 <script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
 <script id="nonce-csp"></script>

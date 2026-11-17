@@ -4,7 +4,7 @@ import { PORT, PUBLIC_ORIGIN } from "./config";
 import { migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
 import { brandingFile } from "./branding";
-import { handleLogin, maintenancePage, rulesPage } from "./login";
+import { handleLogin, handleOldSessions, maintenancePage, rulesPage } from "./login";
 import { adminApi, audit } from "./admin";
 import { loadSettings, settings } from "./settings";
 import { flagPickerData } from "./flag-picker";
@@ -25,6 +25,7 @@ import { loadBuild } from "./build";
 import { MEDIA_DIR, mediaUpload, serveMedia } from "./media";
 import { resumeVideos } from "./video";
 import { livePipeline, restRoute } from "./rest";
+import { adaptiveRoute, legacyOperation } from "./adaptive";
 import { bootScript, shell } from "./shell";
 import { platformSource } from "./platforms";
 import { badgeImage, expireSanctions } from "./moderation";
@@ -234,7 +235,10 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 	const gql = parts.indexOf("graphql");
 	const operation = gql >= 0 ? parts[parts.length - 1] : undefined;
 	if (req.method === "POST" && path === "/1.1/graphql/app_context.json") return new Response(null, { status: 204 });
-	if ((req.method !== "GET" || operation) && req.headers.get("x-csrf-token") !== viewer.csrf)
+	// The 2020 client's uploader (client/old/) sends cookies and no csrf header, as
+	// upload.twitter.com wanted; the browser's own same-origin mark stands in for it
+	const oldUpload = !!loadBuild()?.build.stateBase && /^\/(i|1\.1)\/media\/upload2?\.json$/.test(path) && req.headers.get("sec-fetch-site") === "same-origin";
+	if ((req.method !== "GET" || operation) && req.headers.get("x-csrf-token") !== viewer.csrf && !oldUpload)
 		return apiError(403, 353, "This request requires a matching csrf cookie and header.");
 	if (req.method === "GET" && operation && isMutation(operation)) return apiError(405, 144, "Use POST for this operation.");
 	// a delegate switched into another account (delegation.ts); the client sends
@@ -293,12 +297,15 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 			// the chat app sends its variables as a JSON string
 			if (typeof vars === "string") vars = parseJson(vars);
 			if (!shapeFits(vars)) return apiError(413, 324, "That request is too large.");
-			return runOperation(name, viewer, vars ?? {});
+			const res = await runOperation(name, viewer, vars ?? {});
+			if (!loadBuild()?.build.stateBase) return res;
+			return Response.json(legacyOperation(name, await res.json()), { status: res.status, headers: res.headers });
 		}
 	} else if (path === "/live_pipeline/events") {
 		return livePipeline();
 	}
-	const rest = await restRoute(req.method, path, viewer, req);
+	// an old build (client/old/) gets its own REST shapes first; the current client never asks for them
+	const rest = (loadBuild()?.build.stateBase ? await adaptiveRoute(req.method, path, viewer, req) : undefined) ?? (await restRoute(req.method, path, viewer, req));
 	if (rest) return rest;
 
 	const key = `${req.method} ${gql >= 0 ? `graphql:${parts[parts.length - 1]}` : path}`;
@@ -448,6 +455,11 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (!h.ok) return limitedResponse(h);
 		return handleLogin(req);
 	}
+	if (p === "/sessions" && req.method === "POST" && loadBuild()?.build.stateBase) {
+		const h = hit("auth", requestIp(req) ?? "unknown");
+		if (!h.ok) return limitedResponse(h);
+		return handleOldSessions(req);
+	}
 	if (p === "/rules" || p === "/tos" || p === "/privacy") return rulesPage();
 	// X's sign-in screens (jf.x.com), answered here
 	// inside the signed-in client the same screens come through /i/jfapi
@@ -474,7 +486,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (/^\/(settings|i\/flow)\/.*passkey/i.test(p) && !p.startsWith("/settings/xitter/")) return Response.redirect("/settings/xitter/passkeys", 302);
 	// the built-in "All" list (lists.ts)
 	if (p === "/all") return Response.redirect("/i/lists/1", 302);
-	if (p === "/login" || p === "/signup" || p.startsWith("/i/flow/")) {
+	if ((p === "/login" && !loadBuild()?.build.stateBase) || p === "/signup" || p.startsWith("/i/flow/")) {
 		const headers = new Headers({ location: "/" });
 		const code = url.searchParams.get("code");
 		if (code) headers.append("set-cookie", `xitter_invite=${encodeURIComponent(code)}; Path=/; Max-Age=86400; SameSite=Lax; HttpOnly`);
@@ -580,7 +592,9 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (preview) return preview;
 	}
 	// signed out: X's own home page with its sign-in form, and the dialog
-	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding")) return Response.redirect("/", 302);
+	// (an old build has its own sign-in page at /login, and /login/error after a wrong password)
+	const oldLogin = !!loadBuild()?.build.stateBase && (p === "/login" || p.startsWith("/login/"));
+	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding") && !oldLogin) return Response.redirect("/", 302);
 	// maintenance: guests see the notice; ?staff=1 is the sign-in page, for staff
 	if (!viewer && p === "/" && settings().operations.maintenance && !url.searchParams.has("staff")) return maintenancePage(true);
 	const [communityRows, flagRows, links] = viewer
@@ -594,7 +608,8 @@ async function route(req: Request): Promise<Response | undefined> {
 	const look = prefs.look;
 	const painted = look?.kind === "painted" ? look.theme : null;
 	const paint = viewer && painted ? await resolveBackground(viewer.id, painted) : undefined;
-	const page = shell(viewer ?? null, !!parseCookies(req)[MULTI_COOKIE], communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf);
+	const flash = !viewer && p === "/login/error" ? "The username and password you entered did not match our records. Please double-check and try again." : undefined;
+	const page = shell(viewer ?? null, !!parseCookies(req)[MULTI_COOKIE], communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf, flash);
 	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": PAGE_CSP });
 	// a guest token left from the signed-out page makes the signed-in client act
 	// as a guest (no csrf header, every write refused)
