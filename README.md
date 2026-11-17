@@ -337,6 +337,8 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `PUBLIC_ORIGIN` | `http://localhost:$PORT` | Address browsers use to reach the instance |
 | `PASSKEY_ORIGINS` | none | Other https sites of this instance, comma separated, that may make and use its passkeys (subdomains of `PUBLIC_ORIGIN`'s host only) |
 | `CLIENT_DIR` | `client` | Where the pinned client is stored |
+| `EXTRA_CLIENT_DIRS` | none | More client builds served next to it, comma separated, each `dir` or `id=dir` (the Nov 2020 one from `bun scripts/fetch-old-client.ts`, for example `client/old/2020-11-a0abd565-legacy`); people pick theirs in Settings > Xitter settings > Twitter client |
+| `DEFAULT_CLIENT`, `CLIENT_CHOICE` | the `CLIENT_DIR` build, on | Starting values for the default client's id (`current`, `2020`) and whether people may pick (`off` to stop them); both change in Admin > Client |
 | `MEDIA_DIR` | `media` | Uploaded images and videos |
 | `MEDIA_SCAN` | unset | `1` behind Cloudflare with its CSAM Scanning Tool on: every photo gets a signed public copy at `/media-scan/<id>.<ext>`, fetched once through `PUBLIC_ORIGIN` so the edge caches and scans it; a 451 hides the media and its post and files a report (`src/media-scan.ts`). `MEDIA_SCAN_SECRET` sets the signing key, else one is kept in `MEDIA_DIR/.scan-key` |
 | `BRANDING_DIR` | `data/branding` | Logos uploaded in the admin panel |

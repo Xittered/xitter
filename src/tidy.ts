@@ -7,6 +7,7 @@ import { FEDERATION_ON } from "./federation";
 import { sql } from "./db";
 import { isOrganizationSql } from "./users";
 import { type Feature, feature, settings } from "./settings";
+import { choiceAllowed } from "./client-choice";
 import { gifProviders } from "./gifs";
 
 const links = (...hrefs: string[]) => hrefs.map((h) => `a[href="${h}"],a[href^="${h}?"]`);
@@ -88,6 +89,7 @@ export const MONEY_ICON_FILLED = "M10.80 4.20L14 4.20L13.65 5.70L17.65 5.70L16.9
 const STATS = "M4 20V10h3v10H4zm6.5 0V4h3v16h-3zM17 20v-7h3v7h-3z";
 const CIRCLE = "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-3 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5c-2.2 0-4 1.1-4 2.5V17h8v-.5c0-1.4-1.8-2.5-4-2.5z";
 const TONE = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 1.8v14.4a7.2 7.2 0 0 0 0-14.4z";
+const HISTORY = "M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z";
 const GIF = "M120-120v-720h720v720H120Zm80-80h560v-560H200v560Zm80-80h400L560-520 440-360l-80-100-80 180Zm40-280q25 0 42.5-17.5T380-700q0-25-17.5-42.5T320-760q-25 0-42.5 17.5T260-700q0 25 17.5 42.5T320-660Z";
 const CAT = "M5 3.5 9.2 7.6A9 9 0 0 1 12 7.2a9 9 0 0 1 2.8.4L19 3.5V12a7 7 0 0 1-14 0V3.5Zm4.5 8.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm5 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z";
 // four tiles: the admin panel
@@ -119,6 +121,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	if (u?.gold) links.push({ href: "/account/decor", text: "Profile decor", description: "Dress your profile with a theme, background and avatar frame from Steam.", icon: PALETTE, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/post-details", text: "Post details", description: "Show reposts, quotes and likes on a row of their own, as Twitter did.", icon: STATS, where: "settings" });
 	if (feature("circles")) links.push({ href: "/account/circle", text: "Circle", description: "Choose who sees the posts you send to your Circle.", icon: CIRCLE, where: "settings" });
+	if (choiceAllowed()) links.push({ href: "/account/client", text: "Twitter client", description: "Use the current client or an older Twitter one.", icon: HISTORY, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/theme", text: "Theme", description: "Dim, a preset, or your own colours for the client.", icon: TONE, where: "settings" });
 	if (feature("gifs") && gifProviders().length > 1) links.push({ href: "/account/gifs", text: "GIF provider", description: "Choose which provider supplies your GIF search results.", icon: GIF, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/decoration", text: "Avatar decoration", description: "Put cat ears or a decoration around your avatar.", icon: CAT, where: "both" });

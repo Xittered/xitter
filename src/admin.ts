@@ -67,7 +67,7 @@ export const AUDIT_ACTIONS = [
 	"release_identity", "remove_affiliate", "rename_sticker_pack", "reset_branding", "reset_decor", "reset_password", "resolve_appeal",
 	"resolve_errors", "review_community_note_appeal", "revoke_api_tokens", "revoke_invite", "revoke_platform", "revoke_session", "revoke_strike",
 	"rollback_client", "save_automod", "save_operations", "save_security", "save_settings", "self_update", "self_update_rollback", "send_staff_message",
-	"send_test_mail", "set_badge", "set_badges", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
+	"send_test_mail", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
 	"set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
 	"set_status", "set_translator", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",

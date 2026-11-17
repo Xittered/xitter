@@ -6,7 +6,7 @@
 import { existsSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { type Action, AdminError, audit, guard, idOf } from "./admin";
-import { loadBuild } from "./build";
+import { clientBuild, clientBuilds, loadBuild } from "./build";
 import { INSTANCE_ID, isPeer } from "./federation";
 import { sql } from "./db";
 import { newId } from "./ids";
@@ -24,6 +24,13 @@ import { selfUpdateEnabled, selfUpdateReady, selfUpdateStatus, startRollback, st
 import { reauthenticate } from "./superadmin";
 import { BACKUP_DIR, BACKUP_INTERVALS, MAX_BACKUPS_KEPT, createBackup, deleteBackup, listBackups } from "./backups";
 import { clientStatus, latestSha, rollbackClient, updateClient } from "./client-update";
+import { defaultClient } from "./client-choice";
+
+const clientChoices = () => ({
+	builds: clientBuilds().map((c) => ({ id: c.id, label: c.label, sha: loadBuild(c.dir)?.build.sha ?? null })),
+	default: defaultClient()?.id ?? null,
+	user_choice: settings().clients.user_choice,
+});
 import { decideImport, pendingImports } from "./archive-import";
 
 const STANDINGS = ["active", "restricted", "limited", "suspended"];
@@ -766,7 +773,25 @@ export const toolActions: Record<string, Action> = {
 	},
 
 	// client-update.ts
-	client: { role: "admin", run: async () => clientStatus() },
+	client: { role: "admin", run: async () => ({ ...clientStatus(), ...clientChoices() }) },
+	// client-choice.ts: the instance's default client and whether people pick their own
+	setClients: {
+		role: "admin",
+		run: async (a, b) => {
+			const next = { ...settings().clients };
+			if (b.default !== undefined) {
+				if (typeof b.default !== "string" || !clientBuild(b.default)) throw new AdminError("Pick one of the clients this instance serves.");
+				next.default = b.default;
+			}
+			if (b.user_choice !== undefined) {
+				if (typeof b.user_choice !== "boolean") throw new AdminError("Turn picking on or off.");
+				next.user_choice = b.user_choice;
+			}
+			await setSetting("clients", next);
+			await audit(a, "set_clients", null, next);
+			return clientChoices();
+		},
+	},
 	checkClient: {
 		role: "admin",
 		run: async () => ({ latest: await latestSha().catch((e: Error) => { throw new AdminError(e.message); }), ...clientStatus() }),

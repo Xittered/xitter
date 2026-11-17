@@ -291,7 +291,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 // JSON placed inside a <script> must not be able to close it
 const inline = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
-let runtimePatched: { sha: string; text: string } | undefined;
+// per build: an instance can serve more than one (build.ts clientBuilds)
+const runtimes = new Map<string, string>();
 
 // Xitter's own scripts are the same on every page (one set signed in, one
 // signed out), so they come as a file the browser keeps instead of 130 KB
@@ -325,6 +326,16 @@ const boots = () =>
 const bootFor = (signedIn: boolean) => boots()[signedIn ? 1 : 0];
 export const bootScript = (path: string): Buffer | undefined => boots().find((b) => b.path === path)?.body;
 
+// Both clients keep their state in IndexedDB "localforage", in shapes the
+// other can't read: the 2020 client waits forever on a blank page over what
+// the current one left. Each page notes its build; the 2020 one drops the
+// database when another build ran last, before its scripts do.
+const BUILD_MARK = "xitter_client_build";
+const markBuild = (sha: string) => `try{localStorage.setItem(${inline(BUILD_MARK)},${inline(sha)})}catch(e){}`;
+const oldLoader = (sha: string, srcs: string[]) => `(function(){var s=${inline(srcs)};function go(){s.forEach(function(u){var e=document.createElement("script");e.src=u;e.async=false;e.charset="utf-8";e.crossOrigin="anonymous";document.body.appendChild(e)})}
+var was;try{was=localStorage.getItem(${inline(BUILD_MARK)})}catch(e){}${markBuild(sha)}
+if(was===${inline(sha)}||!window.indexedDB)return go();var d=indexedDB.deleteDatabase("localforage");d.onsuccess=d.onerror=d.onblocked=go})();`;
+
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
 // asks for them.
@@ -334,7 +345,11 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 	const loaded = loadBuild();
 	if (!loaded) return undefined;
 	const { build, runtime } = loaded;
-	if (runtimePatched?.sha !== build.sha) runtimePatched = { sha: build.sha, text: patchText(runtime) };
+	let runtimeText = runtimes.get(build.sha);
+	if (runtimeText === undefined) {
+		if (runtimes.size > 8) runtimes.clear();
+		runtimes.set(build.sha, (runtimeText = patchText(runtime)));
+	}
 	// the chat build's address is ours (the rest of the metadata stays as captured:
 	// the client decides from it where its csrf header goes)
 	const chatBuild = build.meta.xchatEmbedBuild;
@@ -353,8 +368,8 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
 <script id="nonce-csp"></script>
-<script>${runtimePatched.text}</script>
-${scripts}
+<script>${runtimeText}</script>
+<script>${oldLoader(build.sha, build.scripts.map((p) => `${PUBLIC_ORIGIN}/abs${p}`))}</script>
 </body></html>`;
 	return `<!DOCTYPE html><html dir="ltr" lang="en"${theme ? ` data-xitter-theme="${esc(theme.id)}"` : ""} data-xitter-accent="${esc(accent.kind === "named" ? accent.id : "custom")}"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />
@@ -377,7 +392,8 @@ ${user?.classic_post_details ? CLASSIC_DETAIL_CSS : ""}
 <script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
 <script id="nonce-csp"></script>
-<script>${runtimePatched.text}</script>
+<script>${runtimeText}</script>
+<script>${markBuild(build.sha)}</script>
 ${scripts}
 </body></html>`;
 }

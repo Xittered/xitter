@@ -635,7 +635,16 @@ const RENDER = {
 			'<div class="cards"><div class="card"><span>Serving</span><b class="code">' + esc(short(c.sha)) + '</b><span class="small dim">pinned ' + esc(when(c.fetchedAt)) + "</span></div>" +
 			'<div class="card"><span>Previous</span><b class="code">' + esc(short(c.previous?.sha)) + "</b>" + (c.previous ? '<span class="small dim">pinned ' + esc(when(c.previous.fetchedAt)) + "</span>" : "") + "</div>" +
 			'<div class="card"><span>On x.com</span><b class="code" id="latest">?</b></div></div>' +
-			'<div class="row" style="margin-top:16px"><button class="btn" id="ccheck">Check x.com</button><button class="btn primary" id="cupdate">Update</button>' + (c.previous ? '<button class="btn" id="cback">Go back to the previous build</button>' : "") + "</div>";
+			'<div class="row" style="margin-top:16px"><button class="btn" id="ccheck">Check x.com</button><button class="btn primary" id="cupdate">Update</button>' + (c.previous ? '<button class="btn" id="cback">Go back to the previous build</button>' : "") + "</div>" +
+			"<h2>Which client people get</h2>" +
+			(c.builds.length > 1
+				? '<p class="dim">This instance serves ' + c.builds.length + ' clients. New visitors and anyone who hasn\'t picked get the default; with picking on, people switch in Settings > Xitter settings > Twitter client (or at <span class="code">/settings/xitter/client</span> from an older client).</p>' +
+					'<div class="row"><label for="cdefault">Default</label><select id="cdefault">' + c.builds.map((b) => '<option value="' + esc(b.id) + '"' + (b.id === c.default ? " selected" : "") + ">" + esc(b.label) + " (" + esc(short(b.sha)) + ")</option>").join("") + "</select>" +
+					'<button class="btn" id="cdefsave">Save default</button></div>' +
+					'<p style="margin-top:12px">' + (c.user_choice ? "People can pick their own client." : "Everyone gets the default client.") + ' <button class="btn" id="cchoice">' + (c.user_choice ? "Stop people picking" : "Let people pick") + "</button></p>"
+				: '<p class="dim">Only one client is served. Add older builds with <span class="code">EXTRA_CLIENT_DIRS</span> in the server\'s environment (for example <span class="code">client/old/2020-11-a0abd565-legacy</span>) and restart, and people can pick between them.</p>');
+		if ($("#cdefsave")) $("#cdefsave").onclick = () => act(() => api("setClients", { default: $("#cdefault").value }), "Default client saved").then(route);
+		if ($("#cchoice")) $("#cchoice").onclick = () => act(() => api("setClients", { user_choice: !c.user_choice }), c.user_choice ? "Everyone gets the default now" : "People can pick their client").then(route);
 		$("#ccheck").onclick = () => act(async () => { const r = await api("checkClient"); $("#latest").textContent = short(r.latest) + (r.latest === r.sha ? " (same)" : ""); });
 		$("#cupdate").onclick = async () => {
 			if (!(await ask("Pin the build x.com serves now? Everyone gets it on their next page load."))) return;

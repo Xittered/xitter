@@ -1,5 +1,6 @@
 import { MULTI_COOKIE, type Viewer, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
-import { clientPathAllowed, getClientFile, getClientFilePath, hasClientFile } from "./client-cache";
+import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
+import { CLIENT_COOKIE, chosenClient, clientCookie, clientRoute, requestClient, switchByQuery } from "./client-choice";
 import { PORT, PUBLIC_ORIGIN } from "./config";
 import { migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
@@ -21,7 +22,7 @@ import { menuLinks } from "./tidy";
 import { isPlayerPage, playerPage } from "./player-card";
 import { chatMediaRoute, chatSocket, juiceboxProxy, socketUser } from "./chat";
 import { sweepChatUploads } from "./chat-media";
-import { loadBuild } from "./build";
+import { clientBuilds, loadBuild } from "./build";
 import { MEDIA_DIR, mediaUpload, serveMedia } from "./media";
 import { serveScanCopy, startMediaScan } from "./media-scan";
 import { resumeVideos } from "./video";
@@ -98,7 +99,7 @@ const MIME: Record<string, string> = {
 // The client also calls outside services on its own (grok.com checkout, ads
 // measurement). Requests from the page may only reach this instance.
 const SETTINGS_PAGES = new Set(
-	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details"].map((s) => `/account/${s}`),
+	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details", "client"].map((s) => `/account/${s}`),
 );
 
 const PAGE_CSP = "connect-src 'self' blob: data:; font-src 'self'";
@@ -160,8 +161,13 @@ function staffBlockedPage(reason: string) {
 	);
 }
 
+// Files come from the request's build, else from another build that has them:
+// a page asks for its own build's files, but a cookie can change between the
+// page and its later chunks
 async function serveClient(req: Request, pathname: string): Promise<Response> {
 	const cdnPath = pathname.slice("/abs".length);
+	const holder = hasClientFile(cdnPath) ? undefined : clientBuilds().find((b) => b.dir !== clientDir() && withClientDir(b.dir, () => hasClientFile(cdnPath)));
+	if (holder) return withClientDir(holder.dir, () => serveClient(req, pathname));
 	// a file not in the archive yet is fetched from the CDN and kept: only from
 	// where the client's files live, and not faster than one address loads pages
 	if (!hasClientFile(cdnPath)) {
@@ -179,11 +185,11 @@ async function serveClient(req: Request, pathname: string): Promise<Response> {
 
 	// The file name stays the same when our patches change, so patched files are
 	// revalidated against a hash of what we actually serve.
-	let body = cachedPatch(cdnPath);
+	let body = cachedPatch(cdnPath, clientDir());
 	if (!body) {
 		const raw = await getClientFile(cdnPath);
 		if (!raw) return new Response("not found", { status: 404 });
-		body = patchFile(cdnPath, raw);
+		body = patchFile(cdnPath, raw, clientDir());
 	}
 	let hash = etags.get(body);
 	if (!hash) {
@@ -365,7 +371,10 @@ await failInterrupted();
 // the request; caught here it is logged with its path and account
 async function handle(req: Request): Promise<Response | undefined> {
 	try {
-		const res = await asRequest(() => route(req));
+		// the build this request is answered with (client-choice.ts); a page load
+		// may still change it to the account's own pick
+		const dir = requestClient(req)?.dir ?? CLIENT_DIR;
+		const res = await asRequest(() => withClientDir(dir, () => route(req)));
 		return res && (await compressResponse(req, res, new URL(req.url).pathname));
 	} catch (e) {
 		const viewer = await getViewer(req).catch(() => undefined);
@@ -501,6 +510,10 @@ async function route(req: Request): Promise<Response | undefined> {
 
 	const viewer = await getViewer(req);
 	setRequestLanguage(viewer?.language ?? undefined);
+	if (req.method === "GET" && url.searchParams.has("client") && !API_PREFIX.test(p)) {
+		const switched = await switchByQuery(url, viewer ?? undefined);
+		if (switched) return switched;
+	}
 	const steam = /^\/public\/steam\/(\d+)\/([^/]+)$/.exec(p);
 	if (steam) return steamFile(req, steam[1]!, steam[2]!, url.searchParams.has("thumb"), !!viewer);
 	if (viewer?.role && !(await staffGate(req, viewer))) markStaff();
@@ -514,7 +527,9 @@ async function route(req: Request): Promise<Response | undefined> {
 	}
 	// opened on their own (a link, a bookmark), the settings pages come up inside
 	// the client's Settings, which frames them (tidy.ts)
-	if (viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && SETTINGS_PAGES.has(p))
+	const oldBuild = !!loadBuild()?.build.stateBase;
+	if (viewer && oldBuild && (p === "/settings/xitter/client" || p === "/settings/xitter")) return Response.redirect("/account/client", 302);
+	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && SETTINGS_PAGES.has(p))
 		return Response.redirect(`/settings/xitter/${p.slice("/account/".length)}${url.search}`, 302);
 	// and the side bar's pages fill the main column instead (tidy.ts FULL)
 	if (viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && (p === "/account/money" || p.startsWith("/account/money/"))) return Response.redirect(`/i/xmoney${p.slice("/account/money".length)}${url.search}`, 302);
@@ -524,6 +539,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if ((p === "/account" || p === "/account/") && viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document") return Response.redirect("/settings/xitter", 302);
 	if ((p === "/account" || p === "/account/") && viewer) return accountIndexRoute(req, viewer);
 	if (p === "/account/gifs" && viewer) return gifSettingsRoute(req, viewer);
+	if (p === "/account/client" && viewer) return clientRoute(req, viewer, clientBuilds().find((b) => b.dir === clientDir()));
 	if (p === "/account/post-details" && viewer) return classicDetailRoute(req, viewer);
 	if (p === "/account/circle" && viewer) return circleRoute(req, viewer);
 	if (p === "/account/apps/developer" && viewer) return developerAppsRoute(req, viewer);
@@ -567,7 +583,8 @@ async function route(req: Request): Promise<Response | undefined> {
 	// uploads stay inside the instance: only signed-in users get them
 	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p, viewer) : new Response("not found", { status: 404 });
 	// the admin panel: staff only; everyone else gets the client's not-found page
-	if (p.startsWith("/admin/api/")) return adminApi(req, p.slice("/admin/api/".length), viewer);
+	// the panel speaks of the instance's default build (Admin > Client), whatever its staff use
+	if (p.startsWith("/admin/api/")) return withClientDir(CLIENT_DIR, () => adminApi(req, p.slice("/admin/api/".length), viewer));
 	if (p === "/admin/flags.json" && viewer?.role) return Response.json(flagPickerData(null).flags);
 	// a backup, for an admin's browser to save
 	if (p.startsWith("/admin/backups/") && viewer?.role === "admin" && !(await staffGate(req, viewer))) {
@@ -612,8 +629,13 @@ async function route(req: Request): Promise<Response | undefined> {
 	const painted = look?.kind === "painted" ? look.theme : null;
 	const paint = viewer && painted ? await resolveBackground(viewer.id, painted) : undefined;
 	const flash = !viewer && p === "/login/error" ? "The username and password you entered did not match our records. Please double-check and try again." : undefined;
-	const page = shell(viewer ?? null, !!parseCookies(req)[MULTI_COOKIE], communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf, flash);
+	// signed in, the account's own pick wins over the cookie, which then follows it
+	const cookieClient = parseCookies(req)[CLIENT_COOKIE];
+	const pick: string | undefined = flagRows[0]?.preferences?.web_client;
+	const client = viewer ? chosenClient(pick ?? cookieClient) : requestClient(req);
+	const page = withClientDir(client?.dir ?? CLIENT_DIR, () => shell(viewer ?? null, !!parseCookies(req)[MULTI_COOKIE], communityRows.length > 0, flagRows[0]?.education_flags ?? {}, links, look, prefs.accent, paint, viewer?.csrf, flash));
 	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": PAGE_CSP });
+	if (client && pick === client.id && cookieClient !== pick) headers.append("set-cookie", clientCookie(pick));
 	// a guest token left from the signed-out page makes the signed-in client act
 	// as a guest (no csrf header, every write refused)
 	if (viewer && /(?:^|;\s*)gt=/.test(req.headers.get("cookie") ?? "")) headers.append("set-cookie", "gt=; Path=/; Max-Age=0");

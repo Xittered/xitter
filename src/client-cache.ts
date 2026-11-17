@@ -1,10 +1,16 @@
 // Local archive of the pinned web client. Files are stored exactly as the CDN
 // served them; patching happens at serve time so the archive stays pristine.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 
+// the instance's default build; others can be served next to it (build.ts)
 export const CLIENT_DIR = process.env.CLIENT_DIR ?? "client";
+// the build a request is served with, chosen per person (server.ts)
+const requestDir = new AsyncLocalStorage<string>();
+export const clientDir = () => requestDir.getStore() ?? CLIENT_DIR;
+export const withClientDir = <T>(dir: string, run: () => T) => requestDir.run(dir, run);
 export const CDN_ORIGIN = "https://abs.twimg.com";
 // where the client's files live on the CDN; nothing else is fetched for it
 const CDN_PATHS = /^\/(responsive-web|x-web|sticky|emoji|fonts|hashflags|images|favicons)\//;
@@ -42,7 +48,7 @@ async function readUpTo(res: Response, max: number): Promise<Buffer | undefined>
 function localPath(cdnPath: string): string | undefined {
 	const clean = normalize(cdnPath).replace(/^([/\\])+/, "");
 	if (clean.startsWith("..")) return undefined;
-	return join(CLIENT_DIR, "abs", clean);
+	return join(clientDir(), "abs", clean);
 }
 
 export function readCached(cdnPath: string): Buffer | undefined {
