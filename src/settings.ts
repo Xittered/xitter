@@ -91,6 +91,21 @@ const DEFAULTS = {
 		global_pin: null as string | null,
 	},
 	automod: { enabled: true, strike_days: 365, ladder: [0, 24, 168, 720, -1] as number[], second_chances: 5 },
+	// claude-mod.ts: Claude reads new posts, profile changes, reports and 2020
+	// DMs (needs ANTHROPIC_API_KEY in the server's environment). It hides clear
+	// violations and files the rest for staff; it never strikes or suspends.
+	claude_mod: {
+		enabled: true,
+		model: "claude-haiku-5-5",
+		// a verdict below this confidence is only filed for staff, never acted on
+		hide_confidence: 0.85,
+		// a ceiling on model calls per day, so a flood can't run up the bill
+		daily_limit: 5000,
+		posts: true,
+		profiles: true,
+		reports: true,
+		dms: true,
+	},
 	// the admin panel itself (admin.ts staffGate): staff must have two-factor on;
 	// only these addresses (IPs or CIDR ranges) reach it, none meaning any
 	security: { staff_2fa: false, admin_ips: [] as string[] },

@@ -10,6 +10,7 @@ import type { Viewer } from "./auth";
 import { addKeyword, mutedKeywords, removeKeywords, setBlock, setMute, updateKeyword } from "./blocks";
 import { getPost } from "./posts";
 import { sql } from "./db";
+import { queueReview } from "./claude-mod";
 import { flagValue, unknownFlag } from "./flags";
 import { pronounsProblem } from "./pronouns";
 import { isId } from "./ids";
@@ -146,6 +147,7 @@ export async function updateProfileText(viewer: Viewer, f: Record<string, string
 		changes[column] = value;
 	}
 	if (Object.keys(changes).length) await sql`update users set ${sql(changes)} where id = ${viewer.id}::bigint`;
+	if ("name" in changes || "bio" in changes) queueReview("profile", viewer.id);
 	return null;
 }
 

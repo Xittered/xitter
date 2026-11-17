@@ -1858,3 +1858,5 @@ create table if not exists legacy_dm_events (
 );
 create index if not exists legacy_dm_events_conversation_idx on legacy_dm_events (conversation_id, id);
 alter table users add column if not exists legacy_dm_last_seen bigint not null default 0;
+-- hidden by the Claude moderator (claude-mod.ts): gone for both sides, kept for staff
+alter table legacy_dm_events add column if not exists hidden boolean not null default false;

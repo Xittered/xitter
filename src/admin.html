@@ -1506,12 +1506,14 @@ const RENDER = {
 			["open", "actioned", "dismissed"].map((s) => '<button class="btn' + (s === status ? " primary" : "") + '" data-tab="' + s + '">' + s + "</button>").join("") + "</div>" +
 			(reports.length ? '<div class="bar"><input type="search" id="report-search" placeholder="Search reporter, account, post or details" aria-label="Search reports" value="' + esc(savedQuery) + '"><span class="dim small" id="report-count" role="status"></span></div>' : "") +
 			(reports.length ? reports.map((r) => {
-				const reason = reasons[r.reason]?.text || r.reason;
+				const reason = reasons[r.reason]?.text || (String(r.reason).startsWith("automod_") ? "Claude: " + String(r.reason).slice(8).replace(/_/g, " ") : r.reason);
 				const target = r.user_id ? person({ id: r.user_id, screen_name: r.screen_name, name: r.name, avatar_url: r.avatar_url, verified_type: r.verified_type, flag: r.flag, status: r.user_status, role: r.role }) : '<span class="dim">deleted account</span>';
 				return '<div class="box" style="margin-bottom:12px" data-report="' + esc(r.id) + '" data-search="' + esc([reason, r.reporter, r.screen_name, r.name, r.details, r.post_text, r.reason, r.id].filter(Boolean).join(" ").toLocaleLowerCase()) + '">' +
-					'<div class="row" style="justify-content:space-between"><div><b>' + esc(reason) + '</b> <span class="dim small">· reported by @' + esc(r.reporter ?? "?") + " · " + esc(when(r.created_at)) + "</span></div>" +
+					'<div class="row" style="justify-content:space-between"><div><b>' + esc(reason) + '</b> <span class="dim small">· ' + (r.reporter ? "reported by @" + esc(r.reporter) : String(r.reason).startsWith("automod_") ? "filed by Claude automod" : "reported by a deleted account") + " · " + esc(when(r.created_at)) + "</span></div>" +
 					(r.other_open ? '<span class="pill suspended">' + r.other_open + " more open about this account</span>" : "") + "</div>" +
 					(r.details ? '<p style="white-space:pre-wrap">' + esc(r.details) + "</p>" : "") +
+					// Claude's read of a user's report, while it's still open
+					(status === "open" && r.note ? '<p class="dim small" style="white-space:pre-wrap">' + esc(r.note) + "</p>" : "") +
 					'<div style="margin:10px 0">' + target + (r.actioned_before ? '<div class="dim small" style="margin-top:4px">' + r.actioned_before + " earlier reports were acted on</div>" : "") + "</div>" +
 					(r.post_id ? (r.post_text !== null ? '<div class="box" style="background:var(--bg);border:1px solid var(--line)">' + esc(r.post_text || "(no text)") + (r.post_media ? ' <span class="dim small">· ' + r.post_media + " media</span>" : "") +
 						' <a class="small" target="_blank" href="/' + esc(r.screen_name) + "/status/" + esc(r.post_id) + '">open</a></div>' : '<p class="dim small">The post was deleted.</p>') : '<p class="dim small">Report about the account.</p>') +

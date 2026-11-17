@@ -5,6 +5,7 @@
 
 import type { Viewer } from "./auth";
 import { sql } from "./db";
+import { queueReview } from "./claude-mod";
 import { isId, newId } from "./ids";
 
 export const REASONS: Record<string, { text: string; subtext: string }> = {
@@ -125,8 +126,10 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 		const [recent] = await sql`select count(*)::int as n from reports where reporter_id = ${viewer.id}::bigint and created_at > now() - interval '1 hour'`;
 		if (recent.n >= 30) return Response.json({ errors: [{ code: 88, message: "You've sent a lot of reports. Try again later." }] }, { status: 429 });
 		if (!dupe) {
+			const reportId = newId();
 			await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
-				values (${newId()}::bigint, ${viewer.id}::bigint, ${draft.postId}::bigint, ${draft.userId}::bigint, ${draft.reason}, ${textIn})`;
+				values (${reportId}::bigint, ${viewer.id}::bigint, ${draft.postId}::bigint, ${draft.userId}::bigint, ${draft.reason}, ${textIn})`;
+			queueReview("report", reportId);
 		}
 		return Response.json(flow(String(body.flow_token), doneStep()));
 	}

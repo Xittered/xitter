@@ -1,6 +1,7 @@
 import type { User } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
+import { queueReview } from "./claude-mod";
 import { INSTANCE_ID } from "./federation";
 import { idAt, newId } from "./ids";
 import { hateIn } from "./hate";
@@ -543,6 +544,9 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 	await saveMentions(id, text, undefined, opts.db ? undefined : lookupRemoteUser, db);
 	const link = opts.quoteId || opts.articleId ? undefined : linksIn(text).filter((l) => previewable(l.url)).at(-1);
 	if (!opts.skipPreview && link && !(await db`select 1 from link_previews where url = ${link.url}`).length) await Promise.race([fetchPreview(link.url), Bun.sleep(4000)]);
+	// Claude reads it afterwards (claude-mod.ts); inside a caller's transaction
+	// (imports) the post isn't committed yet, so those are left out
+	if (!opts.db) queueReview("post", id);
 	return id;
 }
 

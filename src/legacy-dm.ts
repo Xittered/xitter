@@ -6,6 +6,7 @@
 
 import type { Viewer } from "./auth";
 import { sql } from "./db";
+import { queueReview } from "./claude-mod";
 import { isId, newId } from "./ids";
 import { legacyUser } from "./model";
 import { usersByIds } from "./users";
@@ -49,7 +50,7 @@ async function conversations(viewerId: string, only?: string[]): Promise<Obj> {
 	const rows = await sql`select p.conversation_id, p.last_read_event_id::text,
 			max(e.id)::text as max_id, min(e.id)::text as min_id, max(e.created_at) as last_at,
 			(select json_agg(json_build_object('user_id', o.user_id::text, 'last_read_event_id', o.last_read_event_id::text)) from legacy_dm_participants o where o.conversation_id = p.conversation_id) as participants
-		from legacy_dm_participants p join legacy_dm_events e on e.conversation_id = p.conversation_id
+		from legacy_dm_participants p join legacy_dm_events e on e.conversation_id = p.conversation_id and not e.hidden
 		where p.user_id = ${viewerId}::bigint and (p.left_at_event_id is null or e.id > p.left_at_event_id)
 			${only ? sql`and p.conversation_id = any(${sql.array(only, "TEXT")})` : sql``}
 		group by p.conversation_id, p.last_read_event_id`;
@@ -81,7 +82,7 @@ async function conversations(viewerId: string, only?: string[]): Promise<Obj> {
 // messages the viewer can see, newest first; `after` for updates, `before` for older pages
 async function events(viewerId: string, opts: { after?: string; before?: string; conversationId?: string; limit?: number }) {
 	return await sql`select e.id::text, e.conversation_id, e.sender_id::text, e.text, e.request_id, e.created_at
-		from legacy_dm_events e join legacy_dm_participants p on p.conversation_id = e.conversation_id and p.user_id = ${viewerId}::bigint
+		from legacy_dm_events e join legacy_dm_participants p on p.conversation_id = e.conversation_id and p.user_id = ${viewerId}::bigint and not e.hidden
 		where (p.left_at_event_id is null or e.id > p.left_at_event_id)
 			${opts.conversationId ? sql`and e.conversation_id = ${opts.conversationId}` : sql``}
 			${opts.after ? sql`and e.id > ${opts.after}::bigint` : sql``}
@@ -107,7 +108,7 @@ async function newestId(viewerId: string): Promise<string> {
 }
 
 export async function legacyUnreadCount(viewerId: string): Promise<number> {
-	const [row] = await sql`select count(distinct p.conversation_id)::int as n from legacy_dm_participants p join legacy_dm_events e on e.conversation_id = p.conversation_id
+	const [row] = await sql`select count(distinct p.conversation_id)::int as n from legacy_dm_participants p join legacy_dm_events e on e.conversation_id = p.conversation_id and not e.hidden
 		where p.user_id = ${viewerId}::bigint and e.sender_id <> ${viewerId}::bigint and e.id > p.last_read_event_id and (p.left_at_event_id is null or e.id > p.left_at_event_id)`;
 	return row?.n ?? 0;
 }
@@ -131,6 +132,7 @@ async function send(viewer: Viewer, f: Obj): Promise<Response> {
 		// your own message counts as read
 		await tx`update legacy_dm_participants set last_read_event_id = ${id}::bigint where conversation_id = ${conversationId} and user_id = ${viewer.id}::bigint`;
 	});
+	queueReview("dm", id);
 	const rows = await events(viewer.id, { conversationId, limit: 1 });
 	return Response.json({ entries: rows.map(messageEntry), users: await usersFor(viewer.id, [viewer.id, other]) });
 }
