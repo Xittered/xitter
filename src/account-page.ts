@@ -203,7 +203,10 @@ export async function accountPage({ req, title, body, viewer, status = 200, back
 		extra = look?.kind === "painted" ? `:root[data-theme]{${accountVars(look.theme)}}` : `:root{${accentVars(prefs.accent)}}`;
 	}
 	const theme = paletteOf(look, night);
-	const to = back ?? (viewer ? { href: "/settings/xitter", label: "Back to Xitter settings" } : { href: "/", label: `Back to ${name}` });
+	// the 2020 client opens these pages whole, not framed in its Settings
+	const index = /^\/account\/?$/.test(new URL(req.url).pathname);
+	const home = !loadBuild()?.build.stateBase ? { href: "/settings/xitter", label: "Back to Xitter settings" } : index ? { href: "/settings", label: "Back to Settings" } : { href: "/account/", label: "Back to Xitter settings" };
+	const to = back ?? (viewer ? home : { href: "/", label: `Back to ${name}` });
 	const html = `<!doctype html>
 <html lang="en"${theme ? ` data-theme="${theme}"` : ""}>
 <head>

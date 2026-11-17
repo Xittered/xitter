@@ -336,6 +336,17 @@ const oldLoader = (sha: string, srcs: string[]) => `(function(){var s=${inline(s
 var was;try{was=localStorage.getItem(${inline(BUILD_MARK)})}catch(e){}${markBuild(sha)}
 if(was===${inline(sha)}||!window.indexedDB)return go();var d=indexedDB.deleteDatabase("localforage");d.onsuccess=d.onerror=d.onblocked=go})();`;
 
+// The 2020 client's More menu gets Xitter settings and the side menu's own
+// entries (tidy.ts menuLinks); patch.ts draws them
+const GEAR = "M480-80q-17 0-28.5-11.5T440-120v-62q-49-9-90.5-35.5T280-284l-56 24q-15 7-30.5 1.5T170-278l-40-70q-8-14-4.5-29.5T142-402l50-36q-4-20-6-41t-2-41q0-20 2-41t6-41l-50-36q-13-9-16.5-24.5T130-692l40-70q8-14 23.5-19.5T224-780l56 24q27-26 69.5-52.5T440-844v-62q0-17 11.5-28.5T480-946q17 0 28.5 11.5T520-906v62q49 9 90.5 35.5T680-756l56-24q15-7 30.5-1.5T790-762l40 70q8 14 4.5 29.5T818-638l-50 36q4 20 6 41t2 41q0 20-2 41t-6 41l50 36q13 9 16.5 24.5T830-348l-40 70q-8 14-23.5 19.5T736-260l-56-24q-27 26-69.5 52.5T520-196v76q0 17-11.5 28.5T480-80Zm0-280q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Z";
+const oldMenu = (links: MenuLink[]) => [
+	{ href: "/settings/xitter", text: "Xitter settings", icon: GEAR, viewBox: "0 -960 960 960" },
+	...links.filter((l) => l.where === "menu" || l.where === "both" || l.where === "nav").map((l) => ({ href: l.href, text: l.text, icon: l.icon, viewBox: l.viewBox ?? "0 0 24 24" })),
+];
+// Our pages can't sit inside the 2020 client the way tidy.ts frames them in the
+// current one, so links to them load the page itself instead of a client route
+const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0))return;e.preventDefault();e.stopPropagation();location.assign(p+u.search)},true);`;
+
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
 // asks for them.
@@ -367,6 +378,7 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 <style>html,body{height:100%}body{margin:0}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
+${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};${OLD_PAGES}</script>` : ""}
 <script id="nonce-csp"></script>
 <script>${runtimeText}</script>
 <script>${oldLoader(build.sha, build.scripts.map((p) => `${PUBLIC_ORIGIN}/abs${p}`))}</script>

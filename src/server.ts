@@ -529,15 +529,16 @@ async function route(req: Request): Promise<Response | undefined> {
 	// opened on their own (a link, a bookmark), the settings pages come up inside
 	// the client's Settings, which frames them (tidy.ts)
 	const oldBuild = !!loadBuild()?.build.stateBase;
-	if (viewer && oldBuild && (p === "/settings/xitter/client" || p === "/settings/xitter")) return Response.redirect("/account/client", 302);
+	// the 2020 client has no screens of ours to frame them in: they open whole
+	if (viewer && oldBuild && (p === "/settings/xitter" || p.startsWith("/settings/xitter/"))) return Response.redirect(`/account/${p.slice("/settings/xitter/".length)}${url.search}`, 302);
 	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && SETTINGS_PAGES.has(p))
 		return Response.redirect(`/settings/xitter/${p.slice("/account/".length)}${url.search}`, 302);
 	// and the side bar's pages fill the main column instead (tidy.ts FULL)
-	if (viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && (p === "/account/money" || p.startsWith("/account/money/"))) return Response.redirect(`/i/xmoney${p.slice("/account/money".length)}${url.search}`, 302);
+	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && (p === "/account/money" || p.startsWith("/account/money/"))) return Response.redirect(`/i/xmoney${p.slice("/account/money".length)}${url.search}`, 302);
 	if (p === "/oauth/authorize") return oauthAuthorize(req, url, viewer);
 	if (p === "/account/apps" && viewer) return connectedAppsRoute(req, viewer);
 	// opened on its own, the index comes up as Settings > Xitter settings, like the pages it lists
-	if ((p === "/account" || p === "/account/") && viewer && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document") return Response.redirect("/settings/xitter", 302);
+	if ((p === "/account" || p === "/account/") && viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document") return Response.redirect("/settings/xitter", 302);
 	if ((p === "/account" || p === "/account/") && viewer) return accountIndexRoute(req, viewer);
 	if (p === "/account/gifs" && viewer) return gifSettingsRoute(req, viewer);
 	if (p === "/account/client" && viewer) return clientRoute(req, viewer, clientBuilds().find((b) => b.dir === clientDir()));

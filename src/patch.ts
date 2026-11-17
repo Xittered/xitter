@@ -166,14 +166,33 @@ export function brandText(text: string, name: string, code = false): string {
 // only the 2020 client's files (client-web-legacy)
 const LEGACY_RULES: [RegExp, string][] = [
 	// its only checkmark, painted from `verified` (model.ts oldVerified): gold
-	// for organisations, grey for governments; then an affiliate's badge
+	// for organisations, grey for governments, blue for the rest (the 2020
+	// client drew its one check white on a dark theme); then an affiliate badge
 	[
 		/(\w+)\.isVerified&&(\w+)\.push\((\w+)\.createElement\((\w+\.a),\{accessibilityLabel:(\w+),style:\[(\w+)\.marginLeft,\6\.defaultBadgeColor,(\w+)\]\}\)\)/g,
-		'(function(xv){var xt=xv&&typeof xv=="object"?xv.t:xv;xt&&$2.push($3.createElement($4,{key:"xc",accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,xt==="business"?{color:"rgb(226,183,25)"}:xt==="government"?{color:"rgb(130,154,171)"}:null]}));xv&&xv.img&&$2.push($3.createElement("img",{key:"xa",src:xv.img,alt:xv.name,title:xv.name,style:{width:"1.05em",height:"1.05em",borderRadius:3,marginLeft:4,verticalAlign:"-0.15em",objectFit:"cover",flexShrink:0}}))})($1.isVerified)',
+		'(function(xv){var xt=xv&&typeof xv=="object"?xv.t:xv;xt&&$2.push($3.createElement($4,{key:"xc",accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,xt==="business"?{color:"rgb(226,183,25)"}:xt==="government"?{color:"rgb(130,154,171)"}:{color:"rgb(29,155,240)"}]}));xv&&xv.img&&$2.push($3.createElement("img",{key:"xa",src:xv.img,alt:xv.name,title:xv.name,style:{width:"1.05em",height:"1.05em",borderRadius:3,marginLeft:4,verticalAlign:"-0.15em",objectFit:"cover",flexShrink:0}}))})($1.isVerified)',
 	],
 	// the profile header and user cells cast `verified` to a boolean first
 	[/isVerified:!!(\w+)\.verified(?![\w$])/g, "isVerified:$1.verified"],
+	// Settings: Xitter settings above Additional resources (shell.ts loads our
+	// pages whole when their links are clicked)
+	[/(([\w$]+)\.createElement\(([\w$]+),\{label:[\w$]+,link:"\/settings\/about")/g, '$2.createElement($3,{label:"Xitter settings",link:"/settings/xitter"}),$1'],
+	// More menu entries for what Xitter doesn't run: Topics, and the sites
+	// Twitter had for ads, analytics and media (they lead to x.com)
+	[/(_render(?:Topics|TwitterAds|Analytics|MediaStudio)Item",\(function\([\w$]*\)\{)return /g, "$1return null;"],
 ];
+
+// the More menu: after Settings and privacy, what shell.ts puts in __XITTER_MENU__
+function legacyMenu(text: string): string {
+	const names = /_renderSettingsItem",\(function\(\)\{return ([\w$]+)\.createElement\(([\w$]+),\{icon:/.exec(text);
+	if (!names) return text;
+	const [, react, item] = names;
+	// the icon takes the colour, size and spacing of the menu's own icons, which
+	// come from styles this module can't reach
+	const fit = `function(el){if(!el)return;var own=el.closest("[role=menu]");own=own&&own.querySelector("svg:not([data-xitter])");if(!own)return;var c=getComputedStyle(own);el.style.width=c.width;el.style.height=c.height;el.style.marginRight=c.marginRight;el.style.fill=c.color}`;
+	const entries = `(window.__XITTER_MENU__||[]).map(function(l){return ${react}.createElement(${item},{key:l.href,label:l.text,link:l.href,icon:function(){return ${react}.createElement("svg",{viewBox:l.viewBox,"aria-hidden":"true","data-xitter":"",ref:${fit},style:{width:"1.5em",height:"1.5em",marginRight:12,flexShrink:0}},${react}.createElement("path",{d:l.icon}))}})})`;
+	return text.replace(/this\._renderSettingsItem\(\),/g, `this._renderSettingsItem(),${entries},`);
+}
 
 export function patchText(text: string, chat = false): string {
 	let out = text;
@@ -216,7 +235,10 @@ export function patchFile(key: string, raw: Buffer, build = ""): Buffer {
 	let hit = cachedPatch(key, build);
 	if (!hit) {
 		let text = patchText(raw.toString("utf8"), key.startsWith("/x-web/xchat/"));
-		if (key.includes("/client-web-legacy/")) for (const [re, to] of LEGACY_RULES) text = text.replace(re, to);
+		if (key.includes("/client-web-legacy/")) {
+			for (const [re, to] of LEGACY_RULES) text = text.replace(re, to);
+			text = legacyMenu(text);
+		}
 		if (js) text = brandText(text, name, !I18N.test(key));
 		hit = Buffer.from(text);
 		if (hit.byteLength <= MAX_PATCH_CACHE_BYTES) {
