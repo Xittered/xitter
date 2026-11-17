@@ -338,6 +338,7 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `PASSKEY_ORIGINS` | none | Other https sites of this instance, comma separated, that may make and use its passkeys (subdomains of `PUBLIC_ORIGIN`'s host only) |
 | `CLIENT_DIR` | `client` | Where the pinned client is stored |
 | `MEDIA_DIR` | `media` | Uploaded images and videos |
+| `MEDIA_SCAN` | unset | `1` behind Cloudflare with its CSAM Scanning Tool on: every photo gets a signed public copy at `/media-scan/<id>.<ext>`, fetched once through `PUBLIC_ORIGIN` so the edge caches and scans it; a 451 hides the media and its post and files a report (`src/media-scan.ts`). `MEDIA_SCAN_SECRET` sets the signing key, else one is kept in `MEDIA_DIR/.scan-key` |
 | `BRANDING_DIR` | `data/branding` | Logos uploaded in the admin panel |
 | `FFMPEG`, `FFPROBE` | `ffmpeg`, `ffprobe` | Video tools |
 | `MAX_VIDEO_MB`, `MAX_VIDEO_SECONDS` | `200`, `600` | Starting video limits (changeable in the panel) |

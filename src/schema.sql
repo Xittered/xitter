@@ -1860,3 +1860,10 @@ create index if not exists legacy_dm_events_conversation_idx on legacy_dm_events
 alter table users add column if not exists legacy_dm_last_seen bigint not null default 0;
 -- hidden by the Claude moderator (claude-mod.ts): gone for both sides, kept for staff
 alter table legacy_dm_events add column if not exists hidden boolean not null default false;
+
+-- media-scan.ts: when the photo's signed copy went through Cloudflare's cache,
+-- when it was last asked for again, and when Cloudflare's CSAM tool blocked it
+alter table media add column if not exists scan_warmed_at timestamptz;
+alter table media add column if not exists scan_checked_at timestamptz;
+alter table media add column if not exists scan_blocked_at timestamptz;
+create index if not exists media_scan_todo_idx on media (id) where kind = 'photo' and scan_warmed_at is null;

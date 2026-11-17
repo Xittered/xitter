@@ -23,6 +23,7 @@ import { chatMediaRoute, chatSocket, juiceboxProxy, socketUser } from "./chat";
 import { sweepChatUploads } from "./chat-media";
 import { loadBuild } from "./build";
 import { MEDIA_DIR, mediaUpload, serveMedia } from "./media";
+import { serveScanCopy, startMediaScan } from "./media-scan";
 import { resumeVideos } from "./video";
 import { livePipeline, restRoute } from "./rest";
 import { adaptiveRoute, legacyOperation } from "./adaptive";
@@ -356,6 +357,7 @@ setInterval(
 ).unref();
 await loadSettings();
 await resumeVideos(MEDIA_DIR);
+startMediaScan();
 await resumeImports();
 await failInterrupted();
 
@@ -561,6 +563,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/oembed") return oembed(url);
 	// the frame X's client opens for a player card (YouTube links)
 	if (isPlayerPage(p)) return viewer ? playerPage(p, viewer.id) : new Response("not found", { status: 404 });
+	if (p.startsWith("/media-scan/")) return serveScanCopy(p, url);
 	// uploads stay inside the instance: only signed-in users get them
 	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p, viewer) : new Response("not found", { status: 404 });
 	// the admin panel: staff only; everyone else gets the client's not-found page

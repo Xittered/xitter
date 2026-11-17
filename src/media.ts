@@ -637,7 +637,7 @@ const PRIVATE = "private, no-store";
 const REVALIDATE = "private, no-cache";
 
 async function servedOf(id: string): Promise<Served | undefined> {
-	const [row] = await sql`select id::text, mime, user_id::text as owner, post_id::text as post, detached from media where id = ${id}::bigint`;
+	const [row] = await sql`select id::text, mime, user_id::text as owner, post_id::text as post, detached from media where id = ${id}::bigint and scan_blocked_at is null`;
 	return row as Served | undefined;
 }
 
