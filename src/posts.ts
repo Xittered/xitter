@@ -483,7 +483,7 @@ export async function likedPosts(viewerId: string, userId: string, limit = 100):
 export const seenBy = (userId: string) =>
 	sql`(u.id = ${userId}::bigint or ((not p.hidden or ${staffViewer(userId)}) and ${circleSeen(userId)} and u.id not in ${protectedFor(userId)} and u.id not in ${suspendedFor(userId)}))`;
 
-export async function createPost(userId: string, input: string, opts: { replyToId?: string; quoteId?: string; articleId?: string; source?: string; communityId?: string; placeId?: string; replyPolicy?: string; replySelections?: string[]; circle?: boolean; db?: typeof sql; skipPreview?: boolean } = {}): Promise<string> {
+export async function createPost(userId: string, input: string, opts: { replyToId?: string; quoteId?: string; articleId?: string; source?: string; communityId?: string; placeId?: string; replyPolicy?: string; replySelections?: string[]; circle?: boolean; db?: typeof sql; skipPreview?: boolean; skipReview?: boolean } = {}): Promise<string> {
 	const db = opts.db ?? sql;
 	const text = cleanText(input, { blankLines: 2 });
 	const control = replyControl(opts.replyPolicy, opts.replySelections);
@@ -545,8 +545,9 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 	const link = opts.quoteId || opts.articleId ? undefined : linksIn(text).filter((l) => previewable(l.url)).at(-1);
 	if (!opts.skipPreview && link && !(await db`select 1 from link_previews where url = ${link.url}`).length) await Promise.race([fetchPreview(link.url), Bun.sleep(4000)]);
 	// Claude reads it afterwards (claude-mod.ts); inside a caller's transaction
-	// (imports) the post isn't committed yet, so those are left out
-	if (!opts.db) queueReview("post", id);
+	// (imports) the post isn't committed yet, so those are left out; the
+	// server's own posts (payments feed) aren't read either
+	if (!opts.db && !opts.skipReview) queueReview("post", id);
 	return id;
 }
 

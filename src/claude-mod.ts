@@ -13,6 +13,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { sql } from "./db";
 import { newId } from "./ids";
+import { PUBLIC_ORIGIN } from "./config";
 import { settings } from "./settings";
 
 type Job = { kind: "post" | "profile" | "report" | "dm"; id: string };
@@ -57,6 +58,7 @@ function systemPrompt(kind: Job["kind"]): string {
 		"- ok: fine, including rude, crude, political, sexual-but-legal between adults, or unpopular content that breaks no rule.",
 		"",
 		"Always a violation: threats of violence, hate or harassment aimed at people for who they are, sexual content involving minors (category minor_safety), sharing someone's private information (addresses, phone numbers, documents), encouraging self-harm, scams and phishing, spam (repeated promotion, link farms).",
+		`Equicoins: this site has a built-in play-money feature (no real money). Links to ${PUBLIC_ORIGIN}/i/xmoney/p/<id> are payment receipts and ${PUBLIC_ORIGIN}/i/xmoney/r/<id> are payment requests, both made by the site itself. Posts announcing a transfer ("x sent $5 to y! #Money"), sharing a receipt, thanking someone for coins or asking for coins are ok: never call them scam, spam or impersonation for the link or the amount alone. Links to ${PUBLIC_ORIGIN} are this site, not an unfamiliar domain.`,
 		"Swearing, insults without a target group, heated arguments and criticism of public figures are ok unless the rules below say otherwise. When unsure, prefer borderline over violation.",
 		"",
 		rules ? `This instance's own rules:\n${rules}` : "This instance has written no extra rules.",

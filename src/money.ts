@@ -192,7 +192,7 @@ export async function announcePayment(id: string) {
 		const { createPost } = await import("./posts");
 		// a name that would read as a mention or a link keeps the @ and dots out of it
 		const name = (p: Party) => (p.merchant?.name ?? p.name).replace(/[@＠]/g, "").replace(/\./g, "\u2024").trim() || p.screen_name;
-		await createPost(feed.id, `${name(t.sender)} sent ${shortCents(t.amount)} to ${name(t.recipient)}! #Money ${paymentUrl(id)}`, { skipPreview: true });
+		await createPost(feed.id, `${name(t.sender)} sent ${shortCents(t.amount)} to ${name(t.recipient)}! #Money ${paymentUrl(id)}`, { skipPreview: true, skipReview: true });
 	} catch (e) {
 		console.error("money feed:", e instanceof Error ? e.message : e);
 	}
