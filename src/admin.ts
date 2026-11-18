@@ -23,6 +23,7 @@ import { forgetHeld, handleHeld, retireAccount } from "./held";
 import { activeStrikes, shutOut } from "./moderation";
 import { REASONS } from "./reports";
 import { startSweep, sweepState } from "./media-compress";
+import { DEFAULT_GUIDE, PROMPT_MAX, claudeModKey } from "./claude-mod";
 import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
 import { createPlatform, renameWebSource } from "./platforms";
@@ -780,7 +781,7 @@ const ACTIONS: Record<string, Action> = {
 
 	settings: {
 		role: "support",
-		run: async () => ({ settings: await allSettings(), features: FEATURES, branding: brandingState(), slots: SLOTS, compression: sweepState() }),
+		run: async () => ({ settings: await allSettings(), features: FEATURES, branding: brandingState(), slots: SLOTS, compression: sweepState(), claudeMod: { defaultPrompt: DEFAULT_GUIDE, hasKey: claudeModKey() } }),
 	},
 
 	// Settings > Media: files stored before compression was on (media-compress.ts)
@@ -905,6 +906,29 @@ const ACTIONS: Record<string, Action> = {
 			if (typeof b.rules === "string") {
 				await setSetting("rules", b.rules.slice(0, 20000));
 				changed.push("rules");
+			}
+			if (b.claude_mod && typeof b.claude_mod === "object") {
+				const c = b.claude_mod;
+				const next = { ...s.claude_mod };
+				for (const k of ["enabled", "posts", "profiles", "reports", "dms", "learn"] as const) if (typeof c[k] === "boolean") next[k] = c[k];
+				if (c.hide_confidence !== undefined) {
+					const n = Number(c.hide_confidence);
+					if (!(n >= 0.5 && n <= 1)) throw new AdminError("Hide confidence is between 0.5 and 1.");
+					next.hide_confidence = n;
+				}
+				if (c.daily_limit !== undefined) {
+					const n = Number(c.daily_limit);
+					if (!Number.isInteger(n) || n < 0 || n > 1_000_000) throw new AdminError("The daily limit is a whole number up to 1000000.");
+					next.daily_limit = n;
+				}
+				if (typeof c.prompt === "string") {
+					const text = c.prompt.replace(/\r\n/g, "\n").trim();
+					if (text.length > PROMPT_MAX) throw new AdminError(`The prompt is at most ${PROMPT_MAX} characters.`);
+					// the default saved as is stays the default, so later changes to it reach this instance
+					next.prompt = text === DEFAULT_GUIDE ? "" : text;
+				}
+				await setSetting("claude_mod", next);
+				changed.push("claude_mod");
 			}
 			await audit(a, "save_settings", null, { changed });
 			return {};

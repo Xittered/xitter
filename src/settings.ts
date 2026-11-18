@@ -107,6 +107,8 @@ const DEFAULTS = {
 		dms: true,
 		// learn from staff confirming or dismissing its reports (claude-mod-feedback.ts)
 		learn: true,
+		// replaces claude-mod.ts DEFAULT_GUIDE when set
+		prompt: "",
 	},
 	// the admin panel itself (admin.ts staffGate): staff must have two-factor on;
 	// only these addresses (IPs or CIDR ranges) reach it, none meaning any

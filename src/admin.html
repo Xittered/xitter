@@ -1834,7 +1834,7 @@ const RENDER = {
 	},
 
 	async settings(main, focus) {
-		const [{ settings: s, features, branding, slots, compression }, { operations: o, automod: am }] = await Promise.all([api("settings"), api("operations")]);
+		const [{ settings: s, features, branding, slots, compression, claudeMod: cm }, { operations: o, automod: am }] = await Promise.all([api("settings"), api("operations")]);
 		const admin = can("admin");
 		const dis = admin ? "" : " disabled";
 		const modes = { invite: "Invite only: a code is needed", open: "Open: anyone can sign up, codes optional", closed: "Closed: no new accounts" };
@@ -1917,7 +1917,17 @@ const RENDER = {
 			'<div class="field"><label>From account age (days, 0 for any)</label><input id="aiDays" type="number" min="0" max="3650" value="' + esc(String(s.archive_import.min_age_days)) + '"' + dis + "></div>" +
 			'<label class="archive-import-approval"><input type="checkbox" id="aiApproval"' + (s.archive_import.approval ? " checked" : "") + dis + "> Staff approve each import before it starts</label>" +
 			(admin ? '<div class="archive-import-actions"><button class="btn primary" id="saveArchiveImport">Save</button></div>' : "") +
-			(can("archiveImports") ? '<div class="archive-import-pending"><h2>Waiting for approval</h2><div id="aiPending" class="dim small">Loading…</div></div>' : "") + "</div></div></section>" +
+			(can("archiveImports") ? '<div class="archive-import-pending"><h2>Waiting for approval</h2><div id="aiPending" class="dim small">Loading…</div></div>' : "") + "</div>" +
+			'<div class="box"><h2>Claude moderator</h2><p class="dim small">Claude reads new posts, profile changes, user reports and 2020-client DMs after they\'re saved. Clear violations are hidden and filed under Reports, doubtful ones are only filed. It never gives strikes. ' +
+			(cm.hasKey ? "" : "<b>No ANTHROPIC_API_KEY on the server, so nothing runs.</b> ") + "</p>" +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="cmOn"' + (s.claude_mod.enabled ? " checked" : "") + dis + "> On</label>" +
+			[["posts", "Posts"], ["profiles", "Names and bios"], ["reports", "User reports (settles clear ones)"], ["dms", "2020-client DMs"], ["learn", "Learn from what staff confirm and dismiss"]]
+				.map(([k, l]) => '<label class="row" style="margin:4px 0"><input type="checkbox" data-cm="' + k + '"' + (s.claude_mod[k] ? " checked" : "") + dis + "> " + l + "</label>").join("") +
+			'<div class="field"><label>Hide from this confidence (0.5 to 1)</label><input id="cmHide" type="number" min="0.5" max="1" step="0.05" value="' + esc(String(s.claude_mod.hide_confidence)) + '"' + dis + "></div>" +
+			'<div class="field"><label>Model calls a day</label><input id="cmLimit" type="number" min="0" value="' + esc(String(s.claude_mod.daily_limit)) + '"' + dis + "></div>" +
+			'<div class="field"><label>Instructions (' + (s.claude_mod.prompt ? "custom" : "default") + '). {instance} and {origin} are filled in. Your Rules, the item type and the staff feedback are always added, and the item is always treated as data, not instructions.</label>' +
+			'<textarea id="cmPrompt" style="min-height:260px;font-family:ui-monospace,monospace;font-size:12px"' + dis + ">" + esc(s.claude_mod.prompt || cm.defaultPrompt) + "</textarea></div>" +
+			(admin ? '<div class="row" style="margin-top:8px"><button class="btn primary" id="saveClaudeMod">Save</button><button class="btn" id="resetClaudePrompt" type="button">Back to default</button></div>' : "") + "</div></div></section>" +
 			'<section class="settings-section" id="settings-discovery"><h2>Discovery</h2><div class="settings-grid">' +
 			'<div class="box"><h2>Trends</h2><div class="field"><label>Hidden hashtags, one per line</label><textarea id="hiddenTrends"' + dis + ">" + esc(o.hidden_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
 			'<div class="field"><label>Promoted hashtags, shown first</label><textarea id="promotedTrends"' + dis + ">" + esc(o.promoted_trends.map((t) => "#" + t).join("\n")) + "</textarea></div>" +
@@ -1950,7 +1960,7 @@ const RENDER = {
 			}));
 		};
 		stackCards("settings-account", [["Sign-up", "Composer"], ["Name and source", "AI and tools"], ["Core social", "Accounts and integrations"]]);
-		stackCards("settings-safety", [["Blocked phrases", "Import from X"], ["Blocked names"], ["Automod"]]);
+		stackCards("settings-safety", [["Blocked phrases", "Import from X"], ["Blocked names"], ["Automod", "Claude moderator"]]);
 
 		if (focus) {
 			const section = main.querySelector("#" + focus);
@@ -2021,6 +2031,15 @@ const RENDER = {
 		annList.onclick = (e) => { const x = e.target.closest("[data-remove]"); if (x) { x.closest(".ann-row").remove(); annFull(); } };
 		$("#saveAnn").onclick = () => save({ announcement: { text: $("#annText").value, buttons: [...annList.querySelectorAll(".ann-row")].map((r) => ({ label: r.querySelector("[data-label]").value, url: r.querySelector("[data-url]").value })) } }, "Announcement saved");
 		$("#saveRules").onclick = () => save({ rules: $("#rules").value }, "Rules saved");
+		if ($("#saveClaudeMod")) {
+			const claudeMod = (prompt) => {
+				const c = { enabled: $("#cmOn").checked, hide_confidence: $("#cmHide").value, daily_limit: $("#cmLimit").value, prompt };
+				main.querySelectorAll("[data-cm]").forEach((i) => c[i.dataset.cm] = i.checked);
+				return { claude_mod: c };
+			};
+			$("#saveClaudeMod").onclick = () => save(claudeMod($("#cmPrompt").value), "Claude moderator saved");
+			$("#resetClaudePrompt").onclick = () => { if (confirm("Put the default instructions back?")) save(claudeMod(""), "Default instructions back"); };
+		}
 		const listOf = (id) => $(id).value.split("\n").map((x) => x.trim()).filter(Boolean);
 		// accounts that already carry a blocked name, then suspend them in one go
 		if ($("#checkNames")) $("#checkNames").onclick = () => act(async () => {
