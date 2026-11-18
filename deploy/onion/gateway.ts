@@ -1,19 +1,3 @@
-// Onion gateway: serves an instance at its .onion address without a second
-// copy of the server. Tor hands every connection to this proxy, which passes
-// it on to Xitter as if it came to the public address, and swaps the two
-// addresses in what goes through:
-//   out  https://instance.example -> http://<onion>  (pages, scripts, JSON, headers)
-//   in   http://<onion> -> https://instance.example  (Origin, Referer, bodies)
-// The patched client only knows the address Xitter printed into it
-// (PUBLIC_ORIGIN), so this is all it takes for every call to stay on the onion.
-//
-// Env:
-//   UPSTREAM        where Xitter listens, e.g. http://xitter:3000
-//   PUBLIC_ORIGIN   the instance's public address, the same as Xitter's
-//   ONION_HOST      the .onion name; or read from HOSTNAME_FILE (tor writes it)
-//   HOSTNAME_FILE   default /hs/hostname
-//   PORT            default 8080
-
 import { gzipSync } from "node:zlib";
 
 const UPSTREAM = (process.env.UPSTREAM ?? "http://xitter:3000").replace(/\/$/, "");
@@ -23,7 +7,6 @@ const HOSTNAME_FILE = process.env.HOSTNAME_FILE ?? "/hs/hostname";
 
 async function onionHost() {
 	if (process.env.ONION_HOST) return process.env.ONION_HOST.trim();
-	// tor writes the file on its first start, which may be after ours
 	for (;;) {
 		const f = Bun.file(HOSTNAME_FILE);
 		if (await f.exists()) {
@@ -38,9 +21,6 @@ const ONION = await onionHost();
 const CLEAR = PUBLIC.host;
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-// A host as it shows up in served text: plain, in JSON ("https:\/\/a.b"), or in
-// a regular expression literal (/https:\/\/a\.b/). The dots and slashes keep
-// whatever escaping they had.
 const hostPattern = (host: string) => host.split(".").map(esc).join("(\\\\*\\.)");
 const SCHEME = "(?:(https?|wss?)(:(?:\\\\*\\/){2}))?";
 const outRe = new RegExp(SCHEME + hostPattern(CLEAR) + "(?![\\w-])", "g");
@@ -48,7 +28,6 @@ const inRe = new RegExp(SCHEME + hostPattern(ONION) + "(?![\\w-])", "g");
 const insecure: Record<string, string> = { https: "http", http: "http", wss: "ws", ws: "ws" };
 const secure: Record<string, string> = { https: "https", http: "https", wss: "wss", ws: "wss" };
 
-// latin1 keeps every byte as it was, so this is safe on UTF-8 and binary alike
 const out = (s: string) =>
 	s.replace(outRe, (_m, scheme?: string, sep?: string, ...rest) => {
 		const dot = typeof rest[0] === "string" ? rest[0] : ".";
@@ -68,8 +47,6 @@ const bytes = (buf: ArrayBuffer | Uint8Array, f: (s: string) => string) => {
 
 const TEXT = /^(text\/|application\/(javascript|json|manifest\+json|xml|x-javascript|ld\+json)|image\/svg)/;
 
-// The client's files are big and never change at a given path, so their
-// rewritten (and gzipped) copies are kept. Bounded by total size.
 type Cached = { status: number; headers: [string, string][]; body: Buffer; gz?: Buffer };
 const cache = new Map<string, Cached>();
 let cacheBytes = 0;
@@ -89,7 +66,6 @@ const remember = (key: string, c: Cached) => {
 function upstreamHeaders(req: Request) {
 	const h = new Headers();
 	for (const [k, v] of req.headers) {
-		// the visitor can't choose the address the rate limits see
 		if (/^(host|cf-|x-forwarded-|x-real-ip|forwarded|accept-encoding|content-length|connection|upgrade|sec-websocket-)/i.test(k)) continue;
 		h.set(k, k === "cookie" ? v : back(v));
 	}
@@ -167,8 +143,6 @@ const server = Bun.serve<WsData, {}>({
 				for (const m of ws.data.queue) up.send(m);
 				ws.data.queue = [];
 			};
-			// text frames get the same swap; binary ones (chat's Thrift) carry
-			// lengths, so they go through untouched
 			up.onmessage = (e) => ws.send(typeof e.data === "string" ? out(e.data) : (e.data as Buffer));
 			up.onclose = (e) => ws.close(e.code === 1005 || e.code === 1006 ? 1000 : e.code, e.reason);
 			up.onerror = () => ws.close(1011);

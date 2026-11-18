@@ -1,5 +1,3 @@
-# .onion address for an instance: tor + the rewriting gateway (gateway.ts).
-# Keys stay in ./hs; back that folder up, it IS the address.
 services:
   gateway:
     image: oven/bun:1-alpine

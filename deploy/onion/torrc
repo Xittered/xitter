@@ -1,10 +1,7 @@
 DataDirectory /var/lib/tor
 Log notice stdout
 HiddenServiceDir /var/lib/tor/hs
-# tor shares the gateway's network namespace (compose network_mode)
 HiddenServicePort 80 127.0.0.1:8080
-# Single onion service: the server's address is public anyway, so skip the
-# three hops on our side. Faster pages, same privacy for visitors.
 HiddenServiceNonAnonymousMode 1
 HiddenServiceSingleHopMode 1
 SocksPort 0
