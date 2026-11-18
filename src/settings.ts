@@ -109,6 +109,7 @@ const DEFAULTS = {
 		dms: true,
 		// learn from staff confirming or dismissing its reports (claude-mod-feedback.ts)
 		learn: true,
+		borderline: false,
 		// replaces claude-mod.ts DEFAULT_GUIDE when set
 		prompt: "",
 	},

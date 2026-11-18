@@ -937,7 +937,7 @@ const ACTIONS: Record<string, Action> = {
 			if (b.claude_mod && typeof b.claude_mod === "object") {
 				const c = b.claude_mod;
 				const next = { ...s.claude_mod };
-				for (const k of ["enabled", "posts", "profiles", "reports", "dms", "learn"] as const) if (typeof c[k] === "boolean") next[k] = c[k];
+				for (const k of ["enabled", "posts", "profiles", "reports", "dms", "learn", "borderline"] as const) if (typeof c[k] === "boolean") next[k] = c[k];
 				if (c.hide_confidence !== undefined) {
 					const n = Number(c.hide_confidence);
 					if (!(n >= 0.5 && n <= 1)) throw new AdminError("Hide confidence is between 0.5 and 1.");

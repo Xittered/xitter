@@ -1925,10 +1925,10 @@ const RENDER = {
 			'<div class="field"><label>Answers a day per account (0 for no limit)</label><input id="grokDaily" type="number" min="0" value="' + esc(String(s.grok.daily_per_account)) + '"' + dis + "></div>" +
 			'<div class="field"><label>Instructions (blank for the default). {instance} and {origin} are filled in.</label><textarea id="grokPrompt" style="min-height:120px;font-family:ui-monospace,monospace;font-size:12px"' + dis + ">" + esc(s.grok.prompt) + "</textarea></div>" +
 			(admin ? '<button class="btn primary" id="saveGrok">Save</button>' : "") + "</div>" +
-			'<div class="box"><h2>Claude moderator</h2><p class="dim small">Claude reads new posts, profile changes, user reports and 2020-client DMs after they\'re saved. Clear violations are hidden and filed under Reports, doubtful ones are only filed. It never gives strikes. ' +
+			'<div class="box"><h2>Claude moderator</h2><p class="dim small">Claude reads new posts, profile changes, user reports and 2020-client DMs after they\'re saved. Clear violations are hidden and filed under Reports; doubtful ones are filed only if you turn that on below. It never gives strikes. ' +
 			(cm.hasKey ? "" : "<b>No ANTHROPIC_API_KEY on the server, so nothing runs.</b> ") + "</p>" +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="cmOn"' + (s.claude_mod.enabled ? " checked" : "") + dis + "> On</label>" +
-			[["posts", "Posts"], ["profiles", "Names and bios"], ["reports", "User reports (settles clear ones)"], ["dms", "2020-client DMs"], ["learn", "Learn from what staff confirm and dismiss"]]
+			[["posts", "Posts"], ["profiles", "Names and bios"], ["reports", "User reports (settles clear ones)"], ["dms", "2020-client DMs"], ["learn", "Learn from what staff confirm and dismiss"], ["borderline", "Also file doubtful ones (off: only clear violations reach Reports)"]]
 				.map(([k, l]) => '<label class="row" style="margin:4px 0"><input type="checkbox" data-cm="' + k + '"' + (s.claude_mod[k] ? " checked" : "") + dis + "> " + l + "</label>").join("") +
 			'<div class="field"><label>Hide from this confidence (0.5 to 1)</label><input id="cmHide" type="number" min="0.5" max="1" step="0.05" value="' + esc(String(s.claude_mod.hide_confidence)) + '"' + dis + "></div>" +
 			'<div class="field"><label>Model calls a day</label><input id="cmLimit" type="number" min="0" value="' + esc(String(s.claude_mod.daily_limit)) + '"' + dis + "></div>" +

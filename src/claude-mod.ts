@@ -164,7 +164,7 @@ const acts = (v: Verdict) => v.verdict === "violation" && v.confidence >= settin
 
 async function file(target: { postId?: string | null; userId: string }, v: Verdict | "refused", extra = "") {
 	// staff keep dismissing this kind: only clear violations still get through
-	if (v !== "refused" && v.verdict === "borderline" && (await staffFeedback()).muted.has(v.category)) return;
+	if (v !== "refused" && v.verdict === "borderline" && (!settings().claude_mod.borderline || (await staffFeedback()).muted.has(v.category))) return;
 	const reason = v === "refused" ? "automod_review" : `automod_${v.category}`;
 	const details = (v === "refused" ? "Claude declined to judge this; please look at it." : `${v.verdict} (${Math.round(v.confidence * 100)}%): ${v.reason}`) + extra;
 	const [open] = await sql`select id::text from reports

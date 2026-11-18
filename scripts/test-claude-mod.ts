@@ -52,7 +52,7 @@ const badReports = await reportsFor(bad);
 check("and filed for staff, by no reporter", badReports.length === 1 && badReports[0].reporter_id === null && badReports[0].reason === "automod_harassment", badReports);
 check("saying it was hidden", String(badReports[0]?.details).includes("hidden"));
 check("a borderline post stays up", (await hidden(unsure)) === false);
-check("but is filed", (await reportsFor(unsure)).length === 1);
+check("and is not filed by default", (await reportsFor(unsure)).length === 0);
 check("a declined one is filed for a person", (await reportsFor(declined))[0]?.reason === "automod_review");
 
 // a user's report through the client's flow (reason, then details)
@@ -94,13 +94,17 @@ const [open] = await reportsFor(doubtful);
 check("a doubtful report stays open with a note", open?.status === "open" && String(open?.note).startsWith("Claude:"), open);
 
 // profile: a bio with the marker is filed, nothing changes on the profile
-const bio = await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_BORDERLINE bio ${Date.now()}` });
+await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_BORDERLINE bio ${Date.now()}` });
+await settle();
+const [quiet] = await sql`select count(*)::int as n from reports r join users u on u.id = r.user_id where u.screen_name = ${nameA} and r.post_id is null and r.reason like 'automod_%'`;
+check("a doubtful bio is not filed by default", quiet.n === 0, quiet);
+const bio = await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_VIOLATION bio ${Date.now()}` });
 check("the bio saved", bio.ok, bio.status);
 await settle();
 const [profileReport] = await sql`select reason, details from reports r join users u on u.id = r.user_id where u.screen_name = ${nameA} and r.post_id is null and r.reason like 'automod_%' order by r.id desc limit 1`;
-check("a doubtful bio is filed", !!profileReport && String(profileReport.details).includes("Profile"), profileReport);
+check("a violating bio is filed", !!profileReport && String(profileReport.details).includes("Profile"), profileReport);
 for (const n of [1, 2]) {
-	await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_BORDERLINE bio again ${n} ${Date.now()}` });
+	await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_VIOLATION bio again ${n} ${Date.now()}` });
 	await settle();
 }
 const [profileOpen] = await sql`select count(*)::int as n from reports r join users u on u.id = r.user_id where u.screen_name = ${nameA} and r.post_id is null and r.reason like 'automod_%' and r.status = 'open'`;
