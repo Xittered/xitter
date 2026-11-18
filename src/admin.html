@@ -160,6 +160,18 @@
 	.user-admin-facts b { color: var(--text); font-weight: 500; }
 	.user-instance-note { margin: 0 0 16px; padding: 12px 14px; border-left: 3px solid var(--blue); border-radius: 6px; background: var(--panel); }
 	.user-admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+	.user-tabs { position: sticky; top: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+	.user-tab { padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--dim); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+	.user-tab:hover { color: var(--text); background: var(--panel); }
+	.user-tab.on { color: var(--text); border-color: var(--blue); background: var(--panel); }
+	.user-tab-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+	.user-tab-panel[hidden] { display: none; }
+	.user-tab-panel .user-admin-column > .box { margin: 0 !important; }
+	@media (max-width: 900px) { .user-tab-panel { grid-template-columns: 1fr; } }
+	.user-tab-panel .field > input, .user-tab-panel .field > select, .user-tab-panel .field > textarea { width: 100%; min-width: 0; }
+	.user-tab-panel .box > h2 { margin-top: 0; }
+	.user-tab-panel .list > p { padding: 10px 0; border-bottom: 1px solid var(--line); }
+	.user-tab-panel .list > p:last-child { border-bottom: 0; }
 	.user-admin-column { display: grid; align-content: start; gap: 16px; min-width: 0; }
 	.user-admin-column > .box { min-width: 0; margin: 0 !important; }
 	.user-related-grid > .box { display: inline-block; width: 100%; min-width: 0; margin: 0 0 16px !important; vertical-align: top; break-inside: avoid; }
@@ -2296,7 +2308,8 @@ async function renderUser(main, id) {
 		'<div class="field"><label>For</label><select id="for"' + (!can("setTemporaryStatus") || self ? " disabled" : "") + '><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select></div><div class="row">' +
 		[["active", "Reinstate", ""], ["restricted", "Restrict", "Can read, can't post"], ["limited", "Limit", "Only followers see their posts"], ["suspended", "Suspend", "Signed out, hidden everywhere"]]
 			.map(([s, l, t]) => '<button class="btn' + (s === "suspended" ? " danger" : "") + '" data-status="' + s + '" title="' + esc(t) + '"' + (u.status === s || !can("setStatus") || self ? " disabled" : "") + ">" + l + "</button>").join("") +
-		'</div><p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p></div>' +
+		"</div>" + (alts?.length && can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="withAlts"> Also for the ' + alts.length + (alts.length === 1 ? " account" : " accounts") + ' seen from the same addresses: ' + alts.map((a) => "@" + esc(a.screen_name)).join(", ") + "</label>" : "") +
+		'<p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p></div>' +
 		// access
 		'<div class="box user-card-access"><h2>Access</h2><div class="row">' + (canHere("resetPassword") ? '<button class="btn" id="reset">Reset password</button>' : "") + (canHere("signOut") ? '<button class="btn" id="signout">Sign out everywhere</button>' : "") +
 			(canHere("revokeApiTokens") ? '<button class="btn danger" id="revoketokens"' + (u.api_tokens ? "" : " disabled") + ">Revoke API tokens (" + u.api_tokens + ")</button>" : "") + '</div><div id="secret"></div>' +
@@ -2325,22 +2338,52 @@ async function renderUser(main, id) {
 		"</div><div class=\"user-related-grid\">" +
 		'<section class="box user-affiliates"><h2>Affiliates</h2>' + (canHere("addAffiliate") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : "") +
 			(affiliates.length ? '<div class="scroll"><table class="table">' + affiliates.map((a) => '<tr><td>' + person(a) + "</td><td>" + (can("removeAffiliate") ? '<button class="btn danger" data-unaff="' + esc(a.id) + '">Remove</button>' : "") + "</td></tr>").join("") + "</table></div>" : '<p class="dim small">No affiliates yet.</p>') + "</section>" +
-		(alts?.length ? '<section class="box"><h2>Seen from the same addresses</h2><p class="dim small">Accounts that signed in from an address this one used in the last 90 days. Shared networks may put strangers here too.</p><div class="user-related-links">' + alts.map((a) => '<a href="#user/' + esc(a.id) + '">@' + esc(a.screen_name) + "</a>" + (a.status !== "active" ? ' <span class="pill ' + esc(a.status) + '">' + esc(a.status) + "</span>" : "")).join("") + "</div></section>" : "") +
-		(invited.length ? '<section class="box"><h2>Invited accounts</h2><div class="user-related-links">' + invited.map((i) => '<a href="#user/' + esc(i.id) + '">@' + esc(i.screen_name) + "</a>").join("") + "</div></section>" : "") +
+		(alts?.length ? '<section class="box user-alts"><h2>Seen from the same addresses</h2><p class="dim small">Accounts that signed in from an address this one used in the last 90 days. Shared networks may put strangers here too.</p><div class="user-related-links">' + alts.map((a) => '<a href="#user/' + esc(a.id) + '">@' + esc(a.screen_name) + "</a>" + (a.status !== "active" ? ' <span class="pill ' + esc(a.status) + '">' + esc(a.status) + "</span>" : "")).join("") + "</div></section>" : "") +
+		(invited.length ? '<section class="box user-invited"><h2>Invited accounts</h2><div class="user-related-links">' + invited.map((i) => '<a href="#user/' + esc(i.id) + '">@' + esc(i.screen_name) + "</a>").join("") + "</div></section>" : "") +
 		'<section class="box user-history"><h2>Staff history</h2>' + (log.length ? '<div class="scroll"><table class="table"><tbody>' + log.map((e) => '<tr><td class="small dim">' + esc(when(e.created_at)) + "</td><td>" + (e.automatic ? "Automod" : "@" + esc(e.actor ?? "?")) + " " + esc(e.action.replace(/_/g, " ")) + '</td><td class="small dim code">' + esc(e.detail ? JSON.stringify(e.detail) : "") + "</td></tr>").join("") + "</tbody></table></div>" : '<p class="dim small">No staff actions yet.</p>') + "</section></div>";
 
-	const userGrid = main.querySelector(".user-admin-grid");
-	const userColumns = [document.createElement("div"), document.createElement("div")];
-	userColumns.forEach((column) => column.className = "user-admin-column");
-	const moveCards = (column, selectors) => selectors.forEach((selector) => {
-		const card = main.querySelector(selector);
-		if (card) column.append(card);
+	const userTabs = [
+		["moderation", "Moderation", [".user-card-standing", ".user-card-messages", ".user-alts", ".user-card-notes", ".user-history"]],
+		["profile", "Profile and badges", [".user-card-profile", ".user-card-identity"]],
+		["access", "Access and sessions", [".user-card-access", ".user-card-sessions", ".user-card-handles"]],
+		["related", "Affiliates and invites", [".user-affiliates", ".user-invited"]],
+	].map(([key, label, selectors]) => [key, label, selectors.map((sel) => main.querySelector(sel)).filter(Boolean)]).filter(([, , cards]) => cards.length);
+	const tabBar = document.createElement("div");
+	tabBar.className = "user-tabs";
+	const panels = userTabs.map(([key, label, cards]) => {
+		const tab = document.createElement("button");
+		tab.className = "user-tab";
+		tab.dataset.tab = key;
+		tab.textContent = label;
+		tabBar.append(tab);
+		const panel = document.createElement("div");
+		panel.className = "user-tab-panel";
+		panel.dataset.panel = key;
+		panel.cards = cards;
+		panel.append(...cards);
+		return panel;
 	});
-	moveCards(userColumns[0], [".user-card-profile", ".user-card-standing", ".user-affiliates", ".user-card-messages"]);
-	moveCards(userColumns[1], [".user-card-identity", ".user-history", ".user-card-access", ".user-card-notes", ".user-card-sessions", ".user-card-handles"]);
-	userGrid.replaceChildren(...userColumns);
-	const relatedGrid = main.querySelector(".user-related-grid");
-	if (!relatedGrid.children.length) relatedGrid.remove();
+	const layOut = (panel) => {
+		if (panel.laidOut) return;
+		panel.laidOut = true;
+		const columns = [document.createElement("div"), document.createElement("div")];
+		columns.forEach((column) => column.className = "user-admin-column");
+		panel.replaceChildren(...columns);
+		const wide = getComputedStyle(panel).gridTemplateColumns.split(" ").length > 1;
+		panel.cards.forEach((card) => (wide && columns[1].offsetHeight < columns[0].offsetHeight ? columns[1] : columns[0]).append(card));
+	};
+	main.querySelector(".user-admin-grid").replaceWith(tabBar, ...panels);
+	main.querySelector(".user-related-grid").remove();
+	const showTab = (key) => {
+		if (!userTabs.some(([k]) => k === key)) key = userTabs[0][0];
+		tabBar.querySelectorAll("[data-tab]").forEach((t) => t.classList.toggle("on", t.dataset.tab === key));
+		panels.forEach((panel) => { panel.hidden = panel.dataset.panel !== key; if (!panel.hidden) layOut(panel); });
+		try { localStorage.setItem("xitterUserTab", key); } catch {}
+	};
+	tabBar.querySelectorAll("[data-tab]").forEach((t) => t.onclick = () => showTab(t.dataset.tab));
+	let lastTab = "";
+	try { lastTab = localStorage.getItem("xitterUserTab") || ""; } catch {}
+	showTab(lastTab);
 
 	const again = () => renderUser(main, id);
 	if ($("#saveCounts")) $("#saveCounts").onclick = () => act(() => api("setUserCounts", { id, counts: Object.fromEntries([...main.querySelectorAll("[data-count]")].map((el) => [el.dataset.count, el.value])) }), "Counts saved").then(again);
@@ -2378,11 +2421,18 @@ async function renderUser(main, id) {
 		act(() => api("resetDecor", { id }), "Decor reset").then(again);
 	};
 	main.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
-		if (b.dataset.status === "suspended" && !(await ask("Suspend @" + u.screen_name + "?"))) return;
-		const hours = $("#for").value;
-		act(() => hours && b.dataset.status !== "active"
-			? api("setTemporaryStatus", { id, status: b.dataset.status, hours, reason: $("#reason").value })
-			: api("setStatus", { id, status: b.dataset.status, reason: $("#reason").value }), "Standing changed").then(again);
+		const others = $("#withAlts")?.checked ? alts.filter((a) => a.status !== b.dataset.status) : [];
+		if (b.dataset.status === "suspended" && !(await ask("Suspend @" + u.screen_name + (others.length ? " and " + others.length + (others.length === 1 ? " alt" : " alts") : "") + "?"))) return;
+		const hours = $("#for").value, reason = $("#reason").value;
+		const apply = (target) => hours && b.dataset.status !== "active"
+			? api("setTemporaryStatus", { id: target, status: b.dataset.status, hours, reason })
+			: api("setStatus", { id: target, status: b.dataset.status, reason: reason || (target === id ? "" : "alt of @" + u.screen_name) });
+		const changed = await act(() => apply(id).then(() => true));
+		if (!changed) return;
+		const skipped = [];
+		for (const a of others) await apply(a.id).catch((e) => skipped.push("@" + a.screen_name + " (" + e.message + ")"));
+		notice(others.length ? "Standing changed for @" + u.screen_name + " and " + (others.length - skipped.length) + " of " + others.length + " alts" + (skipped.length ? ". Skipped: " + skipped.join(", ") : "") : "Standing changed", skipped.length > 0);
+		again();
 	});
 	if ($("#reset")) $("#reset").onclick = async () => {
 		if (!(await ask("Give @" + u.screen_name + " a new password and sign them out?"))) return;
