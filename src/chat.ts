@@ -559,6 +559,28 @@ async function deleteMessages(v: Viewer, vars: Vars) {
 	return { data: { xchat_delete_messages: { __typename: "DeleteMessageResponse", error_code: null } } };
 }
 
+const DM_FROM = new Set(["all", "following", "verified"]);
+const DM_RECEIPTS = new Set(["all_enabled", "all_disabled"]);
+const AV_PERMS = ["accept_calls_from_addressbook", "accept_calls_from_everyone", "accept_calls_from_following", "accept_calls_from_verified"];
+async function dmSettings(userId: string) {
+	const [row] = await sql`select preferences->'dm_settings' as s from users where id = ${userId}::bigint`;
+	const s = (row?.s ?? {}) as Record<string, any>;
+	const av = s.av_settings ?? {};
+	return {
+		__typename: "DmSettings",
+		allow_dms_from: s.allow_dms_from ?? "all",
+		always_allow_dms_from_subscribers: s.always_allow_dms_from_subscribers ?? false,
+		dm_quality_filter: "disabled",
+		dm_receipt_settings: s.dm_receipt_settings ?? "all_enabled",
+		av_settings: {
+			__typename: "AvSettings",
+			has_av_calls_enabled: av.has_av_calls_enabled ?? false,
+			has_enhanced_call_privacy_enabled: av.has_enhanced_call_privacy_enabled ?? false,
+			av_call_permissions: { __typename: "AvCallPermissions", ...Object.fromEntries(AV_PERMS.map((k) => [k, av.av_call_permissions?.[k] ?? false])) },
+		},
+	};
+}
+
 export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promise<unknown> | unknown> = {
 	...media.handlers,
 	GetConversationEntryDetailsQuery: async (v, vars) => {
@@ -666,20 +688,26 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		}
 		return { data: { xchat_remove_group_members: { __typename: "RemoveGroupMembersResponse", error_code: null, conversation_key_change_sequence_id: seqs[0] ?? null } } };
 	},
-	xChatDmSettingsQuery: () => ({
-		data: {
-			dm_settings: {
-				__typename: "DmSettings",
-				allow_dms_from: "all",
-				dm_quality_filter: "disabled",
-				av_settings: {
-					__typename: "AvSettings",
-					has_av_calls_enabled: false,
-					av_call_permissions: { accept_calls_from_addressbook: false, accept_calls_from_everyone: false, accept_calls_from_following: false, accept_calls_from_verified: false },
-				},
-			},
-		},
-	}),
+	xChatDmSettingsQuery: async (v) => ({ data: { dm_settings: await dmSettings(v.id) } }),
+	DmSettingsQuery: async (v) => ({ data: { dm_settings: await dmSettings(v.id) } }),
+	UpdateDmSettingsMutation: async (v, vars) => {
+		const saved: Record<string, unknown> = {};
+		if (typeof vars.allow_dms_from === "string" && DM_FROM.has(vars.allow_dms_from)) saved.allow_dms_from = vars.allow_dms_from;
+		if (typeof vars.always_allow_dms_from_subscribers === "boolean") saved.always_allow_dms_from_subscribers = vars.always_allow_dms_from_subscribers;
+		if (typeof vars.dm_receipt_settings === "string" && DM_RECEIPTS.has(vars.dm_receipt_settings)) saved.dm_receipt_settings = vars.dm_receipt_settings;
+		const av = vars.av_settings as Record<string, unknown> | undefined;
+		if (av && typeof av === "object") {
+			const perms = (av.av_call_permissions ?? {}) as Record<string, unknown>;
+			saved.av_settings = {
+				has_av_calls_enabled: av.has_av_calls_enabled === true,
+				has_enhanced_call_privacy_enabled: av.has_enhanced_call_privacy_enabled === true,
+				av_call_permissions: Object.fromEntries(AV_PERMS.map((k) => [k, perms[k] === true])),
+			};
+		}
+		await sql`update users set preferences = jsonb_set(coalesce(preferences, '{}'), '{dm_settings}', coalesce(preferences->'dm_settings', '{}') || ${JSON.stringify(saved)}::text::jsonb, true) where id = ${v.id}::bigint`;
+		const { dm_quality_filter: _, ...rest } = await dmSettings(v.id);
+		return { data: { xchat_update_dm_settings: { ...rest, __typename: "XChatDmSettings" } } };
+	},
 	// calls run on X's Periscope servers; none here
 	useDirectCallSetupQuery: () => ({ data: { authenticate_periscope: null } }),
 	GetExternalAppIntegrationsQuery: () => ({ data: { get_external_app_integrations: { __typename: "ExternalAppIntegrations", integrations: [] } } }),
