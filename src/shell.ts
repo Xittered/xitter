@@ -1,6 +1,8 @@
 // The HTML page that boots the client, built from the pinned build snapshot.
 // Everything about the signed-in account is ours.
 
+import { BEE } from "./bee-icon";
+import { grokName } from "./grok";
 import type { User } from "./auth";
 import { loadBuild } from "./build";
 import { feature, settings } from "./settings";
@@ -345,9 +347,10 @@ const oldMenu = (links: MenuLink[]) => [
 	{ href: "/settings/xitter", text: "Xitter settings", icon: GEAR, viewBox: "0 -960 960 960" },
 	...links.filter((l) => l.where === "menu" || l.where === "both" || l.where === "nav").map((l) => ({ href: l.href, text: l.text, icon: l.icon, viewBox: l.viewBox ?? "0 0 24 24" })),
 ];
+const OLD_BEE = `window.__xitterBeeIcon=function(R,Base){return Base};(function(){function swap(){document.querySelectorAll('a[href="/i/grok"] svg:not([data-gbee])').forEach(function(v){v.setAttribute("data-gbee","");v.setAttribute("viewBox","0 -960 960 960");v.innerHTML='<path d="${BEE}"/>'})}new MutationObserver(swap).observe(document.documentElement,{childList:true,subtree:true})})();`;
 // Our pages can't sit inside the 2020 client the way tidy.ts frames them in the
 // current one, so links to them load the page itself instead of a client route
-const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0))return;e.preventDefault();e.stopPropagation();var b=getComputedStyle(document.body).backgroundColor;document.cookie="xitter_old_theme="+(b==="rgb(0, 0, 0)"?"dark":b.indexOf("rgb(21, 32, 43")===0?"dim":"light")+"; Path=/; Max-Age=31536000; SameSite=Lax";location.assign(p+u.search)},true);`;
+const OLD_PAGES = `document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a||e.button||e.metaKey||e.ctrlKey||e.shiftKey)return;var u=new URL(a.href,location.href),p=u.pathname;if(u.origin!==location.origin||!(p.indexOf("/account/")===0||p==="/settings/xitter"||p.indexOf("/settings/xitter/")===0||(p==="/i/grok"&&window.__XITTER_GBEE__)))return;e.preventDefault();e.stopPropagation();var b=getComputedStyle(document.body).backgroundColor;document.cookie="xitter_old_theme="+(b==="rgb(0, 0, 0)"?"dark":b.indexOf("rgb(21, 32, 43")===0?"dim":"light")+"; Path=/; Max-Age=31536000; SameSite=Lax";location.assign(p+u.search)},true);`;
 // An organisation's avatar is square, as on X: the 2020 client draws every
 // avatar round (its r-sdzlij class), and its picture's address carries
 // SQUARE_MARK (model.ts oldAvatar) where it should not be
@@ -400,7 +403,7 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 <style>html,body{height:100%}body{margin:0}${OLD_SQUARE}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
-${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};${OLD_PAGES}${OLD_TABS}</script>` : ""}
+${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};window.__XITTER_GBEE__=${inline(feature("grok") ? grokName() : null)};${OLD_BEE}${OLD_PAGES}${OLD_TABS}</script>` : ""}
 <script id="nonce-csp"></script>
 <script>${runtimeText}</script>
 <script>${oldLoader(build.sha, build.scripts.map((p) => `${PUBLIC_ORIGIN}/abs${p}`))}</script>

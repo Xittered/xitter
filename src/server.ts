@@ -1,4 +1,5 @@
 import { MULTI_COOKIE, type Viewer, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
+import { gbeePage } from "./gbee-page";
 import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
 import { CLIENT_COOKIE, chosenClient, clientCookie, clientRoute, requestClient, switchByQuery } from "./client-choice";
 import { PORT, PUBLIC_ORIGIN } from "./config";
@@ -7,7 +8,7 @@ import { knownOperation, runOperation } from "./graphql";
 import { brandingFile } from "./branding";
 import { handleLogin, handleOldCode, handleOldSessions, maintenancePage, rulesPage } from "./login";
 import { adminApi, audit } from "./admin";
-import { loadSettings, settings } from "./settings";
+import { feature, loadSettings, settings } from "./settings";
 import { flagPickerData } from "./flag-picker";
 import { flagSvg } from "./flags";
 import { onboarding } from "./onboarding";
@@ -535,6 +536,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	// the client's Settings, which frames them (tidy.ts)
 	const oldBuild = !!loadBuild()?.build.stateBase;
 	// the 2020 client has no screens of ours to frame them in: they open whole
+	if (viewer && oldBuild && p === "/i/grok" && req.method === "GET" && feature("grok")) return gbeePage(req, viewer);
 	if (viewer && oldBuild && (p === "/settings/xitter" || p.startsWith("/settings/xitter/"))) return Response.redirect(`/account/${p.slice("/settings/xitter/".length)}${url.search}`, 302);
 	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && SETTINGS_PAGES.has(p))
 		return Response.redirect(`/settings/xitter/${p.slice("/account/".length)}${url.search}`, 302);
