@@ -7,6 +7,7 @@ import { newId } from "./ids";
 import { hit, limitedResponse } from "./ratelimit";
 import { SUPERADMINS, isSuperadminHome, superadminOf } from "./superadmins";
 import { codeAccepted } from "./two-factor";
+import { NAME_MAX } from "./settings";
 
 const TICKET_SECONDS = 60;
 const SESSION_MINUTES = 60;
@@ -214,7 +215,7 @@ export async function acceptTicket(req: Request, ip: string): Promise<Response> 
 	const id = known?.id ?? newId();
 	if (!known) {
 		await sql`update users set screen_name = screen_name || '~' || remote_id::text where lower(screen_name) = lower(${handle}) and instance = ${issuer}`;
-		await sql`insert into users (id, screen_name, name, password_hash, instance, remote_id) values (${id}::bigint, ${handle}, ${String(t.name ?? t.sub).slice(0, 50)}, '!', ${issuer}, ${t.sub_id}::bigint)`;
+		await sql`insert into users (id, screen_name, name, password_hash, instance, remote_id) values (${id}::bigint, ${handle}, ${String(t.name ?? t.sub).slice(0, NAME_MAX)}, '!', ${issuer}, ${t.sub_id}::bigint)`;
 		await sql`insert into federated_objects (instance, kind, remote_id, local_id) values (${issuer}, 'user', ${t.sub_id}::bigint, ${id}::bigint) on conflict do nothing`;
 	}
 	await sql`update users set role = 'admin', status = 'active', deactivated_at = null where id = ${id}::bigint`;

@@ -13,6 +13,7 @@ import { saveMentions } from "./mentions";
 import { cleanText, oneLine } from "./text-clean";
 import { parseDecoration } from "./decorations";
 import { posterFile } from "./video";
+import { NAME_MAX } from "./settings";
 
 const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
 const PAGE = 200;
@@ -326,13 +327,13 @@ export async function applyUser(instance: string, u: any): Promise<string | unde
 	const created = typeof u.created_at === "string" && !Number.isNaN(Date.parse(u.created_at)) ? new Date(u.created_at) : new Date();
 	const id = local ?? newId();
 	if (local)
-		await sql`update users set screen_name = ${handle}, name = ${oneLine(clip(u.name, 50))}, bio = ${cleanText(clip(u.bio, 300), { lines: 6 })}, location = ${oneLine(clip(u.location, 60))}, website = ${website}, protected = ${!!u.protected}
+		await sql`update users set screen_name = ${handle}, name = ${oneLine(clip(u.name, NAME_MAX))}, bio = ${cleanText(clip(u.bio, 300), { lines: 6 })}, location = ${oneLine(clip(u.location, 60))}, website = ${website}, protected = ${!!u.protected}
 			where id = ${local}::bigint`;
 	else {
 		const [{ n }] = await sql`select count(*)::int as n from users where instance = ${instance}`;
 		if (n >= MAX_ACCOUNTS) throw new FederationError(`${instance} already has ${MAX_ACCOUNTS} accounts here`);
 		await sql`insert into users (id, screen_name, name, password_hash, bio, location, website, protected, instance, remote_id, created_at)
-			values (${id}::bigint, ${handle}, ${oneLine(clip(u.name, 50))}, '!', ${cleanText(clip(u.bio, 300), { lines: 6 })}, ${oneLine(clip(u.location, 60))}, ${website}, ${!!u.protected}, ${instance}, ${u.id}::bigint, ${created})
+			values (${id}::bigint, ${handle}, ${oneLine(clip(u.name, NAME_MAX))}, '!', ${cleanText(clip(u.bio, 300), { lines: 6 })}, ${oneLine(clip(u.location, 60))}, ${website}, ${!!u.protected}, ${instance}, ${u.id}::bigint, ${created})
 			on conflict (instance, remote_id) where instance is not null do nothing`;
 		const again = await mapped(instance, "user", u.id);
 		if (again) return again;

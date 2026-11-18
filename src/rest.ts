@@ -4,7 +4,7 @@ import { addResponse } from "./grok";
 import { blockedNameIn, blockedWordIn, forbiddenText, suspendForName } from "./names";
 import { hateIn, hateInName } from "./hate";
 import { automodStrike } from "./moderation";
-import { hasBlockedPhrase } from "./settings";
+import { NAME_MAX, hasBlockedPhrase } from "./settings";
 import { hashflagsJson } from "./hashflags";
 import { accountsRoute } from "./accounts";
 import type { Viewer } from "./auth";
@@ -125,7 +125,7 @@ async function profileRoute(path: string, viewer: Viewer, req: Request): Promise
 // /me). Keys are the web form's: name, description, location, url. Every
 // field is checked before any is saved; the message is for the person.
 export async function updateProfileText(viewer: Viewer, f: Record<string, string>): Promise<string | null> {
-	const limits: Record<string, [string, number]> = { name: ["name", 50], description: ["bio", 160], location: ["location", 30], url: ["website", 100] };
+	const limits: Record<string, [string, number]> = { name: ["name", NAME_MAX], description: ["bio", 160], location: ["location", 30], url: ["website", 100] };
 	const changes: Record<string, string> = {};
 	for (const [field, [column, max]] of Object.entries(limits)) {
 		if (!(field in f)) continue;

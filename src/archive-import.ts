@@ -37,7 +37,7 @@ import { compressUpload } from "./media-compress";
 import { automodStrike } from "./moderation";
 import { blockedNameIn, blockedWordIn } from "./names";
 import { RateLimitError, chargePostCost, limitOf } from "./ratelimit";
-import { feature, hasBlockedPhrase, settings } from "./settings";
+import { NAME_MAX, feature, hasBlockedPhrase, settings } from "./settings";
 import { cleanText, oneLine } from "./text-clean";
 import { postLimitFor, weightedLength } from "./textlen";
 import { queueVideo, sourceFile } from "./video";
@@ -230,7 +230,7 @@ async function importProfile(userId: string, zip: Zip) {
 		return value && allowed(value, name) ? value : null;
 	};
 	const d = profile?.description ?? {};
-	const name = field(account?.accountDisplayName, 50, true);
+	const name = field(account?.accountDisplayName, NAME_MAX, true);
 	const bio = field(d.bio, 160);
 	const location = field(d.location, 30);
 	const website = typeof d.website === "string" && /^https?:\/\/\S+$/.test(d.website) ? field(d.website, 100) : null;

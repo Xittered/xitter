@@ -9,6 +9,8 @@ import { foldGlyphs } from "./fold";
 export type SignupMode = "invite" | "open" | "closed";
 
 // parts of the client this instance can switch off; true shows the feature
+export const NAME_MAX = 100;
+
 export const FEATURES = {
 	communities: "Communities",
 	lists: "Lists",

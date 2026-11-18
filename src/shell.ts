@@ -5,7 +5,7 @@ import { BEE } from "./bee-icon";
 import { grokName } from "./grok";
 import type { User } from "./auth";
 import { loadBuild } from "./build";
-import { feature, settings } from "./settings";
+import { NAME_MAX, feature, settings } from "./settings";
 import { postLimitFor } from "./textlen";
 import { CONVERSATION_CARD_CSS, CONVERSATION_CARD_SCRIPT } from "./conversation-card-ui";
 import { COMPOSER_BUTTON_CSS, COMPOSER_BUTTON_SCRIPT } from "./composer-buttons";
@@ -129,6 +129,7 @@ const CLAIMED_FEATURES = Object.fromEntries(["subscriptions_feature_article_comp
 const HOST_SWITCHES = ["responsive_web_media_upload_host"];
 // Xitter's own values, over the pinned build's
 const ownSwitches = (): Record<string, { value: unknown }> => ({
+	user_display_name_max_limit: { value: NAME_MAX },
 	responsive_web_birdwatch_note_writing_enabled: { value: true },
 	responsive_web_pinned_replies_enabled: { value: true },
 	// Circles (circles.ts): the label on Circle posts stays even with the

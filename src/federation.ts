@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
-import { settings } from "./settings";
+import { NAME_MAX, settings } from "./settings";
 import { isSuperadminHome, pinnedHomeKey } from "./superadmins";
 import { MIGRATION_FORMAT_VERSION, SCHEMA, VERSION } from "./version";
 
@@ -80,7 +80,7 @@ function parseRegistry(raw: unknown): Registry | undefined {
 		seen.add(i.id);
 		instances.push({
 			id: i.id,
-			name: typeof i.name === "string" ? i.name.slice(0, 50) : i.id,
+			name: typeof i.name === "string" ? i.name.slice(0, NAME_MAX) : i.id,
 			source_url: typeof i.source_url === "string" && /^https:\/\//.test(i.source_url) ? i.source_url.slice(0, 300) : null,
 			public_key: i.public_key,
 			state: i.state,

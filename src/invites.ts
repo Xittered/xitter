@@ -9,7 +9,7 @@ import { sql } from "./db";
 import { flagValue } from "./flags";
 import { newId } from "./ids";
 import { superadminNameHere } from "./superadmins";
-import { getSetting, settings } from "./settings";
+import { NAME_MAX, getSetting, settings } from "./settings";
 
 // Eight digits ("4821-0937"): X's sign-up dialog takes the code in digit boxes,
 // and digits are easy to read out and type on a phone.
@@ -103,7 +103,7 @@ export async function checkSignup(f: SignupForm) {
 	if (await handleHeld(screenName)) throw new SignupError("That username isn't available.");
 	// a blocked word in the handle or name (names.ts): no account at all
 	if (blockedNameIn(screenName, name) || hateInName(screenName, name)) throw new SignupError("That username isn't allowed here.");
-	if ([...name].length > 50) throw new SignupError("Names are at most 50 characters.");
+	if (name.length > NAME_MAX) throw new SignupError(`Names are at most ${NAME_MAX} characters.`);
 	if (f.password.length < 8) throw new SignupError("Passwords are at least 8 characters.");
 	if (f.password.length > 256) throw new SignupError("Passwords are at most 256 characters.");
 	if ((await getSetting("signup_mode")) === "closed") throw new SignupError("Sign-up is closed on this instance.");

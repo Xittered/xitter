@@ -30,7 +30,7 @@ import { blockedNameIn, forbiddenText } from "./names";
 import { pronounsProblem } from "./pronouns";
 import { NotPublic, publicFetch, reservedAddress } from "./public-net";
 import { recordError } from "./errors";
-import { settings } from "./settings";
+import { NAME_MAX, settings } from "./settings";
 import { maxVideoBytes, posterFile } from "./video";
 
 const ALLOW_HTTP = !!(process.env.MIGRATION_ALLOW_HTTP || process.env.FEDERATION_ALLOW_HTTP);
@@ -528,7 +528,7 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 			await progress("Profile", undefined, undefined, true);
 			const a = archive.account;
 			const changes: Record<string, unknown> = {};
-			const name = str(a.name, 50).replace(/\s+/g, " ").trim();
+			const name = str(a.name, NAME_MAX).replace(/\s+/g, " ").trim();
 			if (name && !blockedNameIn(name) && !forbiddenText(name)) changes.name = name;
 			else if (name) skipped.push("The display name has words this instance doesn't allow, so it wasn't changed.");
 			for (const [field, max] of [["bio", 160], ["location", 30]] as const) {

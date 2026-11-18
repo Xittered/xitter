@@ -24,7 +24,7 @@ import { activeStrikes, shutOut } from "./moderation";
 import { REASONS } from "./reports";
 import { startSweep, sweepState } from "./media-compress";
 import { DEFAULT_GUIDE, PROMPT_MAX, claudeModKey } from "./claude-mod";
-import { FEATURES, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
+import { FEATURES, NAME_MAX, type Feature, type SignupMode, allSettings, setSetting, settings } from "./settings";
 import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
 import { createPlatform, renameWebSource } from "./platforms";
 import { TopicError, deleteTopic, listTopics, saveTopic } from "./topics";
@@ -436,7 +436,7 @@ const ACTIONS: Record<string, Action> = {
 		run: async (a, b) => {
 			const id = idOf(b.id);
 			await guard(a, id, true);
-			const limits: Record<string, [string, number]> = { name: ["name", 50], screen_name: ["screen_name", 50], bio: ["bio", 160], location: ["location", 30], website: ["website", 100], based_in: ["based_in_override", 50] };
+			const limits: Record<string, [string, number]> = { name: ["name", NAME_MAX], screen_name: ["screen_name", 50], bio: ["bio", 160], location: ["location", 30], website: ["website", 100], based_in: ["based_in_override", 50] };
 			const [old] = await sql`select screen_name from users where id = ${id}::bigint`;
 			const changes: Record<string, string | null> = {};
 			for (const [field, [column, max]] of Object.entries(limits)) {
