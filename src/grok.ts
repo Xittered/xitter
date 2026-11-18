@@ -220,7 +220,8 @@ export async function addResponse(viewer: Viewer, req: Request): Promise<Respons
 	if (!feature("grok")) return Response.json({ errors: [{ code: 403, message: "Grok is turned off on this instance." }] }, { status: 403 });
 	const body = (await req.json().catch(() => null)) as any;
 	if (body?.isCancel) return new Response("", { status: 200 });
-	const asked = body?.responses?.find?.((r: any) => typeof r?.message === "string")?.message?.slice(0, MAX_INPUT) ?? "";
+	const sent: any[] = Array.isArray(body?.responses) ? body.responses.filter((r: any) => typeof r?.message === "string") : [];
+	const asked = (sent.filter((r) => r.sender === undefined || r.sender === 1).at(-1) ?? sent.at(-1))?.message?.slice(0, MAX_INPUT) ?? "";
 	if (!asked.trim()) return Response.json({ errors: [{ code: 400, message: "Ask something." }] }, { status: 400 });
 
 	let conv = await ownConversation(viewer, body?.conversationId);
