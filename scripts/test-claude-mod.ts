@@ -99,6 +99,12 @@ check("the bio saved", bio.ok, bio.status);
 await settle();
 const [profileReport] = await sql`select reason, details from reports r join users u on u.id = r.user_id where u.screen_name = ${nameA} and r.post_id is null and r.reason like 'automod_%' order by r.id desc limit 1`;
 check("a doubtful bio is filed", !!profileReport && String(profileReport.details).includes("Profile"), profileReport);
+for (const n of [1, 2]) {
+	await a.form("/1.1/account/update_profile.json", { description: `CLAUDEMOD_BORDERLINE bio again ${n} ${Date.now()}` });
+	await settle();
+}
+const [profileOpen] = await sql`select count(*)::int as n from reports r join users u on u.id = r.user_id where u.screen_name = ${nameA} and r.post_id is null and r.reason like 'automod_%' and r.status = 'open'`;
+check("more profile edits keep one open report", profileOpen.n === 1, profileOpen);
 await a.form("/1.1/account/update_profile.json", { description: "testing xitter" });
 
 // clean up

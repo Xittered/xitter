@@ -167,6 +167,14 @@ async function file(target: { postId?: string | null; userId: string }, v: Verdi
 	if (v !== "refused" && v.verdict === "borderline" && (await staffFeedback()).muted.has(v.category)) return;
 	const reason = v === "refused" ? "automod_review" : `automod_${v.category}`;
 	const details = (v === "refused" ? "Claude declined to judge this; please look at it." : `${v.verdict} (${Math.round(v.confidence * 100)}%): ${v.reason}`) + extra;
+	const [open] = await sql`select id::text from reports
+		where status = 'open' and reporter_id is null and reason like 'automod%' and user_id = ${target.userId}::bigint
+			and post_id is not distinct from ${target.postId ?? null}::bigint
+		order by created_at desc limit 1`;
+	if (open) {
+		await sql`update reports set reason = ${reason}, details = ${details.slice(0, 2000)} where id = ${open.id}::bigint`;
+		return;
+	}
 	await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
 		values (${newId()}::bigint, null, ${target.postId ?? null}::bigint, ${target.userId}::bigint, ${reason}, ${details.slice(0, 2000)})`;
 }
