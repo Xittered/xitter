@@ -130,7 +130,7 @@ export async function updateProfileText(viewer: Viewer, f: Record<string, string
 	for (const [field, [column, max]] of Object.entries(limits)) {
 		if (!(field in f)) continue;
 		const value = field === "description" ? cleanText(f[field], { lines: 6 }) : oneLine(f[field]);
-		if ([...value].length > max) return `${field} is limited to ${max} characters.`;
+		if ((field === "name" ? value.length : [...value].length) > max) return `${field} is limited to ${max} characters.`;
 		if (field === "name" && !value) return "Name can't be blank.";
 		if (field === "url" && value && !/^https?:\/\/\S+$/.test(value)) return "Website must be an http or https address.";
 		const hate = field === "name" ? hateInName(value) : hateIn(value);

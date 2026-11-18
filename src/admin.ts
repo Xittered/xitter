@@ -445,7 +445,7 @@ const ACTIONS: Record<string, Action> = {
 				// the form always sends the handle; one set before the handle rules
 				// (a symbol in it) must not block saving the rest of the profile
 				if (field === "screen_name" && value === old?.screen_name) continue;
-				if ([...value].length > max) throw new AdminError(`${field} is at most ${max} characters.`);
+				if ((field === "name" ? value.length : [...value].length) > max) throw new AdminError(`${field} is at most ${max} characters.`);
 				if (field === "screen_name" && staffHandleProblem(value)) throw new AdminError(staffHandleProblem(value)!);
 				if (field === "name" && !value) throw new AdminError("Name can't be blank.");
 				if (field === "website" && value && !/^https?:\/\/\S+$/.test(value)) throw new AdminError("Website must be an http or https address.");
