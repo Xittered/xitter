@@ -22,6 +22,7 @@ export async function shutOut(...userIds: string[]) {
 	await sql`delete from login_challenges where user_id = any(${ids})`;
 	await sql`delete from push_subscriptions where user_id = any(${ids})`;
 	await sql`update invites set revoked = true where created_by = any(${ids}) and not revoked and uses < max_uses`;
+	await sql`update reports set status = 'actioned', note = case when note = '' then 'account suspended' else note end, handled_at = now() where user_id = any(${ids}) and status = 'open'`;
 	forgetHeld();
 	const chat = await import("./chat");
 	for (const id of userIds) chat.closeSockets(id);
