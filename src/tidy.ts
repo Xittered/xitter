@@ -141,7 +141,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 // what the script needs to know, as window.__XITTER__.tidy
 export function tidyData(links: MenuLink[] = []) {
 	const s = settings();
-	const menuItems = ["Embed post"];
+	const menuItems = ["Embed post", "Go to grok.com"];
 	if (!feature("lists")) menuItems.push("Add/remove from Lists");
 	const announcement = s.money_shop.enabled && s.money_shop.announcement?.text ? s.money_shop.announcement : s.announcement;
 	return {
@@ -621,6 +621,10 @@ export const TIDY_SCRIPT = `(function(){
 			});
 		}
 		document.querySelectorAll('button[aria-label="Link accounts"]').forEach(function(b){b.style.display="none"});
+		document.querySelectorAll('a[href*="grok.com"]').forEach(function(a){(a.closest('[role="menuitem"]')||a).style.display="none"});
+		document.querySelectorAll('[role="menuitem"],[role="option"],[role="button"],button').forEach(function(m){
+			if(m.innerText&&m.innerText.trim()==="Go to grok.com")m.style.display="none";
+		});
 		document.querySelectorAll('[data-testid="primaryColumn"] span').forEach(function(n){
 			var t=n.textContent.trim();
 			if(n.childElementCount||(t!=="Meet Grok Bot"&&t!=="Meet GBee Bot"))return;
