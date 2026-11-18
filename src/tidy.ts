@@ -52,6 +52,8 @@ const ALWAYS = [
 	// a menu's divider with nothing after it (the More menu ends with one, the
 	// entries it led to being gone)
 	'[role="menu"] [data-testid="Dropdown"] div:has(> [role="separator"]):last-child',
+	'[data-testid="Dropdown"] > [role="menuitem"]:has(path[d^="M12.745 20.54l10.97-8.19"])',
+	'[data-testid="Dropdown"] > div:not([role]):has(+ [role="menuitem"] path[d^="M12.745 20.54l10.97-8.19"])',
 ];
 
 export function hideCss(): string {
@@ -621,6 +623,11 @@ export const TIDY_SCRIPT = `(function(){
 			});
 		}
 		document.querySelectorAll('button[aria-label="Link accounts"]').forEach(function(b){b.style.display="none"});
+		document.querySelectorAll("button").forEach(function(b){
+			if(b.getAttribute("aria-label")||!b.innerText||b.innerText.trim()!=="Link accounts")return;
+			var row=b.parentElement&&b.parentElement.parentElement;
+			(row&&/auto|scroll/.test(getComputedStyle(row).overflowX)?row:b).style.display="none";
+		});
 		document.querySelectorAll('a[href*="grok.com"]').forEach(function(a){(a.closest('[role="menuitem"]')||a).style.display="none"});
 		document.querySelectorAll('[role="menuitem"],[role="option"],[role="button"],button').forEach(function(m){
 			if(m.innerText&&m.innerText.trim()==="Go to grok.com")m.style.display="none";
