@@ -907,6 +907,33 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("rules", b.rules.slice(0, 20000));
 				changed.push("rules");
 			}
+			if (b.grok && typeof b.grok === "object") {
+				const g = b.grok;
+				const next = { ...s.grok };
+				if (g.brain === "claude" || g.brain === "bee") next.brain = g.brain;
+				if (typeof g.model === "string") {
+					const m = g.model.trim();
+					if (!/^[a-z0-9.\-]{1,80}$/.test(m)) throw new AdminError("That isn't a model name.");
+					next.model = m;
+				}
+				if (typeof g.bee_url === "string") {
+					const u = g.bee_url.trim();
+					if (u && !/^https?:\/\/[^\s]{1,200}$/.test(u)) throw new AdminError("The bee address is an http(s) URL.");
+					next.bee_url = u;
+				}
+				if (g.daily_per_account !== undefined) {
+					const n = Number(g.daily_per_account);
+					if (!Number.isInteger(n) || n < 0 || n > 100_000) throw new AdminError("Answers a day is a whole number up to 100000.");
+					next.daily_per_account = n;
+				}
+				if (typeof g.prompt === "string") {
+					const t = g.prompt.replace(/\r\n/g, "\n").trim();
+					if (t.length > 8000) throw new AdminError("The instructions are at most 8000 characters.");
+					next.prompt = t;
+				}
+				await setSetting("grok", next);
+				changed.push("grok");
+			}
 			if (b.claude_mod && typeof b.claude_mod === "object") {
 				const c = b.claude_mod;
 				const next = { ...s.claude_mod };

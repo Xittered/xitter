@@ -148,6 +148,7 @@ export function tidyData(links: MenuLink[] = []) {
 		menuItems,
 		premium: feature("premium"),
 		imageGen: feature("image_gen"),
+		gbee: feature("grok") && s.grok.brain === "bee",
 		announcement: announcement.text
 			? {
 				id: announcement.id,
@@ -588,6 +589,45 @@ export const TIDY_SCRIPT = `(function(){
 			var a=box.querySelector('a[href="/i/flow/login"]');
 			a.style.backgroundColor="#eff3f4";a.style.borderColor="#eff3f4";
 			a.querySelectorAll("span,div").forEach(function(n){n.style.color="#0f1419"});
+		});
+		if(T.gbee){
+			var G=window.__gbeeD||(window.__gbeeD={});
+			document.querySelectorAll('a[href="/i/grok"] svg:not([data-gbee]) path').forEach(function(p){G[p.getAttribute("d")]=1});
+			document.querySelectorAll("svg:not([data-gbee]) path").forEach(function(p){
+				if(!G[p.getAttribute("d")])return;
+				var v=p.ownerSVGElement;
+				if(!v)return;
+				v.setAttribute("data-gbee","");
+				v.setAttribute("viewBox","0 -960 960 960");
+				v.innerHTML='<path fill="currentColor" d="m720-600-32 28q-14 13-33 13t-33-11q-14-11-19-28t1-36l16-50-34-20q-16-9-22.5-26t-1.5-34q5-17 20-26.5t34-9.5h40l12-38q6-19 20.5-30.5T720-880q17 0 31.5 11.5T772-838l12 38h40q19 0 33.5 9.5T878-764q7 18 0 35t-22 25l-36 20 16 50q6 19 1 36.5T818-570q-15 11-33.5 11T752-572l-32-28Zm0-80q17 0 28.5-11.5T760-720q0-17-11.5-28.5T720-760q-17 0-28.5 11.5T680-720q0 17 11.5 28.5T720-680ZM552-244q23 60-15 112T430-80q-33 0-62.5-17T324-142q-83 12-137.5-42.5T142-324q-30-17-46-46.5T80-438q0-61 55.5-98.5T244-552l62 26q20-31 53-50.5t71-21.5v-82h60v90q37 11 61 34.5t41 65.5h88v60h-82q-2 38-20.5 71T528-306l24 62Zm-248 24q0-27 4.5-52.5T322-322q-23 11-49.5 15.5T220-304q0 39 22.5 61.5T304-220Zm-74-164q32 0 56.5-8t63.5-32l-120-50q-29-12-49.5.5T160-434q0 26 17 38t53 12Zm200 224q25 0 40.5-17.5T478-214l-54-136q-19 32-29.5 64T384-228q0 33 11.5 50.5T430-160Zm66-222q10-10 16-26.5t6-34.5q0-32-21-54t-52-22q-18 0-34 6t-27 17l78 36 34 78Zm-174 60Z"/>';
+			});
+			var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+				if(n.nodeValue.indexOf("Grok")<0)return NodeFilter.FILTER_REJECT;
+				var e=n.parentElement;
+				return e&&!e.closest('[data-testid="tweetText"],[contenteditable="true"],textarea,script,style')?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+			}});
+			var hits=[];
+			while(w.nextNode())hits.push(w.currentNode);
+			hits.forEach(function(n){n.nodeValue=n.nodeValue.replace(/Grok/g,"GBee")});
+			document.querySelectorAll('[placeholder*="Grok"],[aria-label*="Grok"]').forEach(function(e){
+				["placeholder","aria-label"].forEach(function(a){var v=e.getAttribute(a);if(v&&v.indexOf("Grok")>=0)e.setAttribute(a,v.replace(/Grok/g,"GBee"))});
+			});
+			if(document.title.indexOf("Grok")>=0)document.title=document.title.replace(/Grok/g,"GBee");
+			document.querySelectorAll('svg[viewBox="0 0 88 32"]:not([data-gbee])').forEach(function(v){
+				var p=v.querySelector("path");
+				if(!p||(p.getAttribute("d")||"").indexOf("M76.717 24.208")!==0)return;
+				v.setAttribute("data-gbee","");
+				v.innerHTML='<svg x="0" y="2" width="28" height="28" viewBox="0 -960 960 960"><path fill="currentColor" d="m720-600-32 28q-14 13-33 13t-33-11q-14-11-19-28t1-36l16-50-34-20q-16-9-22.5-26t-1.5-34q5-17 20-26.5t34-9.5h40l12-38q6-19 20.5-30.5T720-880q17 0 31.5 11.5T772-838l12 38h40q19 0 33.5 9.5T878-764q7 18 0 35t-22 25l-36 20 16 50q6 19 1 36.5T818-570q-15 11-33.5 11T752-572l-32-28Zm0-80q17 0 28.5-11.5T760-720q0-17-11.5-28.5T720-760q-17 0-28.5 11.5T680-720q0 17 11.5 28.5T720-680ZM552-244q23 60-15 112T430-80q-33 0-62.5-17T324-142q-83 12-137.5-42.5T142-324q-30-17-46-46.5T80-438q0-61 55.5-98.5T244-552l62 26q20-31 53-50.5t71-21.5v-82h60v90q37 11 61 34.5t41 65.5h88v60h-82q-2 38-20.5 71T528-306l24 62Zm-248 24q0-27 4.5-52.5T322-322q-23 11-49.5 15.5T220-304q0 39 22.5 61.5T304-220Zm-74-164q32 0 56.5-8t63.5-32l-120-50q-29-12-49.5.5T160-434q0 26 17 38t53 12Zm200 224q25 0 40.5-17.5T478-214l-54-136q-19 32-29.5 64T384-228q0 33 11.5 50.5T430-160Zm66-222q10-10 16-26.5t6-34.5q0-32-21-54t-52-22q-18 0-34 6t-27 17l78 36 34 78Zm-174 60Z"/></svg><text x="33" y="24" font-size="21" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor">GBee</text>';
+			});
+		}
+		document.querySelectorAll('button[aria-label="Link accounts"]').forEach(function(b){b.style.display="none"});
+		document.querySelectorAll('[data-testid="primaryColumn"] span').forEach(function(n){
+			var t=n.textContent.trim();
+			if(n.childElementCount||(t!=="Meet Grok Bot"&&t!=="Meet GBee Bot"))return;
+			var box=n;
+			while(box.parentElement&&!/Learn more/.test(box.innerText))box=box.parentElement;
+			while(box.parentElement&&box.parentElement.children.length===1)box=box.parentElement;
+			box.style.display="none";
 		});
 		// the verified-badge popup's "Upgrade to get verified": nothing to upgrade to here
 		document.querySelectorAll('a,button,[role="button"]').forEach(function(b){

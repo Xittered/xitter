@@ -1,5 +1,6 @@
 // The few REST endpoints the client still uses next to GraphQL.
 
+import { addResponse } from "./grok";
 import { blockedNameIn, blockedWordIn, forbiddenText, suspendForName } from "./names";
 import { hateIn, hateInName } from "./hate";
 import { automodStrike } from "./moderation";
@@ -169,6 +170,7 @@ const EMPTY_LIST = { users: [], next_cursor: 0, next_cursor_str: "0", previous_c
 
 // `path` has no /i/api prefix
 export async function restRoute(method: string, path: string, viewer: Viewer, req: Request): Promise<Response | undefined> {
+	if (path === "/2/grok/add_response.json") return addResponse(viewer, req);
 	if ((method === "GET" && path.endsWith("/capi/passthrough/1")) || (method === "POST" && path === "/v2/cards/preview.json")) {
 		const params = { ...Object.fromEntries(new URL(req.url).searchParams), ...(method === "POST" ? await form(req) : {}) };
 		const id = /^card:\/\/(\d{1,19})$/.exec(params["twitter:string:card_uri"] ?? params.status ?? "")?.[1];

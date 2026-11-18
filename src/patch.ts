@@ -20,6 +20,7 @@ const API_HOSTS = ["api", "upload", "caps", "jf"].flatMap((s) => [`${s}.x.com`, 
 const inRegex = (url: string) => url.replace(/[/.]/g, (c) => "\\" + c);
 
 const RULES: [RegExp, string][] = [
+	[/([\w$]+)\.then\(([\w$]+)=>"linked"===\2\?"xweb":/g, '$1.then($2=>!0?"legacy":'],
 	// The Settings search index is built from X's route list: add our custom GIF
 	// provider page so searching "gif" can open it from the results.
 	[/\blet (\w+)=\(0,[\w$]+\.[\w$]+\)\(\),(\w+)=\[\];(?=for\(let \w+ of \1\)for\(let \w+ of\(\2\.push\()/g, '$&$1.find(group=>group.path==="/settings/account")?.items.push({id:"xitterGifProvider",path:"/settings/xitter/gifs",title:"GIF provider",synonyms:["gif","provider","klipy","tenor","giphy"],isSearchable:true,items:[]});$1.find(group=>group.path==="/settings/account")?.items.push({id:"xitterPostDetails",path:"/settings/xitter/post-details",title:"Post details",synonyms:["post","details","classic","counts","likes","reposts","quotes","twitter"],isSearchable:true,items:[]},{id:"xitterEquicoins",path:"/settings/xitter/merchant",title:"Equicoins",synonyms:["equicoins","money","merchant","payments","purchases"],isSearchable:true,items:[]});'],

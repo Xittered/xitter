@@ -585,7 +585,7 @@ function plainTweet(p: PostRow, withTypename: boolean): Record<string, unknown> 
 		...(p.conversation_policy
 			? { conversation_control: { policy: p.conversation_policy === "CountryOfOrigin" ? "Co" : p.conversation_policy, conversation_owner_results: { result: { __typename: "User", legacy: { screen_name: p.conversation_owner } } } }, ...(["Country", "CountryOfOrigin"].includes(p.conversation_policy) ? { conversation_control_details: { mode: p.conversation_policy, allowed_country_codes: p.conversation_selections ?? [] } } : {}) }
 			: {}),
-		grok_analysis_button: false,
+		grok_analysis_button: feature("grok"),
 		grok_annotations: {},
 		grok_translated_post_with_availability: { is_available: false },
 		legacy: {
@@ -658,7 +658,7 @@ export function repostResult(id: string, by: User, createdAt: Date, original: Po
 		cashtag_attachments: [],
 		core: { user_results: { result: userResult(by) } },
 		edit_control: { edit_tweet_ids: [id], editable_until_msecs: String(createdAt.getTime()), edits_remaining: "0", is_edit_eligible: false },
-		grok_analysis_button: false,
+		grok_analysis_button: feature("grok"),
 		grok_annotations: {},
 		grok_translated_post_with_availability: { is_available: false },
 		is_translatable: false,

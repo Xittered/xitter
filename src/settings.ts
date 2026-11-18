@@ -112,6 +112,7 @@ const DEFAULTS = {
 		// replaces claude-mod.ts DEFAULT_GUIDE when set
 		prompt: "",
 	},
+	grok: { brain: "claude" as "claude" | "bee", model: "claude-haiku-5-5", bee_url: "", daily_per_account: 100, prompt: "" },
 	// the admin panel itself (admin.ts staffGate): staff must have two-factor on;
 	// only these addresses (IPs or CIDR ranges) reach it, none meaning any
 	security: { staff_2fa: false, admin_ips: [] as string[] },

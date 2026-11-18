@@ -1918,6 +1918,13 @@ const RENDER = {
 			'<label class="archive-import-approval"><input type="checkbox" id="aiApproval"' + (s.archive_import.approval ? " checked" : "") + dis + "> Staff approve each import before it starts</label>" +
 			(admin ? '<div class="archive-import-actions"><button class="btn primary" id="saveArchiveImport">Save</button></div>' : "") +
 			(can("archiveImports") ? '<div class="archive-import-pending"><h2>Waiting for approval</h2><div id="aiPending" class="dim small">Loading…</div></div>' : "") + "</div>" +
+			'<div class="box"><h2>Grok</h2><p class="dim small">Who answers in Grok, and in the Grok button on posts, while the Grok feature is on. Claude needs ANTHROPIC_API_KEY on the server; Bee is a tiny model that only buzzes, run by the bee service next to Xitter.</p>' +
+			'<div class="field"><label>Brain</label><select id="grokBrain"' + dis + ">" + [["claude", "Claude"], ["bee", "Bee (buzzes)"]].map(([v, l]) => '<option value="' + v + '"' + (s.grok.brain === v ? " selected" : "") + ">" + l + "</option>").join("") + "</select></div>" +
+			'<div class="field"><label>Claude model</label><input id="grokModel" value="' + esc(s.grok.model) + '"' + dis + "></div>" +
+			'<div class="field"><label>Bee address (blank for http://bee:8080)</label><input id="grokBee" value="' + esc(s.grok.bee_url) + '"' + dis + "></div>" +
+			'<div class="field"><label>Answers a day per account (0 for no limit)</label><input id="grokDaily" type="number" min="0" value="' + esc(String(s.grok.daily_per_account)) + '"' + dis + "></div>" +
+			'<div class="field"><label>Instructions (blank for the default). {instance} and {origin} are filled in.</label><textarea id="grokPrompt" style="min-height:120px;font-family:ui-monospace,monospace;font-size:12px"' + dis + ">" + esc(s.grok.prompt) + "</textarea></div>" +
+			(admin ? '<button class="btn primary" id="saveGrok">Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Claude moderator</h2><p class="dim small">Claude reads new posts, profile changes, user reports and 2020-client DMs after they\'re saved. Clear violations are hidden and filed under Reports, doubtful ones are only filed. It never gives strikes. ' +
 			(cm.hasKey ? "" : "<b>No ANTHROPIC_API_KEY on the server, so nothing runs.</b> ") + "</p>" +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="cmOn"' + (s.claude_mod.enabled ? " checked" : "") + dis + "> On</label>" +
@@ -1960,7 +1967,7 @@ const RENDER = {
 			}));
 		};
 		stackCards("settings-account", [["Sign-up", "Composer"], ["Name and source", "AI and tools"], ["Core social", "Accounts and integrations"]]);
-		stackCards("settings-safety", [["Blocked phrases", "Import from X"], ["Blocked names"], ["Automod", "Claude moderator"]]);
+		stackCards("settings-safety", [["Blocked phrases", "Import from X"], ["Blocked names"], ["Automod", "Claude moderator"], ["Grok"]]);
 
 		if (focus) {
 			const section = main.querySelector("#" + focus);
@@ -2031,6 +2038,7 @@ const RENDER = {
 		annList.onclick = (e) => { const x = e.target.closest("[data-remove]"); if (x) { x.closest(".ann-row").remove(); annFull(); } };
 		$("#saveAnn").onclick = () => save({ announcement: { text: $("#annText").value, buttons: [...annList.querySelectorAll(".ann-row")].map((r) => ({ label: r.querySelector("[data-label]").value, url: r.querySelector("[data-url]").value })) } }, "Announcement saved");
 		$("#saveRules").onclick = () => save({ rules: $("#rules").value }, "Rules saved");
+		if ($("#saveGrok")) $("#saveGrok").onclick = () => save({ grok: { brain: $("#grokBrain").value, model: $("#grokModel").value, bee_url: $("#grokBee").value, daily_per_account: $("#grokDaily").value, prompt: $("#grokPrompt").value } }, "Grok saved");
 		if ($("#saveClaudeMod")) {
 			const claudeMod = (prompt) => {
 				const c = { enabled: $("#cmOn").checked, hide_confidence: $("#cmHide").value, daily_limit: $("#cmLimit").value, prompt };
