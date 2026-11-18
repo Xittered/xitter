@@ -164,6 +164,7 @@ const ownSwitches = (): Record<string, { value: unknown }> => ({
 	responsive_web_edit_tweet_perspective_enabled: { value: true },
 	responsive_web_grok_tweet_translation: { value: false },
 	responsive_web_grok_api_enable_grok_host: { value: false },
+	responsive_web_rich_tweet_landing_enabled: { value: false },
 	responsive_web_translation_feedback_enabled: { value: false },
 });
 const overrideSwitches = () => Object.fromEntries(Object.entries(settings().switch_overrides).map(([k, value]) => [k, { value }]));
