@@ -1,4 +1,4 @@
-import { MULTI_COOKIE, type Viewer, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
+import { MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
 import { gbeePage } from "./gbee-page";
 import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
 import { CLIENT_COOKIE, chosenClient, clientCookie, clientRoute, requestClient, switchByQuery } from "./client-choice";
@@ -651,6 +651,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	// as a guest (no csrf header, every write refused)
 	if (viewer && /(?:^|;\s*)gt=/.test(req.headers.get("cookie") ?? "")) headers.append("set-cookie", "gt=; Path=/; Max-Age=0");
 	if (viewer && parseCookies(req).ct0 !== viewer.csrf) headers.append("set-cookie", csrfCookie(viewer.csrf));
+	if (!viewer && (parseCookies(req)[SESSION_COOKIE] || parseCookies(req).twid)) for (const c of clearedCookies()) headers.append("set-cookie", c);
 	// (the 2020 client keeps its own night_mode, set from its Display settings)
 	if (!client?.old) for (const c of nightModeCookies(look)) headers.append("set-cookie", c);
 	if (!page) return new Response("no pinned client build: run scripts/fetch-client.ts --token or --har", { status: 500, headers });

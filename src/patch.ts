@@ -194,7 +194,7 @@ const LEGACY_RULES: [RegExp, string][] = [
 	[/(([\w$]+)&&([\w$]+)\?([\w$]+)\.createElement\(([\w$.]+),\{accessibilityLabel:([\w$]+),hideWhenXShort:!0,label:\6,layout:([\w$]+),onClick:this\._handleTabClickFactory\("bookmarks",([\w$]+)\),path:"\/i\/bookmarks",renderIcon:Object\(([\w$.]+)\)\(([\w$.]+),([\w$.]+),\7\),withLabel:([\w$]+)\}\):null,)/g, '$1window.__XITTER_GBEE__&&$2?$4.createElement($5,{accessibilityLabel:window.__XITTER_GBEE__,hideWhenXShort:!0,label:window.__XITTER_GBEE__,layout:$7,onClick:this._handleTabClickFactory("gbee",$8),path:"/i/grok",renderIcon:Object($9)(window.__xitterBeeIcon($4,$10),window.__xitterBeeIcon($4,$10),$7),withLabel:$12}):null,'],
 	// More menu entries for what Xitter doesn't run: Topics, and the sites
 	// Twitter had for ads, analytics and media (they lead to x.com)
-	[/(_render(?:Topics|TwitterAds|Analytics|MediaStudio)Item",\(function\([\w$]*\)\{)return /g, "$1return null;"],
+	[/(_render(?:Topics|TwitterAds|Analytics|MediaStudio|HelpCenter)Item",\(function\([\w$]*\)\{)return /g, "$1return null;"],
 ];
 
 // the More menu: after Settings and privacy, what shell.ts puts in __XITTER_MENU__
