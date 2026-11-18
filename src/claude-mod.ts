@@ -13,6 +13,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { sql } from "./db";
 import { newId } from "./ids";
+import { type Decision, type Example, feedbackBlock, mutedCategories } from "./claude-mod-feedback";
 import { PUBLIC_ORIGIN } from "./config";
 import { settings } from "./settings";
 
@@ -44,6 +45,39 @@ function fakeJudge(content: string): Verdict | "refused" {
 	return { verdict: "ok", category: "none", confidence: 0.95, reason: "Nothing wrong." };
 }
 
+// Staff decisions on Claude's reports over the last 90 days, read again every
+// 10 minutes (claude-mod-feedback.ts says what is done with them)
+const FEEDBACK_MS = 10 * 60_000;
+let learned: { at: number; block: string; muted: Set<string> } = { at: 0, block: "", muted: new Set() };
+
+async function staffFeedback() {
+	if (!settings().claude_mod.learn) return { block: "", muted: new Set<string>() };
+	if (Date.now() - learned.at < FEEDBACK_MS) return learned;
+	learned.at = Date.now();
+	try {
+		const decisions = (await sql`select substring(reason from 9) as category,
+				count(*) filter (where status = 'actioned')::int as confirmed,
+				count(*) filter (where status = 'dismissed')::int as dismissed
+			from reports where reason like 'automod%' and reason <> 'automod_review' and handled_by is not null
+				and status in ('actioned', 'dismissed') and handled_at > now() - interval '90 days'
+			group by 1`) as Decision[];
+		// what was reported, as it reads now: the post, or the account's name and bio
+		const pick = (status: string, n: number) => sql`select substring(r.reason from 9) as category, r.status = 'actioned' as confirmed, r.note,
+				case when r.post_id is not null then '@' || u.screen_name || ': ' || coalesce(p.text, '')
+					else '@' || u.screen_name || ', name: ' || coalesce(u.name, '') || ', bio: ' || coalesce(u.bio, '') end as item
+			from reports r join users u on u.id = r.user_id left join posts p on p.id = r.post_id
+			where r.reason like 'automod%' and r.reason <> 'automod_review' and r.handled_by is not null and r.status = ${status}
+				and (r.post_id is null or p.id is not null)
+			order by r.handled_at desc limit ${n}`;
+		const [no, yes] = await Promise.all([pick("dismissed", 12), pick("actioned", 8)]);
+		const examples = [...no, ...yes].map((e: any) => ({ category: e.category, confirmed: e.confirmed, item: String(e.item ?? ""), note: String(e.note ?? "") })) as Example[];
+		learned = { at: learned.at, block: feedbackBlock(decisions, examples), muted: mutedCategories(decisions) };
+	} catch (e) {
+		console.log(`claude-mod: staff feedback: ${(e as Error)?.message ?? e}`);
+	}
+	return learned;
+}
+
 // what the instance's own rules say, then what every instance takes down
 function systemPrompt(kind: Job["kind"]): string {
 	const rules = settings().rules.trim();
@@ -70,6 +104,7 @@ function systemPrompt(kind: Job["kind"]): string {
 				: kind === "profile"
 					? "This item is an account's display name and bio."
 					: "This item is a public post or reply.",
+		"Before the item there may be a <staff_feedback> block: how this site's staff handled your earlier reports. Lean towards what they confirm and away from what they dismiss.",
 		"Write the reason in English, in one or two plain sentences, for the staff member who reviews it.",
 	].join("\n");
 }
@@ -79,13 +114,14 @@ async function judge(kind: Job["kind"], content: string): Promise<Verdict | "ref
 	const c = api();
 	if (!c) return null;
 	if (!(await withinDailyLimit())) return null;
+	const feedback = (await staffFeedback()).block;
 	try {
 		const response = await c.messages.parse({
 			model: settings().claude_mod.model,
 			max_tokens: 2048,
 			system: systemPrompt(kind),
 			output_config: { effort: "low", format: zodOutputFormat(Verdict) },
-			messages: [{ role: "user", content: `<item>\n${content.slice(0, 8000)}\n</item>` }],
+			messages: [{ role: "user", content: `${feedback ? `${feedback}\n\n` : ""}<item>\n${content.slice(0, 8000)}\n</item>` }],
 		});
 		// a model that won't judge the item leaves it for a person
 		if (response.stop_reason === "refusal") return "refused";
@@ -116,6 +152,8 @@ async function withinDailyLimit(): Promise<boolean> {
 const acts = (v: Verdict) => v.verdict === "violation" && v.confidence >= settings().claude_mod.hide_confidence;
 
 async function file(target: { postId?: string | null; userId: string }, v: Verdict | "refused", extra = "") {
+	// staff keep dismissing this kind: only clear violations still get through
+	if (v !== "refused" && v.verdict === "borderline" && (await staffFeedback()).muted.has(v.category)) return;
 	const reason = v === "refused" ? "automod_review" : `automod_${v.category}`;
 	const details = (v === "refused" ? "Claude declined to judge this; please look at it." : `${v.verdict} (${Math.round(v.confidence * 100)}%): ${v.reason}`) + extra;
 	await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
