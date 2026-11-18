@@ -21,7 +21,7 @@ import { FEDERATION_ON, INSTANCE_ID, isPeer } from "./federation";
 import { MEDIA_DIR } from "./media";
 import { hit, limitedResponse } from "./ratelimit";
 import { requestIp } from "./login-history";
-import { settings } from "./settings";
+import { feature, settings } from "./settings";
 import { posterFile } from "./video";
 import { COMMIT, MIGRATION_FORMAT_VERSION, SCHEMA, VERSION } from "./version";
 
@@ -172,6 +172,7 @@ async function archive(userId: string) {
 }
 
 export async function migrationApi(req: Request, url: URL): Promise<Response> {
+	if (!feature("migration")) return fail(403, "Moving accounts away from this instance is turned off.");
 	const ip = requestIp(req) ?? "unknown";
 	const who = await holder(req);
 	if (!who) {

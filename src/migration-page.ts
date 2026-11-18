@@ -10,6 +10,7 @@ import { INSTANCE_ID } from "./federation";
 import { type Check, type Finding, MigrationError, check, jobs, start } from "./migration-import";
 import { codeState, createCode, revokeCodes, versionInfo } from "./migration";
 import { hit, passwordTry } from "./ratelimit";
+import { feature } from "./settings";
 
 const CSS = `
 .versions{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 16px;font-size:14px}
@@ -67,6 +68,7 @@ async function home(req: Request, viewer: Viewer, opts: { notice?: string; error
 	const state = await codeState(viewer.id);
 	const recent = await jobs(viewer.id);
 	const running = recent.some((j: any) => j.state === "running");
+	const on = feature("migration");
 	const csrf = `<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">`;
 	const codeCard = opts.code
 		? `<div class="card success"><b>Your migration code</b>
@@ -91,9 +93,10 @@ async function home(req: Request, viewer: Viewer, opts: { notice?: string; error
 <p class="meta">${esc(here.name)} (${esc(INSTANCE_ID)}) runs ${versionLine(here)}.</p>
 ${opts.notice ? `<p class="card success">${esc(opts.notice)}</p>` : ""}
 ${opts.error ? `<p class="error">${esc(opts.error)}</p>` : ""}
+${on ? "" : `<p class="card warning">Moving accounts is turned off on ${esc(here.name)}. Imports already running still finish, and a code made earlier can still be withdrawn.</p>`}
 ${me?.moved_to ? `<div class="card warning"><b>This account moved to @${esc(me.moved_to)}</b><p class="meta">${esc(when(me.moved_at))}</p></div>` : ""}
 
-<h2>Move here from another instance</h2>
+${on ? `<h2>Move here from another instance</h2>
 <p class="dim">First make a migration code on the instance your account is on now, under Move account there. Then sign in here with the account it should move into.</p>
 <form method="post" action="/account/migrate">
 	${csrf}<input type="hidden" name="action" value="check">
@@ -101,19 +104,19 @@ ${me?.moved_to ? `<div class="card warning"><b>This account moved to @${esc(me.m
 	<label for="code">Migration code</label><input id="code" name="code" placeholder="xmig_…" autocomplete="off" spellcheck="false" required>
 	<button type="submit"${running ? " disabled" : ""}>Check</button>
 	<p class="dim">Nothing is copied yet: the next step shows whether the two instances line up.</p>
-</form>
+</form>` : ""}
 ${recent.length ? `<h2>Imports</h2>${recent.map((j: any, i: number) => jobCard(j, i === 0)).join("")}` : ""}
 ${running ? `<script>setTimeout(function(){location.reload()},2000)</script>` : ""}
 
-<h2>Move to another instance</h2>
-<p class="dim">A migration code lets the new instance copy this account's data. When the move is done there, this account can leave a note on its profile pointing to the new one, and be deactivated. Followers can't be moved for them, and encrypted chats stay here.</p>
+${on || codeCard ? `<h2>Move to another instance</h2>` : ""}
+${on ? `<p class="dim">A migration code lets the new instance copy this account's data. When the move is done there, this account can leave a note on its profile pointing to the new one, and be deactivated. Followers can't be moved for them, and encrypted chats stay here.</p>` : ""}
 ${codeCard}
-<form method="post" action="/account/migrate">
+${on ? `<form method="post" action="/account/migrate">
 	${csrf}<input type="hidden" name="action" value="code">
 	<label for="password">Your password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
 	<button type="submit">${state && !state.expired ? "Make a new code" : "Make a migration code"}</button>
 	${state && !state.expired ? `<p class="dim">A new code replaces the one above.</p>` : ""}
-</form>
+</form>` : ""}
 <p class="dim"><a href="/settings/account">Back to settings</a></p>`,
 	});
 }
@@ -174,6 +177,7 @@ export async function migrateRoute(req: Request, viewer: Viewer): Promise<Respon
 	const field = (k: string) => String(f?.get(k) ?? "");
 	if (field("csrf") !== viewer.csrf) return home(req, viewer, { error: "That form is out of date. Try again.", status: 400 });
 	const action = field("action");
+	if (!feature("migration") && action !== "revoke") return home(req, viewer, { error: "Moving accounts is turned off on this instance.", status: 403 });
 	if (action === "code") {
 		const account = viewer.screen_name.toLowerCase();
 		const refund = passwordTry(account);
