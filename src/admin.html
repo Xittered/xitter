@@ -2267,7 +2267,7 @@ async function renderUser(main, id) {
 			'</div><button class="btn" id="saveCounts" style="margin-top:8px">Save counts</button>' : "") + "</div>" +
 		// badges
 		'<div class="box user-card-identity"><h2>Identity and badges</h2><div class="field"><label>Verification badge</label><select id="badge"' + (can("setBadge") ? "" : " disabled") + ">" +
-		[["", "none"], ["blue", "blue"], ["business", "gold (organisation)"], ["government", "grey (government organisation)"], ["government_individual", "grey (government official)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.verified_type ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
+		[["", "none"], ["blue", "blue"], ["business", "gold (organization)"], ["government", "grey (government organization)"], ["government_individual", "grey (government official)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.verified_type ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
 		'</select></div><div class="field"><label>Translator badge (a globe after the verification badge)</label><select id="translator"' + (canHere("setTranslator") ? "" : " disabled") + ">" +
 		[["", "none"], ["translator", "blue (translator)"], ["moderator", "gold (translator moderator)"], ["approver", "yellow (approver)"]].map(([v, l]) => '<option value="' + v + '"' + ((u.translator ?? "") === v ? " selected" : "") + ">" + l + "</option>").join("") +
 		'</select></div><div class="field"><label>Profile label (under the name, where X shows "Parody account"; <a href="#badges">make one</a>)</label><select id="plabel"' + (can("setProfileLabel") ? "" : " disabled") + ">" +
