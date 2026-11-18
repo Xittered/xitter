@@ -1,0 +1,31 @@
+# .onion address for an instance: tor + the rewriting gateway (gateway.ts).
+# Keys stay in ./hs; back that folder up, it IS the address.
+services:
+  gateway:
+    image: oven/bun:1-alpine
+    container_name: ${NAME:-xitter}-onion-gateway
+    restart: unless-stopped
+    working_dir: /app
+    command: ["bun", "gateway.ts"]
+    environment:
+      UPSTREAM: ${UPSTREAM:-http://xitter:3000}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      HOSTNAME_FILE: /hs/hostname
+    volumes:
+      - ./gateway.ts:/app/gateway.ts:ro
+      - ./hs:/hs:ro
+    networks: [instance]
+  tor:
+    build:
+      context: .
+      dockerfile: Dockerfile.tor
+    image: xitter-onion-tor:latest
+    container_name: ${NAME:-xitter}-onion-tor
+    restart: unless-stopped
+    network_mode: service:gateway
+    volumes:
+      - ./hs:/var/lib/tor/hs
+networks:
+  instance:
+    name: ${NETWORK:-proxy}
+    external: true
