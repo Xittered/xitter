@@ -338,8 +338,15 @@ export const bootScript = (path: string): Buffer | undefined => boots().find((b)
 const BUILD_MARK = "xitter_client_build";
 const markBuild = (sha: string) => `try{localStorage.setItem(${inline(BUILD_MARK)},${inline(sha)})}catch(e){}`;
 const oldLoader = (sha: string, srcs: string[]) => `(function(){var s=${inline(srcs)};function go(){s.forEach(function(u){var e=document.createElement("script");e.src=u;e.async=false;e.charset="utf-8";e.crossOrigin="anonymous";document.body.appendChild(e)})}
+if(/(?:^|;\\s*)night_mode=2/.test(document.cookie)){var nm="night_mode=1; Path=/; Max-Age=31536000; SameSite=Lax";document.cookie=nm;document.cookie=nm+"; domain="+location.hostname}
 var was;try{was=localStorage.getItem(${inline(BUILD_MARK)})}catch(e){}${markBuild(sha)}
-if(was===${inline(sha)}||!window.indexedDB)return go();var d=indexedDB.deleteDatabase("localforage");d.onsuccess=d.onerror=d.onblocked=go})();`;
+if(was===${inline(sha)}||!window.indexedDB)return go();var done=false;function once(){if(!done){done=true;go()}}
+var OK={themeBackground:["light","dark","darker"],themeColor:["blue","yellow","red","purple","orange","green"],scale:["xSmall","small","normal","large","xLarge"],highContrastEnabled:[true,false],reducedMotionEnabled:[true,false]},r;try{r=indexedDB.open("localforage")}catch(e){return once()}
+r.onerror=r.onblocked=once;r.onupgradeneeded=function(){r.transaction.abort()};
+r.onsuccess=function(){var db=r.result;if(!db.objectStoreNames.contains("keyvaluepairs")){db.close();return once()}
+var t=db.transaction("keyvaluepairs","readwrite"),st=t.objectStore("keyvaluepairs"),g=st.get("device:rweb.settings");
+g.onsuccess=function(){var l=g.result&&g.result.local,k={};if(l&&typeof l==="object")Object.keys(OK).forEach(function(n){var v=l[n];if(n==="themeColor"&&typeof v==="string")v=v.replace(/\\d+$/,"");if(OK[n].indexOf(v)>=0)k[n]=v});st.clear();if(l)st.put({local:k},"device:rweb.settings")};
+t.oncomplete=t.onerror=t.onabort=function(){db.close();once()}}})();`;
 
 // The 2020 client's More menu gets Xitter settings and the side menu's own
 // entries (tidy.ts menuLinks); patch.ts draws them
