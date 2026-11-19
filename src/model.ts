@@ -259,6 +259,7 @@ export function userResult(u: User) {
 		__typename: "User",
 		action_counts: { favorites_count: u.stats?.likes ?? 0 },
 		affiliates_highlighted_label: badgeLabel(u),
+		...(oldClient() ? { xitter_badges: badgeList(u) } : {}),
 		...(isOrganization(u) ? { business_account: { affiliates_count: u.affiliates ?? 0 } } : {}),
 		avatar: { image_url: absolute(u.avatar_url) ?? DEFAULT_AVATAR },
 		...bioLanguage(u),
@@ -306,14 +307,16 @@ export function userResult(u: User) {
 
 // The 2020 client (client/old) has one checkmark and no affiliate badge. Its
 // `verified` carries both: true, "business" or "government" paint the check
-// (patch.ts LEGACY_RULES), and with a badge label it is an object that also
-// names the badge to draw after the name.
-export function oldVerified(blue: boolean, type: string | undefined, label: any): unknown {
+// (patch.ts LEGACY_RULES), and with badges it is an object that also
+// names the badges to draw after the name: the label first, then the rest.
+export function oldVerified(blue: boolean, type: string | undefined, label: any, badges: Badge[] = []): unknown {
 	const check = !blue ? false : type === "Business" ? "business" : type === "Government" ? "government" : true;
-	const img = label?.badge?.url;
-	if (!img) return check;
-	const org = /screen_name=([^&]+)/.exec(label.url?.url ?? "")?.[1];
-	return { t: check, img, name: label.description ?? "", ...(org ? { org } : {}) };
+	const shown: { img: string; name: string }[] = [];
+	if (label?.badge?.url) shown.push({ img: label.badge.url, name: label.description ?? "" });
+	for (const b of badges) if (!shown.some((s) => s.img === b.url)) shown.push({ img: b.url, name: b.description });
+	if (!shown.length) return check;
+	const org = /screen_name=([^&]+)/.exec(label?.url?.url ?? "")?.[1];
+	return { t: check, img: shown[0].img, name: shown[0].name, ...(org ? { org } : {}), ...(shown.length > 1 ? { more: shown.slice(1) } : {}) };
 }
 const oldClient = () => !!loadBuild()?.build.stateBase;
 // a fragment, so the picture loads as ever; shell.ts squares what carries it
@@ -352,7 +355,7 @@ export function legacyUser(u: User) {
 		super_followed_by: false,
 		super_following: false,
 		verified_user_profiles: { super_follows_user_profile: { is_active: false } },
-		verified: oldClient() ? oldVerified(isVerified(u), verification(u).verified_type, (badgeLabel(u) as any).label) : false,
+		verified: oldClient() ? oldVerified(isVerified(u), verification(u).verified_type, (badgeLabel(u) as any).label, badgeList(u)) : false,
 		protected: !!u.protected,
 		profile_image_url_https: oldClient() ? oldAvatar(absolute(u.avatar_url) ?? DEFAULT_AVATAR, pictureShape(u)) : (absolute(u.avatar_url) ?? DEFAULT_AVATAR),
 		...(u.banner_url ? { profile_banner_url: absolute(u.banner_url) } : {}),

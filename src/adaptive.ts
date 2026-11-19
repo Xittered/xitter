@@ -75,7 +75,7 @@ function legacyFromResult(u: Obj): Obj {
 		favourites_count: u.action_counts?.favorites_count ?? 0,
 		statuses_count: u.tweet_counts?.tweets ?? 0,
 		media_count: u.tweet_counts?.media_tweets ?? 0,
-		verified: oldVerified(!!u.is_blue_verified, u.verification?.verified_type ?? u.verified_type, u.affiliates_highlighted_label?.label),
+		verified: oldVerified(!!u.is_blue_verified, u.verification?.verified_type ?? u.verified_type, u.affiliates_highlighted_label?.label, u.xitter_badges),
 		profile_image_url_https: oldAvatar(u.avatar?.image_url, u.profile_image_shape),
 		...(u.banner?.image_url ? { profile_banner_url: u.banner.image_url } : {}),
 		pinned_tweet_ids_str: u.pinned_items?.tweet_ids_str ?? [],

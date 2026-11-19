@@ -171,10 +171,10 @@ const LEGACY_RULES: [RegExp, string][] = [
 	[/domain:"\.twitter\.com"/g, `domain:"${PUBLIC_HOSTNAME}"`],
 	// its only checkmark, painted from `verified` (model.ts oldVerified): gold
 	// for organisations, grey for governments, blue for the rest (the 2020
-	// client drew its one check white on a dark theme); then an affiliate badge
+	// client drew its one check white on a dark theme); then its badges
 	[
 		/(\w+)\.isVerified&&(\w+)\.push\((\w+)\.createElement\((\w+\.a),\{accessibilityLabel:(\w+),style:\[(\w+)\.marginLeft,\6\.defaultBadgeColor,(\w+)\]\}\)\)/g,
-		'(function(xv){var xt=xv&&typeof xv=="object"?xv.t:xv;xt&&$2.push($3.createElement($4,{key:"xc",accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,xt==="business"?{color:"rgb(226,183,25)"}:xt==="government"?{color:"rgb(130,154,171)"}:{color:"rgb(29,155,240)"}]}));xv&&xv.img&&$2.push($3.createElement("img",{key:"xa",src:xv.img,alt:xv.name,title:xv.name,style:{width:"1.05em",height:"1.05em",borderRadius:3,marginLeft:4,verticalAlign:"-0.15em",objectFit:"cover",flexShrink:0}}))})($1.isVerified)',
+		'(function(xv){var xt=xv&&typeof xv=="object"?xv.t:xv;xt&&$2.push($3.createElement($4,{key:"xc",accessibilityLabel:$5,style:[$6.marginLeft,$6.defaultBadgeColor,$7,xt==="business"?{color:"rgb(226,183,25)"}:xt==="government"?{color:"rgb(130,154,171)"}:{color:"rgb(29,155,240)"}]}));xv&&xv.img&&[{img:xv.img,name:xv.name}].concat(xv.more||[]).forEach(function(b,xi){$2.push($3.createElement("img",{key:"xa"+xi,src:b.img,alt:b.name,title:b.name,style:{width:"1.05em",height:"1.05em",borderRadius:3,marginLeft:4,verticalAlign:"-0.15em",objectFit:"cover",flexShrink:0}}))})})($1.isVerified)',
 	],
 	// the profile header and user cells cast `verified` to a boolean first
 	[/isVerified:!!(\w+)\.verified(?![\w$])/g, "isVerified:$1.verified"],
