@@ -1908,6 +1908,10 @@ const RENDER = {
 			'<div class="box"><h2>Rules</h2><p class="dim small">Shown at <a href="/rules" target="_blank">/rules</a> and linked from sign-up. A blank line starts a new paragraph.</p>' +
 			'<textarea id="rules" style="min-height:160px"' + dis + ">" + esc(s.rules) + "</textarea>" +
 			(admin ? '<button class="btn primary" id="saveRules" style="margin-top:8px">Save</button>' : "") + "</div>" +
+			[["terms", "Terms of Service", "/tos"], ["privacy", "Privacy Policy", "/privacy"]].map(([k, title, url]) =>
+				'<div class="box"><h2>' + title + '</h2><p class="dim small">Shown at <a href="' + url + '" target="_blank">' + url + '</a>. Leave it blank for the built-in text, which follows what this instance has switched on. A blank line starts a new paragraph, a paragraph starting with "## " is a heading.</p>' +
+				'<textarea id="' + k + '" style="min-height:160px"' + dis + ">" + esc(s[k]) + "</textarea>" +
+				(admin ? '<button class="btn primary" data-save-legal="' + k + '" style="margin-top:8px">Save</button>' : "") + "</div>").join("") +
 			'<div class="box"><h2>Maintenance</h2><p class="dim small">While it\'s on, everyone except staff sees this message instead of the site.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="maint"' + (o.maintenance ? " checked" : "") + dis + "> Maintenance mode</label>" +
 			'<div class="field"><label>Message</label><input id="maintMsg" maxlength="500" value="' + esc(o.message) + '"' + dis + "></div>" +
@@ -2050,6 +2054,7 @@ const RENDER = {
 		annList.onclick = (e) => { const x = e.target.closest("[data-remove]"); if (x) { x.closest(".ann-row").remove(); annFull(); } };
 		$("#saveAnn").onclick = () => save({ announcement: { text: $("#annText").value, buttons: [...annList.querySelectorAll(".ann-row")].map((r) => ({ label: r.querySelector("[data-label]").value, url: r.querySelector("[data-url]").value })) } }, "Announcement saved");
 		$("#saveRules").onclick = () => save({ rules: $("#rules").value }, "Rules saved");
+		main.querySelectorAll("[data-save-legal]").forEach((b) => b.onclick = () => save({ [b.dataset.saveLegal]: $("#" + b.dataset.saveLegal).value }, "Saved"));
 		if ($("#saveGrok")) $("#saveGrok").onclick = () => save({ grok: { brain: $("#grokBrain").value, model: $("#grokModel").value, bee_url: $("#grokBee").value, daily_per_account: $("#grokDaily").value, prompt: $("#grokPrompt").value } }, "Grok saved");
 		if ($("#saveClaudeMod")) {
 			const claudeMod = (prompt) => {

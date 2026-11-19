@@ -143,16 +143,13 @@ const templates = {
 	passkey: await load("passkey"),
 };
 
-// x.com's legal links become the instance's rules page
+// x.com's legal links become the instance's own pages
 const LINKS: Record<string, string> = {
-	"https://x.com/tos": "/rules",
-	"https://x.com/privacy": "/rules",
-	"https://help.x.com/rules-and-policies/twitter-cookies": "/rules",
+	"https://x.com/tos": "/tos",
+	"https://x.com/privacy": "/privacy",
+	"https://help.x.com/rules-and-policies/twitter-cookies": "/privacy",
 };
 const TEXTS: Record<string, () => string> = {
-	"Terms of Service": () => "Rules",
-	"Privacy Policy": () => "privacy",
-	"Cookie Use": () => "cookies",
 	Login: () => `Sign in to ${settings().instance_name}`,
 	"See what's happening": () => `Sign in to ${settings().instance_name}`,
 	"Select an option below:": () => "Enter your username to continue.",

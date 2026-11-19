@@ -907,6 +907,11 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("rules", b.rules.slice(0, 20000));
 				changed.push("rules");
 			}
+			for (const key of ["terms", "privacy"] as const)
+				if (typeof b[key] === "string") {
+					await setSetting(key, b[key].slice(0, 50000));
+					changed.push(key);
+				}
 			if (b.grok && typeof b.grok === "object") {
 				const g = b.grok;
 				const next = { ...s.grok };

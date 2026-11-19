@@ -46,7 +46,7 @@ const ALWAYS = [
 	'a[href^="https://ads.x.com"]',
 	'a[href^="https://help.x.com"]',
 	'[data-testid="sidebarColumn"] nav[aria-label="Footer"]',
-	// the signed-out home page's footer keeps Terms and Privacy (our rules page)
+	// the signed-out home page's footer keeps Terms and Privacy (our own pages)
 	'nav[aria-label="Footer"] > div:has(> a[href^="http"]:not([href$="/tos"]):not([href$="/privacy"]))',
 	'nav[aria-label="Footer"] > div:has(> a[href^="/i/jf/stories"])',
 	// a menu's divider with nothing after it (the More menu ends with one, the

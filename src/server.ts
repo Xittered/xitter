@@ -7,6 +7,7 @@ import { migrate, sql } from "./db";
 import { knownOperation, runOperation } from "./graphql";
 import { brandingFile } from "./branding";
 import { handleLogin, handleOldCode, handleOldSessions, maintenancePage, rulesPage } from "./login";
+import { privacyPage, termsPage } from "./legal";
 import { adminApi, audit } from "./admin";
 import { feature, loadSettings, settings } from "./settings";
 import { flagPickerData } from "./flag-picker";
@@ -478,7 +479,9 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (h && !h.ok) return limitedResponse(h);
 		return handleOldCode(req);
 	}
-	if (p === "/rules" || p === "/tos" || p === "/privacy") return rulesPage();
+	if (p === "/rules") return rulesPage();
+	if (p === "/tos") return termsPage();
+	if (p === "/privacy") return privacyPage();
 	// X's sign-in screens (jf.x.com), answered here
 	// inside the signed-in client the same screens come through /i/jfapi
 	if (p.startsWith("/onboarding/web") || p.startsWith("/i/jfapi/onboarding/web")) {

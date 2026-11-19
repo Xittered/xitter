@@ -79,6 +79,8 @@ const DEFAULTS = {
 	default_follows: [] as string[],
 	// the instance's rules, shown at /rules and linked from sign-up
 	rules: "",
+	terms: "",
+	privacy: "",
 	// AGPL-3.0: people using an instance can get its source here
 	source_url: process.env.SOURCE_URL ?? "https://github.com/Xittered/xitter",
 	// admin panel, Settings: maintenance mode, blocked phrases, trend controls, pinned post
