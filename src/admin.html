@@ -2260,7 +2260,7 @@ function userTable(users, orgs = false, pick = false) {
 }
 
 async function renderUser(main, id) {
-	const { user: u, invited, log, alts, strikes, next_step } = await api("user", { id });
+	const { user: u, invited, log, alts, strikes, next_step, clients } = await api("user", { id });
 	const [affiliates, { badges }, { labels }, { notes }, { messages }, sessions, handles] = await Promise.all([
 		api("affiliates", { orgId: id }).then((r) => r.affiliates),
 		api("badges"),
@@ -2303,6 +2303,9 @@ async function renderUser(main, id) {
 		[{ id: "", name: "none" }].concat(flags).map((f) => '<button type="button" title="' + esc(f.name) + '" data-flag="' + esc(f.id) + '"' + (can("setFlag") ? "" : " disabled") + ">" +
 			(f.id ? '<img alt="" loading="lazy" src="/public/flag-' + esc(f.id) + '.svg">' : "none") + "</button>").join("") + "</div>" +
 		(can("setFlag") ? '<div class="row" style="margin-top:8px"><button class="btn primary" id="saveFlags" disabled>Save flags</button><span class="dim small" id="flagState"></span></div>' : '<p class="dim small">Requires permission to set flags.</p>') + "</div>" +
+		(clients?.length > 1 && canHere("setUserClient") ? '<div class="field"><label>Twitter client</label><div class="row"><select id="userClient" aria-label="Which client this account gets">' +
+			clients.map((c) => '<option value="' + esc(c.id) + '"' + (u.web_client === c.id ? " selected" : "") + ">" + esc(c.label) + "</option>").join("") +
+			'</select><button class="btn" id="saveUserClient">Switch</button></div><p class="dim small">For an account stuck on a client that doesn\'t load. Takes effect on their next page load.</p></div>' : "") +
 		(u.decor ? '<div class="field"><label>Profile decor from Steam</label><div class="dim small">' +
 			esc([u.decor.profile && "game profile " + u.decor.profile.name, u.decor.theme && "theme " + u.decor.theme, u.decor.background && "background " + u.decor.background.name, u.decor.frame && "frame " + u.decor.frame.name].filter(Boolean).join(" · ")) +
 			"</div>" + (canHere("resetDecor") ? '<button class="btn" id="resetDecor" style="margin-top:6px">Reset decor</button>' : "") + "</div>" : "") +
@@ -2431,6 +2434,7 @@ async function renderUser(main, id) {
 		if ($("#saveFlags")) $("#saveFlags").onclick = () => act(() => api("setFlag", { id, flag: picked.join(",") }), "Flags saved").then(again);
 		drawFlags();
 	}
+	if ($("#saveUserClient")) $("#saveUserClient").onclick = () => act(() => api("setUserClient", { id, client: $("#userClient").value }), "Client switched").then(again);
 	if ($("#resetDecor")) $("#resetDecor").onclick = async () => {
 		if (!(await ask("Take off @" + u.screen_name + "'s profile decor?"))) return;
 		act(() => api("resetDecor", { id }), "Decor reset").then(again);

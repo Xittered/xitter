@@ -8,6 +8,7 @@
 // support more or take some away (staff-permissions.ts). Every change is
 // written to the audit log.
 
+import { clientBuilds } from "./build";
 import { isSuperadminViewer } from "./superadmin";
 import { oneLine } from "./text-clean";
 import { SUPERADMINS, isSuperadminHome, superadminNameHere, superadminOf } from "./superadmins";
@@ -70,7 +71,7 @@ export const AUDIT_ACTIONS = [
 	"rollback_client", "save_automod", "save_operations", "save_security", "save_settings", "self_update", "self_update_rollback", "send_staff_message",
 	"send_test_mail", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
 	"set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
-	"set_status", "set_translator", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
+	"set_status", "set_translator", "set_user_client", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",
 ];
 
@@ -408,7 +409,7 @@ const ACTIONS: Record<string, Action> = {
 		role: "support",
 		run: async (a, b) => {
 			const id = idOf(b.id);
-			const [u] = await sql`select ${userListCols}, ${allows(a.role, "invites") ? sql`u.invite_code` : sql`null::text as invite_code`}, u.bio, u.location, u.website, u.banner_url, u.based_in_override, u.country, u.signup_country, u.count_overrides, u.decor, u.notes_writer, u.never_sensitive, u.org_badge_id::text, u.status_until, u.parody_label, u.label_id::text, u.instance,
+			const [u] = await sql`select ${userListCols}, ${allows(a.role, "invites") ? sql`u.invite_code` : sql`null::text as invite_code`}, u.bio, u.location, u.website, u.banner_url, u.based_in_override, u.country, u.signup_country, u.count_overrides, u.decor, u.notes_writer, u.never_sensitive, u.org_badge_id::text, u.status_until, u.parody_label, u.label_id::text, u.instance, u.preferences->>'web_client' as web_client,
 				(select coalesce(json_agg(ub.badge_id::text order by ub.position), '[]') from user_badges ub where ub.user_id = u.id) as badge_ids,
 				(select count(*)::int from sessions s where s.user_id = u.id) as sessions,
 				(select count(*)::int from api_tokens t where t.user_id = u.id) as api_tokens,
@@ -427,7 +428,7 @@ const ACTIONS: Record<string, Action> = {
 				join users u on u.id = other.user_id
 				where mine.user_id = ${id}::bigint and mine.ip is not null and mine.created_at > now() - interval '90 days' limit 20`;
 			u.joined_from = u.signup_country ? countryDisplayName(u.signup_country) : "";
-			return { user: u, invited, log, alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
+			return { clients: clientBuilds().map(({ id, label }) => ({ id, label })), user: u, invited, log, alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
 		},
 	},
 

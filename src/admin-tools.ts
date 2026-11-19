@@ -149,6 +149,19 @@ export const toolActions: Record<string, Action> = {
 	},
 	// takes off everything an account wears from Steam (decor.ts): theme,
 	// background, frame; what it wore goes in the audit log
+	setUserClient: {
+		role: "moderator",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			await guard(a, id, true);
+			const pick = typeof b.client === "string" ? b.client : "";
+			if (!clientBuilds().some((c) => c.id === pick)) throw new AdminError("Choose a client this instance has.");
+			const [before] = await sql`select preferences->>'web_client' as client from users where id = ${id}::bigint`;
+			await sql`update users set preferences = jsonb_set(coalesce(preferences, '{}'), '{web_client}', to_jsonb(${pick}::text)) where id = ${id}::bigint`;
+			await audit(a, "set_user_client", id, { from: before?.client ?? null, to: pick });
+			return {};
+		},
+	},
 	resetDecor: {
 		role: "moderator",
 		run: async (a, b) => {

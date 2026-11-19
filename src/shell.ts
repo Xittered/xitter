@@ -339,10 +339,11 @@ export const bootScript = (path: string): Buffer | undefined => boots().find((b)
 // database when another build ran last, before its scripts do.
 const BUILD_MARK = "xitter_client_build";
 const markBuild = (sha: string) => `try{localStorage.setItem(${inline(BUILD_MARK)},${inline(sha)})}catch(e){}`;
+const OLD_CLIENT_CACHE_GENERATION = 2;
 const oldLoader = (sha: string, srcs: string[]) => `(function(){var s=${inline(srcs)};function go(){s.forEach(function(u){var e=document.createElement("script");e.src=u;e.async=false;e.charset="utf-8";e.crossOrigin="anonymous";document.body.appendChild(e)})}
 if(/(?:^|;\\s*)night_mode=2/.test(document.cookie)){var nm="night_mode=1; Path=/; Max-Age=31536000; SameSite=Lax";document.cookie=nm;document.cookie=nm+"; domain="+location.hostname}
-var was;try{was=localStorage.getItem(${inline(BUILD_MARK)})}catch(e){}${markBuild(sha)}
-if(was===${inline(sha)}||!window.indexedDB)return go();var done=false;function once(){if(!done){done=true;go()}}
+var was;try{was=localStorage.getItem(${inline(BUILD_MARK)})}catch(e){}${markBuild(`${sha}:${OLD_CLIENT_CACHE_GENERATION}`)}
+if(was===${inline(`${sha}:${OLD_CLIENT_CACHE_GENERATION}`)}||!window.indexedDB)return go();var done=false;function once(){if(!done){done=true;go()}}
 var OK={themeBackground:["light","dark","darker"],themeColor:["blue","yellow","red","purple","orange","green"],scale:["xSmall","small","normal","large","xLarge"],highContrastEnabled:[true,false],reducedMotionEnabled:[true,false]},r;try{r=indexedDB.open("localforage")}catch(e){return once()}
 r.onerror=r.onblocked=once;r.onupgradeneeded=function(){r.transaction.abort()};
 r.onsuccess=function(){var db=r.result;if(!db.objectStoreNames.contains("keyvaluepairs")){db.close();return once()}
