@@ -11,6 +11,7 @@ import { CONVERSATION_CARD_CSS, CONVERSATION_CARD_SCRIPT } from "./conversation-
 import { COMPOSER_BUTTON_CSS, COMPOSER_BUTTON_SCRIPT } from "./composer-buttons";
 import { STICKER_PICKER_CSS, STICKER_PICKER_SCRIPT } from "./sticker-picker";
 import { PASSKEY_SCRIPT } from "./passkeys";
+import { PIRATE_SCRIPT } from "./pirate";
 import { FORGOT_SCRIPT, FRESH_SCRIPT, type MenuLink, TIDY_SCRIPT, hideCss, tidyData } from "./tidy";
 import { POST_CONTEXT_SCRIPT } from "./post-context";
 import { ERROR_SCRIPT } from "./errors";
@@ -313,6 +314,7 @@ ${FLAG_PICKER_SCRIPT}
 ${signedIn ? COMPOSER_BUTTON_SCRIPT : ""}
 ${signedIn ? STICKER_PICKER_SCRIPT : ""}
 ${signedIn ? CONVERSATION_CARD_SCRIPT : ""}
+${signedIn ? PIRATE_SCRIPT : ""}
 ${signedIn ? CLASSIC_DETAIL_SCRIPT : ""}
 ${signedIn ? MONEY_UI_SCRIPT : ""}
 ${POST_CONTEXT_SCRIPT}

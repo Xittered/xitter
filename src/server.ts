@@ -126,7 +126,7 @@ async function servePublic(p: string): Promise<Response> {
 			? new Response(svg, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", "x-content-type-options": "nosniff" } })
 			: new Response("not found", { status: 404 });
 	}
-	if (!/^[\w.-]+\.(png|svg|ico|webp)$/.test(name)) return new Response("not found", { status: 404 });
+	if (!/^[\w.-]+\.(png|svg|ico|webp|webm|mp4)$/.test(name)) return new Response("not found", { status: 404 });
 	// a logo uploaded in the admin panel replaces the shipped one
 	const uploaded = brandingFile(name);
 	if (uploaded && (await uploaded.file.exists())) return new Response(uploaded.file, { headers: { "content-type": uploaded.type, "cache-control": "no-cache" } });

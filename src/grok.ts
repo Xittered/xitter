@@ -4,6 +4,7 @@ import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { getPost } from "./posts";
+import { PIRATE_ASK, pirateBrain } from "./pirate";
 import { feature, settings } from "./settings";
 
 export type GrokBrain = "claude" | "bee";
@@ -257,7 +258,7 @@ export async function addResponse(viewer: Viewer, req: Request): Promise<Respons
 			try {
 				if (limited) say("That's enough Grok for today. Come back tomorrow.");
 				else {
-					const gen = FAKE ? fakeBrain(turns) : brain === "bee" ? beeBrain(turns) : claudeBrain(viewer, turns);
+					const gen = PIRATE_ASK.test(asked) ? pirateBrain() : FAKE ? fakeBrain(turns) : brain === "bee" ? beeBrain(turns) : claudeBrain(viewer, turns);
 					for await (const t of gen) say(t);
 					if (!said) say(brain === "bee" ? "bzz." : "…");
 				}

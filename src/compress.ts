@@ -60,7 +60,7 @@ export function compressedFile(body: Buffer, encoding: Encoding): Promise<Buffer
 const UNTOUCHED = /^\/(federation\/|migration\/|\.well-known\/xitter|juicebox\/)/;
 
 export async function compressResponse(req: Request, res: Response, pathname: string): Promise<Response> {
-	if (req.method === "HEAD" || !res.body || res.status === 204 || res.status === 304 || res.headers.has("content-encoding")) return res;
+	if (req.method === "HEAD" || !res.body || res.status === 204 || res.status === 304 || res.headers.has("content-encoding") || res.headers.get("x-accel-buffering") === "no") return res;
 	if (!COMPRESSIBLE.test(res.headers.get("content-type") ?? "") || UNTOUCHED.test(pathname)) return res;
 	const length = Number(res.headers.get("content-length") ?? NaN);
 	if (length < MIN_BYTES) return res;
