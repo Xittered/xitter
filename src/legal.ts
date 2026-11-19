@@ -7,80 +7,125 @@ import { settings } from "./settings";
 
 type Section = [string, string[]];
 
+const BUILT_IN_UPDATED = "2026-11-19";
+
 const anthropicKey = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+
+const longDate = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+function operator() {
+	const s = settings();
+	const who = s.legal.operator.trim() || `the staff of ${s.instance_name}`;
+	const contact = s.legal.contact.trim();
+	return { who, contact, reach: contact ? `contact us at ${contact}` : "contact the staff of this instance" };
+}
+
+function backupDays(): number {
+	const s = settings();
+	if (s.legal.backup_days > 0) return s.legal.backup_days;
+	const { keep, every_hours } = s.backups;
+	return Math.max(1, Math.ceil((keep * (every_hours || 24)) / 24));
+}
 
 function defaultTerms(): Section[] {
 	const s = settings();
 	const name = s.instance_name;
+	const { who, reach } = operator();
 	return [
-		["Who runs this", [
-			`${name} is run by its own staff. It isn't X or Twitter and has nothing to do with X Corp. It runs Xitter, open source software, and shows X's web app pointed at this server.`,
+		["1. Who we are", [
+			`${name} is operated by ${who}. It is an independent service and is not affiliated with, endorsed by or connected to X Corp. It runs Xitter, open source software, and serves X's web app pointed at our own server.`,
+			`For questions about these terms, ${reach}.`,
 		]],
-		["Your account", [
-			"You need to be at least 13, or older if the law where you live says so.",
-			"Keep your password to yourself. You're responsible for what's posted from your account.",
-			"One person can have several accounts, but using them to get around a suspension, fake support or harass someone isn't allowed.",
+		["2. Eligibility", [
+			"You must be at least 13 years old to use this service, or older if the law of your country requires it. By creating an account you confirm that you meet this requirement.",
 		]],
-		["What you post", [
-			"What you post stays yours. By posting it you let this instance store it, show it to the people it's meant for and send it where it needs to go to work" + (FEDERATION_ON ? ", other Xitter instances included" : "") + ".",
-			"Don't post what you have no right to post, and nothing illegal.",
+		["3. Your account", [
+			"You are responsible for keeping your password safe and for everything done through your account.",
+			"You may have more than one account, but you may not use additional accounts to evade a suspension, impersonate others or harass anyone.",
 		]],
-		["Rules and moderation", [
-			"The rules at /rules apply to everyone. Staff can hide or remove posts and media, give strikes, limit accounts and suspend them when the rules are broken. You can appeal from your account's notices page.",
+		["4. Your content", [
+			"You keep ownership of everything you post. By posting, you give us a non-exclusive, royalty-free permission to store, display and transmit your content as needed to run the service" + (FEDERATION_ON ? ", including sending it to other Xitter instances" : "") + ". This permission ends when the content is deleted, except for copies kept in backups for the period stated in our Privacy Policy.",
+			"You may only post content you have the right to share, and nothing that is illegal.",
+		]],
+		["5. Rules and moderation", [
+			"Everyone must follow the rules published at /rules. We may hide or remove content, give strikes, and restrict, limit or suspend accounts that break them. You can appeal a decision from your account's notices page.",
 		]],
 		...(s.features.money
-			? ([["Play money", ["Equicoins and everything bought with them are play money. They have no cash value, can't be sold or paid out, and staff can adjust or reverse them."]]] as Section[])
+			? ([["6. Virtual currency", ["Equicoins and anything obtained with them are virtual items with no monetary value. They cannot be sold, exchanged for money or paid out, and we may adjust or reverse them at any time."]]] as Section[])
 			: []),
-		["No guarantees", [
-			"The service is given as it is, for free. It can be down, lose data, change or close. Nobody running it is liable for that as far as the law allows.",
+		[`${s.features.money ? 7 : 6}. Disclaimer`, [
+			"The service is provided free of charge and \"as is\", without warranties of any kind. It may be unavailable, lose data, change or shut down at any time. To the extent permitted by law, we are not liable for any loss arising from your use of the service.",
 		]],
-		["Changes", [
-			"These terms can change. The current version is always on this page, and using the service after a change means you accept it.",
+		[`${s.features.money ? 8 : 7}. Changes to these terms`, [
+			"We may update these terms at any time. Changes take effect when they are posted on this page, and the date at the top shows the latest version. Continuing to use the service after a change means you accept the updated terms.",
 		]],
 	];
 }
 
 function defaultPrivacy(): Section[] {
 	const s = settings();
-	const services: string[] = [];
-	if (mailEnabled()) services.push("A mail service delivers the emails this instance sends you (sign-up codes, password resets, digests).");
+	const name = s.instance_name;
+	const { who, reach } = operator();
+	const days = backupDays();
+	const providers: string[] = [];
+	if (mailEnabled()) providers.push("Email delivery: an email service sends the messages we send you, such as sign-up codes, password resets and digests.");
 	if (anthropicKey() && s.claude_mod.enabled)
-		services.push("Anthropic's Claude reads new posts, profile changes, reports and messages from the old 2020 app to flag rule breaking for staff. Chat messages are end-to-end encrypted and never sent.");
+		providers.push("Anthropic (Claude), United States: automated moderation. New posts, profile changes, reports and messages sent from the old 2020 app are checked for rule violations. End-to-end encrypted chats are never sent.");
 	if (s.features.grok)
-		services.push(s.grok.brain === "claude" && anthropicKey() ? "When you talk to Grok, your messages go to Anthropic's Claude to get an answer." : "When you talk to Grok, your messages go to a language model run for this instance.");
+		providers.push(s.grok.brain === "claude" && anthropicKey() ? "Anthropic (Claude), United States: when you talk to Grok, your messages are sent to generate a reply." : "A language model run for this instance: when you talk to Grok, your messages are sent to it to generate a reply.");
 	const gifs = gifProviders().map((p) => p.display_name);
-	if (s.features.gifs && gifs.length) services.push(`GIF searches go to ${gifs.length > 1 ? `the GIF service you pick (${gifs.slice(0, -1).join(", ")} or ${gifs.at(-1)})` : gifs[0]}.`);
-	services.push("When you press Translate, that post's text goes to Google Translate.");
-	if (scanEnabled()) services.push("Uploaded photos pass through Cloudflare once so its tool can check them for child sexual abuse material.");
-	if (FEDERATION_ON) services.push("Public posts and profiles are shared with other Xitter instances this one federates with, and those instances follow their own rules.");
+	if (s.features.gifs && gifs.length) providers.push(`GIF search (${gifs.join(", ")}): your search terms go to the GIF service you use.`);
+	providers.push("Google Translate, United States: when you press Translate, the text of that post is sent to be translated.");
+	if (scanEnabled()) providers.push("Cloudflare, United States: uploaded photos pass through Cloudflare once so they can be checked against known child sexual abuse material.");
 	return [
-		["What we keep", [
-			"Your account: username, display name, profile, the email you gave and your password, stored only as a hash nobody can read back.",
-			"What you do here: posts, replies, likes, reposts, bookmarks, follows, lists, uploads and settings.",
-			"Messages: chats are end-to-end encrypted, so the server only stores them sealed and can't read them. Messages sent from the old 2020 app aren't encrypted.",
-			"Sign-ins: the IP address, the country it's in, the app and the browser of each sign-in, and of every device that's still signed in. You see these under Settings, Your account, Account access history.",
+		["1. Who we are", [
+			`${name} is operated by ${who}, who is the controller of your personal data. To ask anything about this policy or your data, ${reach}.`,
+			"This policy explains what personal data we collect, why, who it is shared with, how long we keep it and what rights you have.",
 		]],
-		["Why", [
-			"To run the service and show you your stuff.",
-			"To keep accounts safe and the rules working: staff with permission can see sign-in addresses to find stolen accounts, spam and people getting around a suspension.",
-			"Your country sets the \"based in\" line of your profile unless you change it.",
+		["2. Information we collect", [
+			"Account details: your username, display name, profile information, the email address you give us, and your password, which is stored only as a one-way hash that no one can read.",
+			"Content and activity: your posts, replies, likes, reposts, bookmarks, follows, lists, uploaded media and settings.",
+			"Messages: chats are end-to-end encrypted. Our server only stores them in encrypted form and cannot read them. Messages sent from the old 2020 app are not end-to-end encrypted.",
+			"Technical data: for every sign-in, and for every device that is signed in, we record the IP address, the country it belongs to, the app and the browser used, and the time. You can see this under Settings, Your account, Account access history.",
 		]],
-		["Who else sees it", [
+		["3. Why we use it and our legal basis", [
+			"To provide the service you signed up for: creating your account, showing your content and delivering it to the people it's meant for (performance of a contract).",
+			"To keep the platform safe: IP addresses and sign-in records are used to protect accounts from being taken over, to fight spam and abuse, and to stop people from getting around suspensions. Content is moderated, partly with automated tools, to enforce our rules (legitimate interests).",
+			"To show the \"based in\" country on your profile, which you can change at any time (legitimate interests).",
+			"To comply with the law, for example when removing illegal content (legal obligation).",
+		]],
+		["4. Who we share it with", [
 			"Your posts and profile are public unless you protect your account or post to a circle.",
-			"Staff see what they need to moderate. Only some staff can see email and IP addresses.",
-			...services,
-			"Nothing is sold, there are no ads, and the app only talks to this server: no trackers or analytics from anyone else.",
+			"Staff can see what they need to moderate the service. Only staff with specific permission can see email addresses and IP addresses.",
+			...(FEDERATION_ON ? ["Other Xitter instances: public posts and profiles are shared with the instances we federate with. They are run by other people, may be located anywhere in the world, and handle data under their own policies."] : []),
+			"Service providers, who process data on our behalf only for the purposes below:",
+			...providers.map((p) => `• ${p}`),
+			"We do not sell your data and do not show ads. The app only connects to our server and loads no third-party trackers or analytics.",
 		]],
-		["Cookies", [
-			"Only the ones that keep you signed in and remember your settings, like dark mode.",
+		["5. International transfers", [
+			"Our server and some of our providers may be located outside your country, including in the United States. Where data leaves the UK or the EU, our providers rely on standard legal safeguards, such as Standard Contractual Clauses, to protect it.",
 		]],
-		["How long", [
-			"Everything is kept while your account exists. Database backups are kept for a while after that.",
-			"Deactivating hides your account; signing in within 30 days brings it back. To have it deleted for good, ask staff.",
-			"When a suspended account is deleted, its username, email and recent sign-in addresses are kept so it can't just come back.",
+		["6. Cookies", [
+			"We only use cookies that are needed to keep you signed in and to remember your settings, such as dark mode. We do not use advertising or tracking cookies.",
 		]],
-		["Your data", [
-			"You can download an archive of your data under Settings, Your account. You can change or delete your posts and profile any time, and ask staff to delete your account.",
+		["7. Data retention", [
+			"We keep your data for as long as your account exists.",
+			`Database backups are kept for up to ${days} days, after which they are automatically overwritten and permanently deleted.`,
+			"If you deactivate your account, it is hidden and can be restored by signing in within 30 days. To have your account deleted permanently, contact us.",
+			"If a suspended account is deleted, we keep its username, email address and the IP addresses it used in its last 30 days, only to prevent it from returning.",
+		]],
+		["8. Data security", [
+			"Passwords are hashed, connections are encrypted with HTTPS, chats are end-to-end encrypted, and access to personal data is limited by staff permissions.",
+		]],
+		["9. Your rights", [
+			"You have the right to access, correct and delete your personal data, to object to or restrict how we use it, and to receive a copy of it. You can download an archive of your data under Settings, Your account, and edit or delete your posts and profile at any time.",
+			`For anything else, ${reach}. We will verify that the request comes from the account owner before acting on it. You also have the right to complain to your local data protection authority.`,
+		]],
+		["10. Children", [
+			"The service is not intended for children under 13, and we do not knowingly collect personal data from them. If you believe a child under 13 has given us personal data, contact us and we will delete it.",
+		]],
+		["11. Changes to this policy", [
+			"We may update this policy at any time. Changes take effect when they are posted on this page, and the date at the top shows the latest version.",
 		]],
 	];
 }
@@ -96,7 +141,8 @@ function custom(text: string): string {
 const builtIn = (sections: Section[]) =>
 	sections.map(([title, paragraphs]) => `<h2>${esc(title)}</h2>${paragraphs.map((p) => `<p class="rules">${esc(p)}</p>`).join("")}`).join("");
 
-function legalPage(title: string, written: string, sections: () => Section[]): Response {
+function legalPage(title: string, written: string, updated: string, sections: () => Section[]): Response {
+	const own = written.trim();
 	return html(
 		layout(
 			title,
@@ -104,12 +150,13 @@ function legalPage(title: string, written: string, sections: () => Section[]): R
 <form class="legal">
 	<img class="logo" src="/public/logo-dark.png" alt="${esc(settings().instance_name)}">
 	<h1>${esc(title)}</h1>
-	${written.trim() ? custom(written) : builtIn(sections())}
+	<p class="alt">Last updated: ${esc(longDate(own && updated ? updated : BUILT_IN_UPDATED))}</p>
+	${own ? custom(written) : builtIn(sections())}
 	<p class="alt"><a href="/tos">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/rules">Rules</a> · <a href="/">Sign in</a></p>
 </form>`,
 		),
 	);
 }
 
-export const termsPage = () => legalPage("Terms of Service", settings().terms, defaultTerms);
-export const privacyPage = () => legalPage("Privacy Policy", settings().privacy, defaultPrivacy);
+export const termsPage = () => legalPage("Terms of Service", settings().terms, settings().legal.terms_updated, defaultTerms);
+export const privacyPage = () => legalPage("Privacy Policy", settings().privacy, settings().legal.privacy_updated, defaultPrivacy);

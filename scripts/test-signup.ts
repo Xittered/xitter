@@ -125,6 +125,7 @@ const inviteCookie = link.headers.getSetCookie().map((c) => c.split(";")[0]).fin
 check("an invite link leads to the home page and keeps the code", link.status === 302 && link.headers.get("location") === "/" && !!inviteCookie);
 s = await step("begin_login", { username_or_email: `${name}c` }, inviteCookie);
 check("then a new username goes straight to account setup", shows(s, "Set up your account"));
+check("which says signing up agrees to the terms and privacy policy", shows(s, "By signing up, you agree to our ") && shows(s, "Terms of Service") && shows(s, "Privacy Policy"));
 s = await step("verify_signup", { session_token: s.fields.session_token, name: "", username: `${name}c`, password: "testpass123", email: `${name.toLowerCase()}c@example.com` }, inviteCookie);
 check("and signing up spends the code and clears it", s.cookies.some((c) => c.startsWith("auth_token=")) && s.cookies.includes("xitter_invite="));
 const [spent] = await sql`select uses from invites where code = ${linked}`;

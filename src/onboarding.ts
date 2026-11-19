@@ -110,6 +110,42 @@ function withEmailField(messages: Message[]): Message[] {
 	return messages;
 }
 
+function withLegalNote(messages: Message[], source: Message[]): Message[] {
+	const [, root] = messages[0];
+	const [, from] = source[0];
+	const text = (r: any, p: number): string | undefined => (r.props[p]?.[0] === 0 ? r.props[p][1] : undefined);
+	const parents = (r: any) => {
+		const m = new Map<number, number>();
+		r.els.forEach((e: any, i: number) => e.children.forEach((c: number) => m.set(c, i)));
+		return m;
+	};
+	const fromParent = parents(from);
+	const lead = from.els.findIndex((e: any) => [...e.props.values()].some((p: number) => text(from, p) === "By continuing, you agree to our "));
+	const line = fromParent.get(lead);
+	const note = line === undefined ? undefined : fromParent.get(line);
+	const rootParent = parents(root);
+	const input = root.els.findIndex((e: any) => e.props.has(17392) && text(root, e.props.get(17392)) === "name");
+	const block = rootParent.get(input);
+	const holder = block === undefined ? undefined : rootParent.get(block);
+	if (note === undefined || holder === undefined) throw new Error("setup screen: no place for the terms note");
+	const copy = (i: number): number => {
+		const old = from.els[i];
+		const props = new Map<number, number>();
+		for (const [k, p] of old.props) {
+			const value = from.props[p];
+			root.props.push(value[0] === 0 && value[1] === "By continuing, you agree to our " ? [0, "By signing up, you agree to our "] : value);
+			props.set(k, root.props.length - 1);
+		}
+		const fresh = { ...old, props, children: [] as number[] };
+		root.els.push(fresh);
+		const at = root.els.length - 1;
+		fresh.children = old.children.map(copy);
+		return at;
+	};
+	root.els[holder].children.push(copy(note));
+	return messages;
+}
+
 // The setup screen checks the username as it's typed: its
 // Input2.RemoteAsYouType posts the form to suggest_username and draws the
 // reply. "Username is available" shows, and Continue enables, while the
@@ -138,7 +174,7 @@ const templates = {
 	code: codeLength(without(await load("code"), ["Send again"], 7140), INVITE_LENGTH),
 	// the authenticator code at sign-in: six digits
 	twoFactor: codeLength(without(await load("code"), ["Send again"], 7140), 6),
-	setup: withEmailField(await load("setup")),
+	setup: withLegalNote(withEmailField(await load("setup")), await load("password")),
 	success: await load("success"),
 	passkey: await load("passkey"),
 };

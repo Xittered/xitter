@@ -907,11 +907,27 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("rules", b.rules.slice(0, 20000));
 				changed.push("rules");
 			}
+			const legal = { ...settings().legal };
+			let legalChanged = false;
 			for (const key of ["terms", "privacy"] as const)
 				if (typeof b[key] === "string") {
 					await setSetting(key, b[key].slice(0, 50000));
+					legal[`${key}_updated`] = new Date().toISOString().slice(0, 10);
+					legalChanged = true;
 					changed.push(key);
 				}
+			if (b.legal && typeof b.legal === "object") {
+				if (typeof b.legal.operator === "string") legal.operator = b.legal.operator.trim().slice(0, 200);
+				if (typeof b.legal.contact === "string") legal.contact = b.legal.contact.trim().slice(0, 200);
+				if (b.legal.backup_days !== undefined) {
+					const days = Number(b.legal.backup_days);
+					if (!Number.isInteger(days) || days < 0 || days > 3650) throw new AdminError("Backup days must be a whole number from 0 to 3650.");
+					legal.backup_days = days;
+				}
+				legalChanged = true;
+				changed.push("legal");
+			}
+			if (legalChanged) await setSetting("legal", legal);
 			if (b.grok && typeof b.grok === "object") {
 				const g = b.grok;
 				const next = { ...s.grok };

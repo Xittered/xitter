@@ -1916,6 +1916,11 @@ const RENDER = {
 				'<div class="box"><h2>' + title + '</h2><p class="dim small">Shown at <a href="' + url + '" target="_blank">' + url + '</a>. Leave it blank for the built-in text, which follows what this instance has switched on. A blank line starts a new paragraph, a paragraph starting with "## " is a heading.</p>' +
 				'<textarea id="' + k + '" style="min-height:160px"' + dis + ">" + esc(s[k]) + "</textarea>" +
 				(admin ? '<button class="btn primary" data-save-legal="' + k + '" style="margin-top:8px">Save</button>' : "") + "</div>").join("") +
+			'<div class="box"><h2>Who runs this instance</h2><p class="dim small">Used by the built-in terms and privacy policy. Blank operator: "the staff of ' + esc(s.instance_name) + '". Backups: how many days any backup, off-site copies included, can be kept; 0 works it out from the backup schedule.</p>' +
+			'<div class="field"><label>Operator</label><input id="legalOperator" placeholder="Your name or team" value="' + esc(s.legal.operator) + '"' + dis + "></div>" +
+			'<div class="field"><label>Contact for privacy and legal questions</label><input id="legalContact" placeholder="email or link" value="' + esc(s.legal.contact) + '"' + dis + "></div>" +
+			'<div class="field"><label>Backups kept for (days)</label><input id="legalBackupDays" type="number" min="0" max="3650" value="' + esc(String(s.legal.backup_days)) + '"' + dis + "></div>" +
+			(admin ? '<button class="btn primary" id="saveLegalInfo">Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Maintenance</h2><p class="dim small">While it\'s on, everyone except staff sees this message instead of the site.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="maint"' + (o.maintenance ? " checked" : "") + dis + "> Maintenance mode</label>" +
 			'<div class="field"><label>Message</label><input id="maintMsg" maxlength="500" value="' + esc(o.message) + '"' + dis + "></div>" +
@@ -2059,6 +2064,7 @@ const RENDER = {
 		$("#saveAnn").onclick = () => save({ announcement: { text: $("#annText").value, buttons: [...annList.querySelectorAll(".ann-row")].map((r) => ({ label: r.querySelector("[data-label]").value, url: r.querySelector("[data-url]").value })) } }, "Announcement saved");
 		$("#saveRules").onclick = () => save({ rules: $("#rules").value }, "Rules saved");
 		main.querySelectorAll("[data-save-legal]").forEach((b) => b.onclick = () => save({ [b.dataset.saveLegal]: $("#" + b.dataset.saveLegal).value }, "Saved"));
+		if ($("#saveLegalInfo")) $("#saveLegalInfo").onclick = () => save({ legal: { operator: $("#legalOperator").value, contact: $("#legalContact").value, backup_days: $("#legalBackupDays").value } }, "Saved");
 		if ($("#saveGrok")) $("#saveGrok").onclick = () => save({ grok: { brain: $("#grokBrain").value, model: $("#grokModel").value, bee_url: $("#grokBee").value, daily_per_account: $("#grokDaily").value, prompt: $("#grokPrompt").value } }, "Grok saved");
 		if ($("#saveClaudeMod")) {
 			const claudeMod = (prompt) => {

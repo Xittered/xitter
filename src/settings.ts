@@ -81,6 +81,7 @@ const DEFAULTS = {
 	rules: "",
 	terms: "",
 	privacy: "",
+	legal: { operator: "", contact: "", backup_days: 0, terms_updated: "", privacy_updated: "" },
 	// AGPL-3.0: people using an instance can get its source here
 	source_url: process.env.SOURCE_URL ?? "https://github.com/Xittered/xitter",
 	// admin panel, Settings: maintenance mode, blocked phrases, trend controls, pinned post
