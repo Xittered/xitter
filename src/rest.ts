@@ -1,5 +1,6 @@
 // The few REST endpoints the client still uses next to GraphQL.
 
+import { recordError } from "./errors";
 import { addResponse } from "./grok";
 import { blockedNameIn, blockedWordIn, forbiddenText, suspendForName } from "./names";
 import { hateIn, hateInName } from "./hate";
@@ -465,8 +466,38 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 		return Response.json({ totalEvents: 0, eventsFailed: 0, shouldRetry: false, retryAfterMs: null, eventsFailedSequenceNumbers: null, message: null });
 	const translation = await translateRoute(path, viewer);
 	if (translation) return translation;
+	if (method === "POST" && path.endsWith("/jot/error_log.json")) void keepClientErrors(req, viewer);
 	if (TELEMETRY.test(path)) return Response.json({});
 	return undefined;
+}
+
+const jotSeen = new Map<string, number>();
+
+async function keepClientErrors(req: Request, viewer: Viewer) {
+	const raw = await req.clone().text().catch(() => "");
+	let body = raw;
+	try {
+		body = decodeURIComponent(raw.replace(/\+/g, " "));
+	} catch {}
+	const entries: string[] = [];
+	try {
+		const logs = JSON.parse(new URLSearchParams(raw).get("log") ?? "[]");
+		for (const l of Array.isArray(logs) ? logs : [logs]) entries.push(typeof l === "string" ? l : JSON.stringify(l));
+	} catch {
+		entries.push(body);
+	}
+	const now = Date.now();
+	if (jotSeen.size > 500) jotSeen.clear();
+	for (const entry of entries.slice(0, 5)) {
+		const text = entry.slice(0, 4000);
+		const key = text.slice(0, 300);
+		if (now - (jotSeen.get(key) ?? 0) < 60_000) continue;
+		jotSeen.set(key, now);
+		const message = /"(?:message|error|description)"\s*:\s*"([^"]{1,400})/.exec(text)?.[1] ?? text.slice(0, 300);
+		const e = new Error(`jot: ${message}`);
+		e.stack = text;
+		await recordError("client", e, { path: new URL(req.url).pathname, userId: viewer.id });
+	}
 }
 
 // Server-sent events channel for live updates. Nothing is pushed yet; the
