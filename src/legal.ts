@@ -7,7 +7,7 @@ import { settings } from "./settings";
 
 type Section = [string, string[]];
 
-const BUILT_IN_UPDATED = "2026-11-19";
+const BUILT_IN_UPDATED = "2026-11-20";
 
 const anthropicKey = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
@@ -105,8 +105,9 @@ function defaultPrivacy(): Section[] {
 		["5. International transfers", [
 			"Our server and some of our providers may be located outside your country, including in the United States. Where data leaves the UK or the EU, our providers rely on standard legal safeguards, such as Standard Contractual Clauses, to protect it.",
 		]],
-		["6. Cookies", [
+		["6. Cookies and tracking", [
 			"We only use cookies that are needed to keep you signed in and to remember your settings, such as dark mode. We do not use advertising or tracking cookies.",
+			"We do not track you across other websites over time, and we do not allow third parties to collect information about your online activity through our service. Because we do no such tracking, the service works the same whether or not your browser sends a \"Do Not Track\" signal.",
 		]],
 		["7. Data retention", [
 			"We keep your data for as long as your account exists.",
@@ -120,6 +121,7 @@ function defaultPrivacy(): Section[] {
 		["9. Your rights", [
 			"You have the right to access, correct and delete your personal data, to object to or restrict how we use it, and to receive a copy of it. You can download an archive of your data under Settings, Your account, and edit or delete your posts and profile at any time.",
 			`For anything else, ${reach}. We will verify that the request comes from the account owner before acting on it. You also have the right to complain to your local data protection authority.`,
+			"California residents: this policy is written to meet the California Online Privacy Protection Act (CalOPPA). We do not sell your personal information or share it for advertising.",
 		]],
 		["10. Children", [
 			"The service is not intended for children under 13, and we do not knowingly collect personal data from them. If you believe a child under 13 has given us personal data, contact us and we will delete it.",
