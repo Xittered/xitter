@@ -26,6 +26,7 @@ import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, v
 export const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
 const maxImage = () => settings().limits.image_mb * 1024 * 1024;
 const MAX_GIF = 15 * 1024 * 1024;
+const LEGACY_CLIENT_TOP_BITRATE = 2_176_000;
 const MAX_PENDING_MS = 60 * 60 * 1000;
 
 type Pending = { userId: string; total: number; category: string; video: boolean; chunks: Map<number, number>; received: number; started: number };
@@ -858,7 +859,7 @@ function videoEntity(m: MediaRow, postId: string, screenName: string, textLength
 		video_info: {
 			aspect_ratio: [m.width / d, m.height / d],
 			duration_millis: m.duration_ms ?? 0,
-			variants: [{ bitrate: Math.round((m.size * 8) / seconds), content_type: "video/mp4", url: mediaUrl(m.id, m.mime) }],
+			variants: [{ bitrate: Math.min(Math.round((m.size * 8) / seconds), LEGACY_CLIENT_TOP_BITRATE), content_type: "video/mp4", url: mediaUrl(m.id, m.mime) }],
 		},
 	};
 }
