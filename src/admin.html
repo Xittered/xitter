@@ -1541,7 +1541,7 @@ const RENDER = {
 					(status === "open" && can("resolveReport") ? '<div class="field" style="margin-top:12px"><input data-note placeholder="Note for the audit log (optional)"></div><div class="row">' +
 						'<button class="btn" data-do="dismiss">Dismiss</button>' +
 						(r.post_id && r.post_text !== null && can("deletePost") ? '<button class="btn danger" data-do="delete">Delete post</button>' : "") +
-						(r.user_id && can("setStatus") ? '<button class="btn" data-do="restricted">Restrict author</button><button class="btn" data-do="limited">Limit author</button><button class="btn danger" data-do="suspended">Suspend author</button>' : "") +
+						(r.user_id && can("setStatus") ? (can("setTemporaryStatus") ? '<select data-for aria-label="How long the sanction lasts"><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select>' : "") + '<button class="btn" data-do="restricted">Restrict author</button><button class="btn" data-do="limited">Limit author</button><button class="btn danger" data-do="suspended">Suspend author</button>' : "") +
 						(r.user_id ? '<a class="btn" href="#user/' + esc(r.user_id) + '">Open account</a>' : "") + "</div>"
 						: '<p class="dim small">' + esc(r.status) + (r.handled_by ? " by @" + esc(r.handled_by) : "") + (r.handled_at ? " · " + esc(when(r.handled_at)) : "") + (r.note ? " · " + esc(r.note) : "") + "</p>") +
 					"</div>";
@@ -1567,9 +1567,13 @@ const RENDER = {
 			box.querySelectorAll("[data-do]").forEach((b) => b.onclick = () => act(async () => {
 				const what = b.dataset.do;
 				const note = box.querySelector("[data-note]").value;
-				if (what === "suspended" && !(await ask("Suspend @" + r.screen_name + "?"))) return;
+				const hours = box.querySelector("[data-for]")?.value || "";
+				const span = hours ? "for " + box.querySelector("[data-for]").selectedOptions[0].textContent : "until lifted";
+				if (what === "suspended" && !(await ask("Suspend @" + r.screen_name + " " + span + "?"))) return;
 				if (what === "delete") await api("deletePost", { id: r.post_id });
-				if (["restricted", "limited", "suspended"].includes(what)) await api("setStatus", { id: r.user_id, status: what, reason: note || "report: " + r.reason });
+				const reason = note || "report: " + r.reason;
+				if (["restricted", "limited", "suspended"].includes(what))
+					await (hours ? api("setTemporaryStatus", { id: r.user_id, status: what, hours, reason }) : api("setStatus", { id: r.user_id, status: what, reason }));
 				await api("resolveReport", { id: r.id, status: what === "dismiss" ? "dismissed" : "actioned", note, samePost: true });
 				await route();
 				refreshCounts();
