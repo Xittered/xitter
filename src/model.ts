@@ -32,7 +32,7 @@ export function noteText(text: string) {
 	return { text, entities };
 }
 
-const DEFAULT_AVATAR = `${PUBLIC_ORIGIN}/abs/sticky/default_profile_images/default_profile_400x400.png`;
+const DEFAULT_AVATAR = `${PUBLIC_ORIGIN}/abs/sticky/default_profile_images/default_profile_normal.png`;
 export const avatarSrc = (url: string | null | undefined) => {
 	const id = url && /^\/media\/(\d{1,19})$/.exec(url)?.[1];
 	return id ? `${PUBLIC_ORIGIN}/profile_images/${id}_normal.jpg` : absolute(url);
