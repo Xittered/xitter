@@ -1,4 +1,5 @@
 import { MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
+import { multiViewer } from "./accounts";
 import { gbeePage } from "./gbee-page";
 import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
 import { CLIENT_COOKIE, chosenClient, clientCookie, clientRoute, requestClient, switchByQuery } from "./client-choice";
@@ -259,6 +260,12 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 		if (!acting) return apiError(403, 200, "You can't act as this account.");
 		if (!delegateMay(acting.actor!.role, req.method, path, operation)) return apiError(403, 200, "Delegates can't do this for the account.");
 		viewer = acting;
+	}
+	const multiUser = req.headers.get("x-web-auth-multi-user-id");
+	if (multiUser && multiUser !== viewer.id && operation === "ViewerBadgeCounts") {
+		const other = await multiViewer(req, viewer, multiUser);
+		if (!other) return apiError(403, 200, "That account isn't signed in here.");
+		viewer = other;
 	}
 	if (viewer.status === "restricted" && restrictedRefuses(req.method, path, operation, url))
 		return apiError(403, 326, "Your account can't interact right now.");

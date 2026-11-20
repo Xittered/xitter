@@ -11,7 +11,7 @@
 //                                            one, if any, takes its place
 
 import { recordSignIn } from "./login-history";
-import { MULTI_COOKIE, SECURE, SESSION_COOKIE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies } from "./auth";
+import { MULTI_COOKIE, SECURE, SESSION_COOKIE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies, viewerById } from "./auth";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { sql } from "./db";
 import { avatarUrl } from "./model";
@@ -44,6 +44,12 @@ async function live(tokens: string[], except?: string): Promise<Session[]> {
 		out.push(s);
 	}
 	return out;
+}
+
+export async function multiViewer(req: Request, viewer: Viewer, userId: string): Promise<Viewer | undefined> {
+	const session = (await live(multiTokens(req), viewer.id)).find((s) => s.userId === userId);
+	const user = session && (await viewerById(session.userId));
+	return user && { ...viewer, ...user, token: session.token, csrf: session.csrf };
 }
 
 // Cookies for a new sign-in from this browser: the session it was using, and
@@ -83,14 +89,15 @@ function withCookies(body: unknown, cookies: string[]): Response {
 export async function accountsRoute(method: string, path: string, viewer: Viewer, req: Request): Promise<Response | undefined> {
 	if (path === "/1.1/account/multi/list.json") {
 		const others = await live(multiTokens(req), viewer.id);
-		const users = others.length
-			? await sql`select id::text, screen_name, name, avatar_url, verified_type from users where id = any(${sql.array(others.map((s) => s.userId), "INT8")})`
+		const ids = others.length ? [viewer.id, ...others.map((s) => s.userId)] : [];
+		const users = ids.length
+			? await sql`select id::text, screen_name, name, avatar_url, verified_type from users where id = any(${sql.array(ids, "INT8")})`
 			: [];
 		return Response.json({
-			users: others.map((s) => {
-				const u = users.find((x: { id: string }) => x.id === s.userId);
+			users: ids.map((id) => {
+				const u = users.find((x: { id: string }) => x.id === id);
 				return {
-					user_id: s.userId,
+					user_id: id,
 					name: u.name,
 					screen_name: u.screen_name,
 					avatar_image_url: avatarUrl(u.avatar_url),

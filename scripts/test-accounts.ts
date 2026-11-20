@@ -34,7 +34,12 @@ const signIn = (username: string) =>
 	send("/i/jfapi/onboarding/web/actions/login_enter_password", { method: "POST", body: new URLSearchParams({ username, password }) });
 const post = (path: string, body: Record<string, string> = {}) => send(`/i/api${path}`, { method: "POST", body: new URLSearchParams(body) });
 const me = async () => (await (await send("/i/api/1.1/account/settings.json")).json()).screen_name?.toLowerCase();
-const list = async () => (await (await send("/i/api/1.1/account/multi/list.json")).json()).users ?? [];
+const everyone = async () => (await (await send("/i/api/1.1/account/multi/list.json")).json()).users ?? [];
+const list = async () => (await everyone()).slice(1);
+const badgeOf = async (userId: string) => {
+	const r = await send("/i/api/graphql/q4Npr1-FYRWyXsRzPckwEA/ViewerBadgeCounts?variables=%7B%7D", { headers: { "x-web-auth-multi-user-id": userId } });
+	return r.status === 200 ? (await r.json()).data.viewer_v2.user_results.result.badge_counts : r.status;
+};
 const meta = async () => /"hasMultiAccountCookie":(true|false)/.exec(await (await send("/home")).text())?.[1];
 
 await signIn(nameA);
@@ -45,6 +50,9 @@ check("adding B makes B active", (await me()) === nameB.toLowerCase());
 const others = await list();
 check("and keeps A signed in, listed in the menu", others.length === 1 && others[0].screen_name.toLowerCase() === nameA.toLowerCase(), others);
 check("the page tells the menu to ask", (await meta()) === "true");
+check("the menu lists the active account first, as X does", (await everyone())[0]?.screen_name.toLowerCase() === nameB.toLowerCase());
+check("each account's badge is asked for as that account", typeof (await badgeOf(others[0]?.user_id))?.ntab_unread_count === "number");
+check("not for an account that isn't signed in here", (await badgeOf("1")) === 403);
 await signIn(nameA);
 check("signing in to A again doesn't list it twice", (await list()).length === 1 && (await me()) === nameA.toLowerCase());
 
