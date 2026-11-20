@@ -51,16 +51,26 @@ var playing=false,timer=0,k;
 function play(){
 if(playing)return;playing=true;
 var o=document.createElement("div");
-o.style.cssText="position:fixed;inset:0;z-index:2147483647;cursor:pointer;background:radial-gradient(ellipse 70% 45% at 50% 22%,rgba(0,0,0,.55),rgba(0,0,0,0) 70%);transition:opacity .4s";
 var v=document.createElement("video");
 var alpha=v.canPlayType('video/webm; codecs="vp9"')&&!/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+var rgb=(getComputedStyle(document.body).backgroundColor.match(/[\\d.]+/g)||[0,0,0]).map(Number),dark=rgb[3]===0||rgb[0]+rgb[1]+rgb[2]<384;
+o.style.cssText="position:fixed;inset:0;z-index:2147483646;cursor:pointer;transition:opacity .4s;"+(alpha?"background:radial-gradient(ellipse 70% 45% at 50% 22%,rgba(0,0,0,.55),rgba(0,0,0,0) 70%)":dark?"mix-blend-mode:screen":"background:#000");
 v.src=alpha?"/public/pirate.webm":"/public/pirate.mp4";
-v.playsInline=true;v.setAttribute("playsinline","");
-v.style.cssText="position:absolute;left:50%;top:2vh;transform:translateX(-50%);width:min(1280px,max(100vw,150vmin));pointer-events:none"+(alpha?"":";mix-blend-mode:screen");
+v.playsInline=true;v.setAttribute("playsinline","");v.preload="auto";
+v.style.cssText="position:absolute;left:50%;top:2vh;transform:translateX(-50%);width:min(1280px,max(100vw,150vmin));pointer-events:none";
 o.appendChild(v);document.body.appendChild(o);
-function close(){o.style.opacity="0";setTimeout(function(){o.remove();playing=false},400)}
-v.addEventListener("ended",close);v.addEventListener("error",close);o.addEventListener("click",close);
-var p=v.play();if(p&&p.catch)p.catch(function(){v.muted=true;v.play().catch(close)});
+var hint=null;
+function close(){if(hint){hint.remove();hint=null}o.style.opacity="0";setTimeout(function(){o.remove();playing=false},400)}
+function go(){if(hint){hint.remove();hint=null}v.muted=false;var q=v.play();if(q&&q.catch)q.catch(close)}
+function ask(){
+hint=document.createElement("button");hint.type="button";hint.textContent="You found a pirate token. Tap to open";
+hint.style.cssText="position:fixed;left:50%;top:30vh;transform:translateX(-50%);z-index:2147483647;padding:14px 22px;border:0;border-radius:999px;background:#f5b400;color:#000;font:700 16px/1.2 system-ui,-apple-system,sans-serif;max-width:90vw;box-shadow:0 6px 30px rgba(0,0,0,.5);cursor:pointer";
+hint.addEventListener("click",function(e){e.stopPropagation();go()});
+document.body.appendChild(hint);
+}
+v.addEventListener("ended",close);v.addEventListener("error",close);
+o.addEventListener("click",function(){if(hint)go();else close()});
+var p=v.play();if(p&&p.catch)p.catch(function(){v.muted=true;var q=v.play();if(q&&q.catch)q.catch(ask)});
 }
 function scan(){
 timer=0;
