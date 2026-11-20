@@ -42,3 +42,7 @@ export const oneLine = (text: string) =>
 	cleanText(text)
 		.replace(/\s*\n\s*/g, " ")
 		.replace(/\s{2,}/g, " ");
+
+// Hangul fillers, the braille blank and other characters that draw nothing:
+// a name made only of them looks empty
+export const looksBlank = (text: string) => !text.replace(/[\s\p{C}\p{Default_Ignorable_Code_Point}⠀]/gu, "");

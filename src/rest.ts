@@ -34,7 +34,7 @@ import { loginHistory } from "./login-history";
 import { emailInfo, resendConfirmation } from "./email-address";
 import { pushSettingsRoute } from "./push";
 import { answerRequest, followList, knownFollowerCount, pendingRequests, setFollow, setProtected, suggestedUsers, updateFriendship, userById, userByName, usersByIds } from "./users";
-import { cleanText, oneLine } from "./text-clean";
+import { cleanText, looksBlank, oneLine } from "./text-clean";
 import { translateRoute } from "./translate";
 
 // friendships/show's shape, from the viewer's side (source) and the other account's (target)
@@ -133,7 +133,7 @@ export async function updateProfileText(viewer: Viewer, f: Record<string, string
 		if (!(field in f)) continue;
 		const value = field === "description" ? cleanText(f[field], { lines: 6 }) : oneLine(f[field]);
 		if ((field === "name" ? value.length : [...value].length) > max) return `${field} is limited to ${max} characters.`;
-		if (field === "name" && !value) return "Name can't be blank.";
+		if (field === "name" && looksBlank(value)) return "Name can't be blank.";
 		if (field === "url" && value && !/^https?:\/\/\S+$/.test(value)) return "Website must be an http or https address.";
 		const hate = field === "name" ? hateInName(value) : hateIn(value);
 		if (hate) {

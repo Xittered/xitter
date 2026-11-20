@@ -10,6 +10,7 @@ import { flagValue } from "./flags";
 import { newId } from "./ids";
 import { superadminNameHere } from "./superadmins";
 import { NAME_MAX, getSetting, settings } from "./settings";
+import { looksBlank } from "./text-clean";
 
 // Eight digits ("4821-0937"): X's sign-up dialog takes the code in digit boxes,
 // and digits are easy to read out and type on a phone.
@@ -96,7 +97,7 @@ export async function checkSignup(f: SignupForm) {
 	const email = f.email.trim().toLowerCase();
 	if (!EMAIL.test(email) || email.length > 254) throw new SignupError("Enter a valid email address.");
 	const screenName = f.screenName.trim().replace(/^@/, "");
-	const name = f.name.trim() || screenName;
+	const name = looksBlank(f.name) ? screenName : f.name.trim();
 	const problem = usernameProblem(screenName);
 	if (problem) throw new SignupError(problem);
 	if (isReserved(screenName)) throw new SignupError("That username is reserved.");
