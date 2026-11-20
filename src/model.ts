@@ -15,7 +15,7 @@ import { homeOf, mentionsIn } from "./mentions";
 import { type MediaRow, absolute, mediaEntity, mediaUrl, posterUrl } from "./media";
 import { placeById } from "./places";
 import { shownSource } from "./platforms";
-import { hidesParody, requestLanguage } from "./staff-access";
+import { hidesChecks, hidesParody, requestLanguage } from "./staff-access";
 import { feature, settings } from "./settings";
 import { SHORT_POST, previewOf, weightedLength } from "./textlen";
 import { badgeUrl } from "./users";
@@ -47,15 +47,16 @@ export function apiDate(d: Date): string {
 const globalId = (kind: string, id: string) => Buffer.from(`${kind}:${id}`).toString("base64");
 
 // An account from another instance wears the badge that instance gave it,
-// unless this instance stopped showing those (Admin > Federation).
-export const remoteCheckHidden = (u: { instance?: string | null }) => !!u.instance && !settings().remote_checkmarks;
-export const shownVerifiedType = (u: User) => (remoteCheckHidden(u) ? null : u.verified_type);
+// unless this instance stopped showing those (Admin > Federation). A viewer
+// can hide every checkmark for themselves (parody-labels.ts).
+export const checkHidden = (u: { instance?: string | null }) => hidesChecks() || (!!u.instance && !settings().remote_checkmarks);
+export const shownVerifiedType = (u: User) => (checkHidden(u) ? null : u.verified_type);
 
 // Affiliates of an organisation wear X's checkmark next to the organisation's
 // badge, as on X, even without a badge of their own, unless the instance
 // switched that off (Settings: affiliate_checkmarks).
 export const affiliateChecked = (u: User) => !!u.org && feature("affiliate_checkmarks");
-export const isVerified = (u: User) => !remoteCheckHidden(u) && (u.verified_type !== null || affiliateChecked(u));
+export const isVerified = (u: User) => !checkHidden(u) && (u.verified_type !== null || affiliateChecked(u));
 // a business or government badge: what makes an account an organisation on
 // its own, and gives it a square picture
 export const hasOrgBadge = (u: User) => u.verified_type === "business" || u.verified_type === "government";

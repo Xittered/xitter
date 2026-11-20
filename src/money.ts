@@ -13,7 +13,7 @@ import { hateIn } from "./hate";
 import { newId } from "./ids";
 import { linksIn } from "./links";
 import { absolute } from "./media";
-import { avatarUrl, remoteCheckHidden } from "./model";
+import { avatarUrl, checkHidden } from "./model";
 import { feature, hasBlockedPhrase, settings } from "./settings";
 import { MONEY_ICON } from "./tidy";
 import { isPeer } from "./federation";
@@ -361,7 +361,7 @@ export async function parties(ids: string[]): Promise<Map<string, Party>> {
 				screen_name: r.screen_name,
 				name: r.name || r.screen_name,
 				avatar: avatarUrl(r.avatar_url),
-				badge: remoteCheckHidden(r) ? null : (r.verified_type ?? (r.org && feature("affiliate_checkmarks") ? "blue" : null)),
+				badge: checkHidden(r) ? null : (r.verified_type ?? (r.org && feature("affiliate_checkmarks") ? "blue" : null)),
 				org: r.org ? { name: r.org.name, screen_name: r.org.screen_name, avatar: avatarUrl(r.org.avatar) } : null,
 				square: r.verified_type === "business" || r.verified_type === "government",
 				merchant: r.merchant ? { name: r.m_name || r.name || r.screen_name, banner: r.show_banner && r.banner_url ? plainUrl(absolute(r.banner_url)) : null } : null,

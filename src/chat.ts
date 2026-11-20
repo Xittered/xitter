@@ -13,7 +13,7 @@
 // realm (a separate service, see README) reached at /juicebox, with tokens this
 // instance signs. Voice and video calls are not offered.
 
-import { affiliateChecked, pictureShape, remoteCheckHidden, shownVerifiedType } from "./model";
+import { affiliateChecked, pictureShape, checkHidden, shownVerifiedType } from "./model";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { ServerWebSocket } from "bun";
@@ -115,7 +115,7 @@ async function hasKey(userIds: string[]): Promise<Set<string>> {
 function verificationOf(u: User) {
 	return {
 		__typename: "UserVerification",
-		is_blue_verified: !remoteCheckHidden(u) && (u.verified_type === "blue" || (!u.verified_type && affiliateChecked(u))),
+		is_blue_verified: !checkHidden(u) && (u.verified_type === "blue" || (!u.verified_type && affiliateChecked(u))),
 		is_verified_organization: shownVerifiedType(u) === "business",
 		is_verified_organization_affiliate: !!u.org,
 		verified: false,

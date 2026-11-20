@@ -16,7 +16,7 @@ import { flagSvg } from "./flags";
 import { onboarding } from "./onboarding";
 import { cachedPatch, patchFile, patchText } from "./patch";
 import { clientError, recordError } from "./errors";
-import { asRequest, markStaff, setHideParody, setRequestLanguage, staffGate } from "./staff-access";
+import { asRequest, markStaff, setHidden, setRequestLanguage, staffGate } from "./staff-access";
 import { backupPath, startBackups } from "./backups";
 import { startUpdateChecks } from "./update-check";
 import { memberInvitesRoute } from "./member-invites";
@@ -528,7 +528,7 @@ async function route(req: Request): Promise<Response | undefined> {
 
 	const viewer = await getViewer(req);
 	setRequestLanguage(viewer?.language ?? undefined);
-	setHideParody(!!viewer?.hide_parody_labels);
+	if (!p.startsWith("/api/")) setHidden({ parody: !!viewer?.hide_parody_labels, checks: !!viewer?.hide_checkmarks });
 	if (req.method === "GET" && url.searchParams.has("client") && !API_PREFIX.test(p)) {
 		const switched = await switchByQuery(url, viewer ?? undefined);
 		if (switched) return switched;
