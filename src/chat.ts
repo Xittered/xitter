@@ -334,6 +334,27 @@ async function store(seq: string, ev: Struct, senderId: string, conversationId: 
 	return bytes;
 }
 
+async function withRequestFlags<T extends { event: Buffer }>(viewerId: string, rows: T[]): Promise<T[]> {
+	const messages = rows.map((r) => {
+		const ev = thrift.decode(new Uint8Array(r.event));
+		return thrift.fields(thrift.fields(ev[7])?.[1])?.[109] ? ev : null;
+	});
+	const conversations = [...new Set(messages.flatMap((ev) => (ev ? [thrift.text(ev[4]) ?? ""] : [])))];
+	if (!conversations.length) return rows;
+	const pending: { conversation_id: string; id: string }[] = await sql`select conversation_id, user_id::text as id from chat_members
+		where conversation_id = any(${sql.array(conversations, "TEXT")}) and not accepted`;
+	return rows.map((r, i) => {
+		const ev = messages[i];
+		if (!ev) return r;
+		const waiting = pending.filter((p) => p.conversation_id === thrift.text(ev[4]));
+		const flag = thrift.text(ev[3]) === viewerId ? waiting.some((p) => p.id !== viewerId) : waiting.some((p) => p.id === viewerId);
+		const mce = thrift.fields(thrift.fields(ev[7])![1])!;
+		if (mce[109].v === flag) return r;
+		mce[109] = bool(flag);
+		return { ...r, event: Buffer.from(thrift.encode(ev)) };
+	});
+}
+
 // --- the socket: frames are Thrift structs; {1: event} and {3: {1: [events]}}
 // carry events, {2: instruction} the rest (2 is keep-alive)
 
@@ -403,9 +424,9 @@ type Vars = Record<string, any>;
 
 async function conversationData(viewerId: string, conversationId: string) {
 	const all = await members(conversationId);
-	const latest = await sql`select e.event from chat_events e where e.conversation_id = ${conversationId} and e.kind = ${KIND.message} and not e.deleted
+	const latest = await withRequestFlags(viewerId, await sql`select e.event from chat_events e where e.conversation_id = ${conversationId} and e.kind = ${KIND.message} and not e.deleted
 		and e.seq > coalesce((select deleted_before from chat_members where conversation_id = ${conversationId} and user_id = ${viewerId}::bigint), 0)
-		and not exists (select 1 from chat_hidden_events h where h.user_id = ${viewerId}::bigint and h.seq = e.seq) order by e.seq desc limit 21`;
+		and not exists (select 1 from chat_hidden_events h where h.user_id = ${viewerId}::bigint and h.seq = e.seq) order by e.seq desc limit 21`);
 	const keys = await sql`select event from chat_events where conversation_id = ${conversationId} and kind = ${KIND.keyChange} order by seq desc limit 5`;
 	// each member's newest read marker: one index lookup per member, where
 	// sorting every marker the conversation ever had grew with its history
@@ -860,7 +881,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 				get_conversation_page: {
 					...empty,
 					message_request_state: state?.accepted === false ? "Received" : pendingPeer ? "Sent" : "None",
-					encoded_message_events: rows.slice(0, limit).map((r: { event: Buffer }) => b64(r.event)),
+					encoded_message_events: (await withRequestFlags(v.id, rows.slice(0, limit))).map((r: { event: Buffer }) => b64(r.event)),
 					missing_conversation_key_change_events: missing.map((r: { event: Buffer }) => b64(r.event)),
 					has_more: rows.length > limit,
 				},
@@ -879,7 +900,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 			data: {
 				get_message_events_by_sequence_id: {
 					__typename: "XChatGetMessageEventsBySequenceIdResponse",
-					encoded_message_events: rows.filter((r: any) => r.kind !== KIND.keyChange).map((r: any) => b64(r.event)),
+					encoded_message_events: (await withRequestFlags(v.id, rows.filter((r: any) => r.kind !== KIND.keyChange))).map((r: any) => b64(r.event)),
 					encoded_conversation_key_change_events: rows.filter((r: any) => r.kind === KIND.keyChange).map((r: any) => b64(r.event)),
 					not_found_sequence_ids: seqs.filter((s) => !found.has(s)),
 				},
@@ -902,7 +923,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 						rows.length > limit
 							? { __typename: "XChatGetMessageEventsPageContinueCursor", max_local_sequence_id: page[page.length - 1].seq }
 							: { __typename: "XChatGetMessageEventsPageEndCursor", pull_finished: true },
-					encoded_message_events: page.map((r: any) => b64(r.event)),
+					encoded_message_events: (await withRequestFlags(v.id, page)).map((r: any) => b64(r.event)),
 					message_requests_count: 0,
 					message_requests_info: null,
 					error_code: null,

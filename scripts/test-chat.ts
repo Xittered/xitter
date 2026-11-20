@@ -89,6 +89,13 @@ try {
 	check("accepting trusts the sender, so the client stops asking", (await trustOf()) === true);
 	check("accepting clears pending request", (await gql(b, "GetMessageRequestsPageQuery")).data.get_message_requests_page.total_count === 0);
 	check("accepted conversation appears in inbox", (await gql(b, "GetInitialXChatPageQuery")).data.get_initial_chat_page.items.length === 1);
+	const requestFlags = async (account: typeof a) => {
+		const page = (await gql(account, "GetConversationPageQuery", { conversation_id: conversation })).data.get_conversation_page.encoded_message_events as string[];
+		return page.map((e) => thrift.fields(thrift.fields(thrift.decode(thrift.fromBase64(e))[7])?.[1])?.[109]?.v);
+	};
+	const flagsAfter = await requestFlags(b);
+	check("messages sent before accepting no longer say they're requests", flagsAfter.length >= 2 && flagsAfter.every((f) => f === false));
+	check("nor for the sender", (await requestFlags(a)).every((f) => f === false));
 	const conversationKey = crypto.getRandomValues(new Uint8Array(32));
 	const wrapped = await Promise.all([a, b].map(async (account, i) => ({ user_id: account.id, public_key_version: "1",
 		encrypted_conversation_key: await eciesWrap(conversationKey, Buffer.from(identities[i].publicKeyB64, "base64")) })));
