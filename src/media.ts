@@ -763,7 +763,7 @@ function avatarWidth(suffix: string | undefined): number | undefined {
 
 async function resizedAvatar(served: Served, body: Blob, width: number): Promise<Blob | undefined> {
 	const png = served.mime !== "image/jpeg";
-	const out = join(AVATAR_DIR(), `${served.id}_${width}.${png ? "png" : "jpg"}`);
+	const out = join(AVATAR_DIR(), `${served.id}_${width}@2x.${png ? "png" : "jpg"}`);
 	if (existsSync(out)) return Bun.file(out);
 	const key = out;
 	const running = resizing.get(key);
@@ -772,7 +772,7 @@ async function resizedAvatar(served: Served, body: Blob, width: number): Promise
 		mkdirSync(AVATAR_DIR(), { recursive: true });
 		const input = await body.bytes();
 		const tmp = `${out}.${process.pid}.tmp`;
-		const p = spawnLimited([FFMPEG, "-v", "error", "-i", "pipe:0", "-vf", `scale='min(${width},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "3"]), "-y", tmp], 20_000, "ignore", input);
+		const p = spawnLimited([FFMPEG, "-v", "error", "-i", "pipe:0", "-vf", `scale='min(${width * 2},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "2"]), "-y", tmp], 20_000, "ignore", input);
 		if ((await p.exited) !== 0 || !existsSync(tmp)) {
 			rmSync(tmp, { force: true });
 			return undefined;
