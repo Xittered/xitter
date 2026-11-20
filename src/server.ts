@@ -51,6 +51,7 @@ import { gifSettingsRoute } from "./gif-settings";
 import { classicDetailRoute, postCounts } from "./classic-detail";
 import { capRoute } from "./cap";
 import { parodyLabelsRoute } from "./parody-labels";
+import { adsRoute } from "./ads-page";
 import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
 import { cardImage } from "./explore-cards";
@@ -559,6 +560,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		return Response.redirect(`/settings/xitter/${p.slice("/account/".length)}${url.search}`, 302);
 	// and the side bar's pages fill the main column instead (tidy.ts FULL)
 	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && (p === "/account/money" || p.startsWith("/account/money/"))) return Response.redirect(`/i/xmoney${p.slice("/account/money".length)}${url.search}`, 302);
+	if (viewer && !oldBuild && req.method === "GET" && req.headers.get("sec-fetch-dest") === "document" && p === "/account/ads") return Response.redirect(`/i/ads${url.search}`, 302);
 	if (p === "/oauth/authorize") return oauthAuthorize(req, url, viewer);
 	if (p === "/account/apps" && viewer) return connectedAppsRoute(req, viewer);
 	// opened on its own, the index comes up as Settings > Xitter settings, like the pages it lists
@@ -568,6 +570,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/account/client" && viewer) return clientRoute(req, viewer, clientBuilds().find((b) => b.dir === clientDir()));
 	if (p === "/account/post-details" && viewer) return classicDetailRoute(req, viewer);
 	if (p === "/account/labels" && viewer) return parodyLabelsRoute(req, viewer);
+	if ((p === "/account/ads" || /^\/account\/ads\/\d{1,19}$/.test(p)) && viewer) return adsRoute(req, viewer, p);
 	if (p === "/account/circle" && viewer) return circleRoute(req, viewer);
 	if (p === "/account/apps/developer" && viewer) return developerAppsRoute(req, viewer);
 	if (p === "/federation/superadmin" || p.startsWith("/federation/superadmin/")) return superadminHomeRoute(req, url, viewer);

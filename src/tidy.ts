@@ -88,6 +88,7 @@ const PALETTE = "M480-80q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 
 // solid for the side bar while its page is open, as X fills its own icons
 export const MONEY_ICON = "M9.69 5.11L10.04 3.60L15.04 3.60L14.76 4.80L18.46 4.80L17.31 9.80L15.63 9.80L16.33 10.13L17 10.66L17.52 11.33L17.77 11.85L17.94 12.41L18.04 13.32L17.95 14.26L17.78 14.90L17.53 15.53L17.21 16.14L16.58 17L16.09 17.52L15.55 17.98L14.96 18.39L14.34 18.72L13.69 18.99L13.27 20.80L8.27 20.80L8.61 19.30L4.61 19.30L5.77 14.30L7.74 14.30L7.05 13.97L6.37 13.44L6.01 13L5.61 12.25L5.38 11.39L5.34 10.78L5.38 10.15L5.60 9.20L5.85 8.57L6.37 7.66L6.80 7.10L7.29 6.58L7.83 6.12L8.42 5.71L9.04 5.38ZM13.13 5.15L11.23 5.15L10.95 6.36L10.28 6.45L9.71 6.63L8.98 7L8.48 7.37L7.89 7.96L7.52 8.46L7.16 9.18L7 9.74L6.93 10.60L6.98 11L7.21 11.65L7.41 11.98L7.66 12.27L7.96 12.52L8.30 12.72L8.79 12.90L9.51 13L13.55 13.01L13.89 13.11L14.17 13.30L14.44 13.71L14.50 14.06L14.46 14.43L14.23 14.97L13.97 15.29L13.65 15.55L13.09 15.80L12.68 15.85L6.96 15.85L6.52 17.75L10.52 17.75L10.18 19.25L12.08 19.25L12.42 17.74L13.10 17.65L13.67 17.47L14.40 17.10L14.90 16.73L15.49 16.14L15.85 15.64L16.21 14.92L16.38 14.36L16.45 13.50L16.39 13.10L16.17 12.45L15.97 12.12L15.71 11.83L15.41 11.58L15.07 11.38L14.58 11.20L13.87 11.10L9.83 11.09L9.34 10.91L9.10 10.68L8.94 10.39L8.88 10.04L8.91 9.67L9.15 9.13L9.56 8.67L9.91 8.44L10.29 8.30L10.70 8.25L16.12 8.25L16.55 6.35L12.85 6.35Z";
 export const MONEY_ICON_FILLED = "M10.80 4.20L14 4.20L13.65 5.70L17.65 5.70L16.92 8.90L10.41 8.91L10.11 9.01L9.92 9.13L9.76 9.29L9.60 9.57L9.55 9.87L9.62 10.14L9.80 10.34L10.06 10.44L14.06 10.45L14.86 10.56L15.32 10.72L15.90 11.04L16.25 11.34L16.70 11.92L16.97 12.53L17.11 13.30L17.09 14.01L16.90 14.84L16.69 15.35L16.42 15.85L16.09 16.32L15.72 16.76L15.29 17.16L14.83 17.51L14.33 17.81L13.82 18.05L12.94 18.31L12.51 20.20L9.31 20.20L9.72 18.40L5.42 18.40L6.16 15.20L12.96 15.19L13.27 15.09L13.46 14.97L13.68 14.72L13.78 14.53L13.83 14.23L13.76 13.96L13.58 13.76L13.32 13.66L9.32 13.65L8.52 13.54L8.06 13.38L7.48 13.06L6.94 12.56L6.67 12.18L6.41 11.57L6.27 10.80L6.29 10.09L6.39 9.57L6.56 9.05L6.96 8.25L7.28 7.78L7.66 7.34L8.09 6.94L8.55 6.59L9.04 6.29L9.56 6.05L10.43 5.79Z";
+const MEGAPHONE = "M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T620-480q0 41-16.5 75.5T560-346ZM300-480Z";
 const STATS = "M4 20V10h3v10H4zm6.5 0V4h3v16h-3zM17 20v-7h3v7h-3z";
 const MASK = "M2 7c3-1.5 6.5-1.5 10 0 3.5-1.5 7-1.5 10 0v3c0 4-2.5 7-5.5 7-2 0-3.2-1.2-4.5-3-1.3 1.8-2.5 3-4.5 3C4.5 17 2 14 2 10V7zm2 1.3V10c0 3 1.7 5 3.5 5 1.2 0 2-.8 3.3-2.8l1.2-1.7 1.2 1.7c1.3 2 2.1 2.8 3.3 2.8 1.8 0 3.5-2 3.5-5V8.3c-2.4-.9-5-.8-7.6.3L12 9l-.4-.4C9 7.2 6.4 7.4 4 8.3zM6 10h4v2H6v-2zm8 0h4v2h-4v-2z";
 const CIRCLE = "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-3 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5c-2.2 0-4 1.1-4 2.5V17h8v-.5c0-1.4-1.8-2.5-4-2.5z";
@@ -111,6 +112,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 		links.push({ href: "/account/money", text: "Equicoins", description: "Send Equicoins to other accounts.", icon: MONEY_ICON, iconOn: MONEY_ICON_FILLED, where: "nav" });
 		links.push({ href: "/account/merchant", text: "Equicoins", description: "Merchant mode: payments to your organisation read as purchases.", icon: MONEY_ICON, where: "settings" });
 	}
+	if (s.ads.enabled) links.push({ href: "/account/ads", text: "Ads Manager", description: "Run ads with Equicoins.", icon: MEGAPHONE, viewBox: "0 -960 960 960", where: "nav" });
 	links.push({ href: "/account/apps", text: "Connected apps", description: "Review and remove apps authorized to use your account.", icon: CODE, viewBox: "0 -960 960 960", where: "settings" });
 	if (s.invite_quota.enabled && s.signup_mode === "invite")
 		links.push({ href: "/account/invites", text: "Invites", description: `Invite people you know to ${s.instance_name}.`, icon: TICKET, where: "both" });
@@ -264,7 +266,7 @@ export const TIDY_SCRIPT = `(function(){
 	var OWN="/settings/xitter/";
 	// the side bar's own entries (where "nav") open on a path of the client's
 	// own instead, which it answers with its not-found page in the main column
-	var FULL={"/i/xmoney":"/account/money","/i/circles":"/account/circle"};
+	var FULL={"/i/xmoney":"/account/money","/i/ads":"/account/ads","/i/circles":"/account/circle"};
 	// and the pages under it (a payment: /i/xmoney/p/<id>)
 	function fullOf(p){for(var k in FULL)if(p===k||p.indexOf(k+"/")===0)return FULL[k]+p.slice(k.length)}
 	function full(p){for(var k in FULL)if(p===FULL[k]||p.indexOf(FULL[k]+"/")===0)return k+p.slice(FULL[k].length)}

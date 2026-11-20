@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { AdminError } from "../src/admin";
-import { AdError, VIEWS_PER_DAY, adActions, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, myAds, pickAd, priceFor } from "../src/ads";
+import { adActions } from "../src/ads-admin";
+import { AdError, VIEWS_PER_DAY, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, extendAd, myAds, pauseAd, pickAd, priceFor } from "../src/ads";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
 import { createPost } from "../src/posts";
@@ -133,6 +134,21 @@ try {
 	const [spent] = await sql`select status, spent_cents::bigint as cents, budget_cents::bigint as budget from ads where id = ${open.id}::bigint`;
 	assert.equal(spent.status, "ended", "an ad stops when its budget is spent");
 	assert.equal(Number(spent.cents), Number(spent.budget), "it never spends more than its budget");
+
+	await sql`update users set preferences = '{}' where id = ${people.bob}::bigint`;
+	await pauseAd(people.alice, hidden.id, true);
+	assert.equal(await pickAd(people.bob, []), undefined, "a paused ad isn't shown");
+	await refused(pauseAd(people.alice, hidden.id, true), AdError, /running/);
+	await refused(pauseAd(people.bob, hidden.id, false), AdError, /paused/);
+	await pauseAd(people.alice, hidden.id, false);
+	const wallet = await balance(people.alice);
+	const longer = await extendAd(people.alice, hidden.id, { budgetCents: 300, days: 2 });
+	assert.equal(longer.budgetCents, 1300);
+	assert.equal(await balance(people.alice), wallet - 300, "extending takes the added budget");
+	await refused(extendAd(people.alice, hidden.id, { days: 3 }), AdError, /more than 7 days/);
+	await refused(extendAd(people.alice, hidden.id, {}), AdError, /Add days/);
+	await refused(extendAd(people.alice, hidden.id, { budgetCents: 1_000_000 }), AdError, /enough/);
+	await refused(extendAd(people.alice, open.id, { days: 1 }), AdError, /running or paused/);
 
 	const list = (await run("ads", { status: "rejected" })) as any;
 	assert(list.ads.some((a: any) => a.id === second.id && a.rejectReason === "Misleading claim"));

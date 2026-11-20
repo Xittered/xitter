@@ -1,9 +1,7 @@
-import { AdminError, type Action, audit, idOf } from "./admin";
 import { sql } from "./db";
 import { newId } from "./ids";
 import { blockedFor, outOfView } from "./blocks";
 import { formatCents } from "./money";
-import { createPost } from "./posts";
 import { settings } from "./settings";
 
 export class AdError extends Error {}
@@ -13,11 +11,11 @@ export type AdStatus = "pending" | "running" | "paused" | "ended" | "rejected" |
 const AD_TEXT_MAX = 280;
 const AD_URL_MAX = 500;
 
-const adCols = sql`id::text, user_id::text, text, url, budget_cents::bigint as budget_cents, spent_cents::bigint as spent_cents,
+export const adCols = sql`id::text, user_id::text, text, url, budget_cents::bigint as budget_cents, spent_cents::bigint as spent_cents,
 	refunded_cents::bigint as refunded_cents, days, status, reject_reason, created_at, reviewed_at, starts_at, ends_at,
 	ad_only, post_id::text as post_id, views`;
 
-const toAd = (r: any) => ({
+export const toAd = (r: any) => ({
 	id: r.id as string,
 	userId: r.user_id as string,
 	text: r.text as string,
@@ -71,7 +69,7 @@ export async function currentPrice(db: typeof sql = sql) {
 
 export const estimateViews = (budgetCents: number, cpmCents: number) => Math.floor((budgetCents * 1000) / cpmCents);
 
-async function refund(tx: typeof sql, userId: string, cents: number) {
+export async function refund(tx: typeof sql, userId: string, cents: number) {
 	if (cents <= 0) return;
 	await tx`insert into money_wallets (user_id, balance_cents) values (${userId}::bigint, 0) on conflict do nothing`;
 	await tx`update money_wallets set balance_cents = balance_cents + ${cents} where user_id = ${userId}::bigint`;
@@ -124,6 +122,37 @@ export async function cancelAd(userId: string, adId: string): Promise<Ad> {
 	return toAd(row);
 }
 
+export async function pauseAd(userId: string, adId: string, pause: boolean): Promise<Ad> {
+	const from = pause ? "running" : "paused";
+	const [row] = await sql`update ads set status = ${pause ? "paused" : "running"}
+		where id = ${adId}::bigint and user_id = ${userId}::bigint and status = ${from} and ends_at > now() returning ${adCols}`;
+	if (!row) throw new AdError(pause ? "Only a running ad can be paused." : "Only a paused ad can be resumed.");
+	return toAd(row);
+}
+
+export async function extendAd(userId: string, adId: string, input: { budgetCents?: unknown; days?: unknown }): Promise<Ad> {
+	const rules = settings().ads;
+	const add = Number(input.budgetCents ?? 0);
+	const days = Number(input.days ?? 0);
+	if (!Number.isSafeInteger(add) || add < 0 || !Number.isInteger(days) || days < 0) throw new AdError("Add a whole number of days or an amount of Equicoins.");
+	if (!add && !days) throw new AdError("Add days or Equicoins to extend an ad.");
+	const row = await sql.begin(async (tx) => {
+		const [ad] = await tx`select ${adCols}, extract(epoch from ends_at - now())::float8 as left_s from ads where id = ${adId}::bigint and user_id = ${userId}::bigint for update`;
+		if (!ad) throw new AdError("No such ad.");
+		if (!["running", "paused"].includes(ad.status) || Number(ad.left_s) <= 0) throw new AdError("Only a running or paused ad can be extended.");
+		if (Number(ad.left_s) + days * 86_400 > rules.max_days * 86_400) throw new AdError(`An ad can't run more than ${rules.max_days} days ahead.`);
+		if (add) {
+			const [wallet] = await tx`select balance_cents::bigint as cents from money_wallets where user_id = ${userId}::bigint for update`;
+			if (!wallet || Number(wallet.cents) < add) throw new AdError("You don't have enough Equicoins for that.");
+			await tx`update money_wallets set balance_cents = balance_cents - ${add} where user_id = ${userId}::bigint`;
+		}
+		const [done] = await tx`update ads set budget_cents = budget_cents + ${add}, days = days + ${days}, ends_at = ends_at + make_interval(days => ${days})
+			where id = ${adId}::bigint returning ${adCols}`;
+		return done;
+	});
+	return toAd(row);
+}
+
 export async function endExpiredAds() {
 	await sql.begin(async (tx) => {
 		const done = await tx`update ads set status = 'ended', refunded_cents = budget_cents - spent_cents
@@ -162,47 +191,3 @@ export async function chargeView(adId: string, viewerId: string) {
 		if (ad && Number(ad.spent_milli) >= Number(ad.budget_cents) * 1000) await tx`update ads set status = 'ended', ends_at = now() where id = ${adId}::bigint`;
 	});
 }
-
-export const adActions: Record<string, Action> = {
-	ads: {
-		role: "moderator",
-		run: async (_a, b) => {
-			await endExpiredAds();
-			const status = ["pending", "running", "paused", "ended", "rejected", "cancelled"].includes(String(b.status)) ? String(b.status) : "pending";
-			const rows = await sql`select ${adCols}, (select screen_name from users u where u.id = ads.user_id) as screen_name
-				from ads where status = ${status} order by id ${status === "pending" ? sql`asc` : sql`desc`} limit 200`;
-			return { ads: rows.map((r: any) => ({ ...toAd(r), screenName: r.screen_name })), price: await currentPrice(), economy: await economyNow() };
-		},
-	},
-	reviewAd: {
-		role: "moderator",
-		run: async (a, b) => {
-			const id = idOf(b.id, "ad");
-			const approve = b.approve === true;
-			const reason = typeof b.reason === "string" ? b.reason.trim().slice(0, 500) : "";
-			if (!approve && !reason) throw new AdminError("Say why the ad is rejected; the advertiser sees it.");
-			const ad = await sql.begin(async (tx) => {
-				const [row] = await tx`select ${adCols} from ads where id = ${id}::bigint for update`;
-				if (!row) throw new AdminError("No such ad.", 404);
-				if (row.status !== "pending") throw new AdminError("That ad has already been reviewed.");
-				if (approve) {
-					const postId = await createPost(row.user_id, row.url ? `${row.text}\n\n${row.url}` : row.text, { db: tx, skipReview: true });
-					if (row.ad_only) {
-						await tx`update posts set ad_only = true where id = ${postId}::bigint`;
-						await tx`update user_stats set posts = greatest(posts - 1, 0) where user_id = ${row.user_id}::bigint`;
-					}
-					const [done] = await tx`update ads set status = 'running', reviewed_at = now(), reviewed_by = ${a.id}::bigint, post_id = ${postId}::bigint,
-						starts_at = now(), ends_at = now() + days * interval '1 day' where id = ${id}::bigint returning ${adCols}`;
-					return done;
-				}
-				const back = Math.floor((Number(row.budget_cents) * settings().ads.reject_refund_pct) / 100);
-				await refund(tx, row.user_id, back);
-				const [done] = await tx`update ads set status = 'rejected', reviewed_at = now(), reviewed_by = ${a.id}::bigint,
-					reject_reason = ${reason}, refunded_cents = ${back} where id = ${id}::bigint returning ${adCols}`;
-				return done;
-			});
-			await audit(a, approve ? "ad_approve" : "ad_reject", ad.user_id, { ad: id, budget: Number(ad.budget_cents), refunded: Number(ad.refunded_cents), ...(reason ? { reason } : {}) });
-			return { ad: toAd(ad) };
-		},
-	},
-};

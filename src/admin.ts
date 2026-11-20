@@ -38,7 +38,7 @@ import { oauthAppActions } from "./oauth-admin";
 import { hashflagActions } from "./hashflags";
 import { switchActions } from "./feature-switches";
 import { moneyActions } from "./money-admin";
-import { adActions } from "./ads";
+import { adActions } from "./ads-admin";
 import { AFFILIATION_LIMIT } from "./org-manage";
 import { staffGate } from "./staff-access";
 import { countryCode, countryDisplayName } from "./countries";
