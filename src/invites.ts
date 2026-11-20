@@ -108,7 +108,9 @@ export async function checkSignup(f: SignupForm) {
 	if (f.password.length > 256) throw new SignupError("Passwords are at most 256 characters.");
 	if ((await getSetting("signup_mode")) === "closed") throw new SignupError("Sign-up is closed on this instance.");
 	if ((await sql`select 1 from users where lower(screen_name) = lower(${screenName})`).length) throw new SignupError("That username is taken.");
-	if ((await sql`select 1 from users where lower(email) = ${email}`).length) throw new SignupError("That email is already used by another account.");
+	const [owner] = await sql`select deactivated_at from users where lower(email) = ${email}`;
+	if (owner?.deactivated_at) throw new SignupError("That email belongs to a deactivated account. Sign in to it to restore it, or ask this instance's staff to delete it.");
+	if (owner) throw new SignupError("That email is already used by another account.");
 	const evaded = await evadedSuspension(email, f.ip);
 	if (evaded) {
 		await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, null, 'evasion_signup_refused', ${evaded.user},

@@ -1120,6 +1120,15 @@ create table if not exists retired_identities (
 	primary key (kind, value)
 );
 
+do $$ begin
+	if not exists (select 1 from schema_steps where name = 'unretire_deactivated') then
+		delete from retired_identities r where r.reason like 'deleted while suspended%' and not exists (
+			select 1 from audit_log l where (l.target = r.user_id::text or (l.action = 'bulk_status' and l.detail->'ids' ? r.user_id::text))
+				and l.action in ('set_status', 'temporary_status', 'bulk_status', 'auto_suspend_name', 'suspend_blocked_names', 'escalate'));
+		insert into schema_steps (name) values ('unretire_deactivated');
+	end if;
+end $$;
+
 -- Profile labels staff make in the admin panel, worn where X shows "Parody
 -- account": the text, a custom badge as its icon (the parody mask without
 -- one) and an optional link. Staff and parody/commentary/fan labels don't
