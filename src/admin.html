@@ -461,6 +461,7 @@ const PAGES = {
 	overview: { icon: "monitoring", title: "Overview" },
 	reports: { icon: "flag", title: "Reports" },
 	appeals: { icon: "gavel", title: "Appeals", needs: "appeals" },
+	ads: { icon: "campaign", title: "Ads", needs: "ads" },
 	bulkStrike: { icon: "swords", title: "Bulk strike", needs: "bulkStrike" },
 	users: { icon: "group", title: "Users" },
 	orgs: { icon: "domain", title: "Organisations" },
@@ -498,7 +499,7 @@ const PAGES = {
 
 const GROUPS = [
 	[null, ["overview"]],
-	["Moderation", ["reports", "appeals", "bulkStrike", "automod", "posts", "articles", "media"]],
+	["Moderation", ["reports", "appeals", "ads", "bulkStrike", "automod", "posts", "articles", "media"]],
 	["People", ["users", "orgs", "invites", "badges"]],
 	["Content", ["stickers", "hashflags", "topics", "cards"]],
 	["Instance", ["settings-account", "settings-limits", "settings-community", "settings-safety", "settings-discovery", "settings-branding", "switches", "money", "email", "apps", "oauth", "federation"]],
@@ -852,6 +853,31 @@ const RENDER = {
 		main.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { sessionStorage.setItem("appealStatus", b.dataset.tab); route(); });
 		main.querySelectorAll("[data-appeal]").forEach((box) => box.querySelectorAll("[data-do]").forEach((b) => b.onclick = () =>
 			act(() => api("resolveAppeal", { id: box.dataset.appeal, status: b.dataset.do, reply: box.querySelector("[data-reply]").value }), "Answer sent").then(route)));
+	},
+
+	async ads(main) {
+		const status = sessionStorage.getItem("adStatus") || "pending";
+		const { ads, price, economy } = await api("ads", { status });
+		const usd = (c) => "$" + (c / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const tabs = [["pending", "To review"], ["running", "Running"], ["paused", "Paused"], ["ended", "Ended"], ["rejected", "Rejected"], ["cancelled", "Cancelled"]];
+		main.innerHTML = '<h1>Ads</h1><p class="dim small">A view costs ' + usd(price) + " per 1000 right now. " + usd(economy.supplyCents) + " is in circulation and about " + usd(economy.projectedCents) + " is expected over the longest run. Rejecting an ad refunds part of its budget.</p>" +
+			'<div class="bar">' + tabs.map(([s, l]) => '<button class="btn' + (s === status ? " primary" : "") + '" data-tab="' + s + '">' + l + "</button>").join("") + "</div>" +
+			(ads.length ? ads.map((ad) =>
+				'<div class="box" style="margin-bottom:12px" data-ad="' + esc(ad.id) + '">' +
+				'<p class="small"><a href="#user/' + esc(ad.userId) + '">@' + esc(ad.screenName || "unknown") + "</a>" + ' <span class="dim">· ' + usd(ad.budgetCents) + " for " + ad.days + (ad.days === 1 ? " day" : " days") + " · " + (ad.adOnly ? "only as an ad" : "also on their profile") + " · " + esc(when(ad.createdAt)) + "</span></p>" +
+				'<p style="white-space:pre-wrap">' + esc(ad.text) + "</p>" +
+				(ad.url ? '<p class="small"><a target="_blank" rel="noopener noreferrer" href="' + esc(ad.url) + '">' + esc(ad.url) + "</a></p>" : "") +
+				(ad.status === "pending"
+					? (can("reviewAd") ? '<div class="field"><textarea data-reason placeholder="Why it is rejected, shown to the advertiser" maxlength="500"></textarea></div><div class="row"><button class="btn primary" data-do="1">Approve</button><button class="btn danger" data-do="0">Reject</button></div>' : "")
+					: '<p class="dim small">' + usd(ad.spentCents) + " spent · " + ad.views.toLocaleString() + " views" + (ad.refundedCents ? " · " + usd(ad.refundedCents) + " refunded" : "") + (ad.endsAt ? " · ends " + esc(when(ad.endsAt)) : "") + "</p>" +
+						(ad.rejectReason ? '<p class="dim small">Rejected: ' + esc(ad.rejectReason) + "</p>" : "") +
+						(ad.postId ? '<a class="btn" target="_blank" href="/i/status/' + esc(ad.postId) + '">Open post</a>' : "")) +
+				"</div>").join("") : '<div class="empty">' + (status === "pending" ? "No ads waiting for review." : "Nothing here.") + "</div>");
+		main.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { sessionStorage.setItem("adStatus", b.dataset.tab); route(); });
+		main.querySelectorAll("[data-ad]").forEach((box) => box.querySelectorAll("[data-do]").forEach((b) => b.onclick = () => {
+			const approve = b.dataset.do === "1";
+			act(() => api("reviewAd", { id: box.dataset.ad, approve, reason: box.querySelector("[data-reason]").value }), approve ? "Ad approved and running" : "Ad rejected and partly refunded").then(route);
+		}));
 	},
 
 	async articles(main) {
