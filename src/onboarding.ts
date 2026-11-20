@@ -84,7 +84,7 @@ function withEmailField(messages: Message[]): Message[] {
 	const block = parentOf.get(input);
 	const holder = block === undefined ? undefined : parentOf.get(block);
 	if (input < 0 || block === undefined || holder === undefined) throw new Error("setup screen: no name field to copy");
-	const swap: Record<string, string> = { "Name *": "Email *", name: "email", "Full name": "Email" };
+	const swap: Record<string, string> = { "Name *": "Email *", name: "email", "Display name": "Email" };
 	const copies = new Map<number, number>();
 	const copy = (i: number): number => {
 		if (copies.has(i)) return copies.get(i)!;
