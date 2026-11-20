@@ -1,8 +1,9 @@
 import { strict as assert } from "node:assert";
 import { AdminError } from "../src/admin";
-import { AdError, adActions, cancelAd, createAd, endExpiredAds, estimateViews, myAds, priceFor } from "../src/ads";
+import { AdError, VIEWS_PER_DAY, adActions, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, myAds, pickAd, priceFor } from "../src/ads";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
+import { createPost } from "../src/posts";
 import { loadSettings, setSetting, settings } from "../src/settings";
 
 const database = new URL(process.env.DATABASE_URL ?? "postgres://localhost/xitter");
@@ -78,11 +79,60 @@ try {
 	await endExpiredAds();
 	assert.equal(await balance(people.alice), 9350, "ending twice refunds once");
 
-	const base = priceFor(0);
-	assert.equal(base, settings().ads.base_cpm_cents, "no money in running ads costs the base price");
-	assert(priceFor(settings().ads.price_scale_cents) === base * 2, "the price doubles once running budgets reach the scale");
-	assert(priceFor(settings().ads.price_scale_cents * 1000) < base * 12, "the price grows slowly as more money comes in");
+	const small = { projectedCents: 0 };
+	const base = priceFor(0, small);
+	assert.equal(base, settings().ads.base_cpm_cents, "a tiny economy with nothing running costs the floor price");
+	assert.equal(priceFor(settings().ads.price_scale_cents, small), base * 2, "the price doubles once running budgets reach the scale");
+	assert(priceFor(settings().ads.price_scale_cents * 1000, small) < base * 12, "the price grows slowly as more money comes in");
+	const big = { projectedCents: 1_000_000_000 };
+	assert.equal(priceFor(0, big), 20_000, "with nothing running, the price follows the size of the economy");
+	assert.equal(priceFor(10_000_000, big), 40_000, "demand is measured against the economy, not a fixed amount");
+	const triple = { projectedCents: 3_000_000_000 };
+	assert.equal(priceFor(30_000_000, triple) / priceFor(0, triple), priceFor(10_000_000, big) / priceFor(0, big), "the same share of a bigger economy raises the price by the same factor");
 	assert.equal(estimateViews(1000, 20), 50_000);
+
+	const hidden = await createAd(people.alice, { ...ad, text: "Only as an ad", adOnly: true });
+	const open = await createAd(people.alice, { ...ad, text: "On my profile too", adOnly: false });
+	const hiddenRun = ((await run("reviewAd", { id: hidden.id, approve: true })) as any).ad;
+	const openRun = ((await run("reviewAd", { id: open.id, approve: true })) as any).ad;
+	assert(hiddenRun.postId && openRun.postId, "approving makes the ad's post");
+	const [hiddenPost] = await sql`select ad_only, text from posts where id = ${hiddenRun.postId}::bigint`;
+	assert.equal(hiddenPost.ad_only, true);
+	assert.equal(hiddenPost.text, "Only as an ad\n\nhttps://example.com/thing", "the link goes under the text");
+	const inFeeds = (await sql`select post_id::text from feed_items where author_id = ${people.alice}::bigint`).map((r: any) => r.post_id);
+	assert(!inFeeds.includes(hiddenRun.postId), "an ad-only post stays out of profiles and timelines");
+	assert(inFeeds.includes(openRun.postId), "a post for everyone shows like any other");
+	const [stats] = await sql`select posts from user_stats where user_id = ${people.alice}::bigint`;
+	assert.equal(stats.posts, 1, "an ad-only post isn't counted on the profile");
+	await sql`delete from posts where id = ${hiddenRun.postId}::bigint`;
+	const [statsAfter] = await sql`select posts from user_stats where user_id = ${people.alice}::bigint`;
+	assert.equal(statsAfter.posts, 1, "deleting an ad-only post doesn't lower the count");
+	await sql`update ads set post_id = null where id = ${hidden.id}::bigint`;
+	const second2 = await createPost(people.alice, "keep for picking");
+	await sql`update posts set ad_only = true where id = ${second2}::bigint`;
+	await sql`update ads set post_id = ${second2}::bigint where id = ${hidden.id}::bigint`;
+
+	const picked = await pickAd(people.bob, []);
+	assert(picked && [hidden.id, open.id].includes(picked.adId), "a running ad is picked for someone else");
+	assert.equal(await pickAd(people.alice, []), undefined, "nobody is shown their own ad");
+	assert.equal(await pickAd(people.bob, [second2, openRun.postId]), undefined, "an ad already on the page isn't picked again");
+	await chargeView(hidden.id, people.bob);
+	await chargeView(hidden.id, people.bob);
+	const [afterViews] = await sql`select views, spent_milli::bigint as milli from ads where id = ${hidden.id}::bigint`;
+	assert.equal(afterViews.views, 1, "a second view within the hour costs nothing");
+	assert(Number(afterViews.milli) > 0, "a view is charged");
+	await sql`insert into ad_views (ad_id, viewer_id, n) values (${open.id}::bigint, ${people.bob}::bigint, ${VIEWS_PER_DAY}) on conflict (ad_id, viewer_id, day) do update set n = ${VIEWS_PER_DAY}`;
+	await sql`update ad_views set n = ${VIEWS_PER_DAY} where viewer_id = ${people.bob}::bigint`;
+	assert.equal(await pickAd(people.bob, []), undefined, "nobody sees one ad more than the daily cap");
+	await sql`delete from ad_views where viewer_id = ${people.bob}::bigint`;
+	await sql`update users set preferences = '{"hide_ads": true}' where id = ${people.bob}::bigint`;
+	assert.equal(await pickAd(people.bob, []), undefined, "hiding ads hides every ad");
+
+	await sql`update ads set spent_milli = budget_cents * 1000 - 1 where id = ${open.id}::bigint`;
+	await chargeView(open.id, people.mod);
+	const [spent] = await sql`select status, spent_cents::bigint as cents, budget_cents::bigint as budget from ads where id = ${open.id}::bigint`;
+	assert.equal(spent.status, "ended", "an ad stops when its budget is spent");
+	assert.equal(Number(spent.cents), Number(spent.budget), "it never spends more than its budget");
 
 	const list = (await run("ads", { status: "rejected" })) as any;
 	assert(list.ads.some((a: any) => a.id === second.id && a.rejectReason === "Misleading claim"));

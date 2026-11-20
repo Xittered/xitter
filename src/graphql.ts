@@ -26,6 +26,7 @@ import { sql } from "./db";
 import { trendScope } from "./explore-settings";
 import { activeCards, cardsEntry } from "./explore-cards";
 import { isBlockedEitherWay, blockedIds, blockedFor, outOfView, protectedFor } from "./blocks";
+import { chargeView, pickAd } from "./ads";
 import { feature, settings } from "./settings";
 import { freshAsOf, newView, rankedFeed } from "./ranking";
 import * as articles from "./articles";
@@ -146,6 +147,12 @@ const homeResponse = (entries: unknown[], feedbackActions: unknown[] = []) => ({
 // One boosted post (the shop's Post boost) on each page of "For you": not the
 // viewer's own, nor one the page shows already.
 async function boostedPost(viewer: Viewer, onPage: string[]) {
+	const ad = await pickAd(viewer.id, onPage);
+	const adPost = ad && (await getPost(viewer.id, ad.postId));
+	if (ad && adPost) {
+		void chargeView(ad.adId, viewer.id).catch(() => {});
+		return adPost;
+	}
 	if (!feature("money")) return undefined;
 	const [b] = await sql`select b.post_id::text as id from post_boosts b join posts p on p.id = b.post_id
 		where b.ends_at > now() and not p.hidden and p.user_id <> ${viewer.id}::bigint

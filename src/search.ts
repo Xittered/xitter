@@ -121,7 +121,7 @@ export async function searchPosts(
 	// suspended accounts' posts stay out of search for staff too
 	// What the viewer can't open stays out here, not only when the posts are
 	// loaded: the paging cursor is made of these ids.
-	const hidden = sql`and p.user_id not in ${blockedFor(opts.viewerId)} and p.user_id not in ${outOfView(opts.viewerId)}
+	const hidden = sql`and not p.ad_only and p.user_id not in ${blockedFor(opts.viewerId)} and p.user_id not in ${outOfView(opts.viewerId)}
 		and p.user_id not in (select id from users where status = 'suspended') and p.notice->>'type' is distinct from 'Fosnr'
 		and p.user_id not in ${protectedFor(opts.viewerId)} and (not p.hidden or ${staffViewer(opts.viewerId)})
 		${namesOtherInstance(query) ? sql`` : sql`and p.user_id not in ${federatedHiddenFor(opts.viewerId)}`}`;
@@ -162,7 +162,7 @@ export async function hashtagsLike(prefix: string, limit: number): Promise<strin
 	const clean = prefix.replace(/^#/, "").replace(/[^\p{L}\p{N}_]/gu, "");
 	if (!clean) return [];
 	const rows = await sql`select tag, count(*) as n from (
-			select lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag from posts p where p.text ilike ${like(`#${clean}`)} and not p.hidden and p.circle_owner_id is null and p.user_id not in ${outOfView("0")} and p.user_id not in (select id from users where protected)
+			select lower((regexp_matches(p.text, ${HASHTAG_RE}, 'g'))[1]) as tag from posts p where p.text ilike ${like(`#${clean}`)} and not p.hidden and not p.ad_only and p.circle_owner_id is null and p.user_id not in ${outOfView("0")} and p.user_id not in (select id from users where protected)
 			order by p.id desc limit 2000) t
 		where tag like ${`${clean.toLowerCase()}%`} group by tag order by n desc, tag limit ${limit}`;
 	return rows.map((r: any) => `#${r.tag}`);

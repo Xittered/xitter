@@ -1,7 +1,9 @@
 import { AdminError, type Action, audit, idOf } from "./admin";
 import { sql } from "./db";
 import { newId } from "./ids";
+import { blockedFor, outOfView } from "./blocks";
 import { formatCents } from "./money";
+import { createPost } from "./posts";
 import { settings } from "./settings";
 
 export class AdError extends Error {}
@@ -12,7 +14,8 @@ const AD_TEXT_MAX = 280;
 const AD_URL_MAX = 500;
 
 const adCols = sql`id::text, user_id::text, text, url, budget_cents::bigint as budget_cents, spent_cents::bigint as spent_cents,
-	refunded_cents::bigint as refunded_cents, days, status, reject_reason, created_at, reviewed_at, starts_at, ends_at`;
+	refunded_cents::bigint as refunded_cents, days, status, reject_reason, created_at, reviewed_at, starts_at, ends_at,
+	ad_only, post_id::text as post_id, views`;
 
 const toAd = (r: any) => ({
 	id: r.id as string,
@@ -29,18 +32,41 @@ const toAd = (r: any) => ({
 	reviewedAt: (r.reviewed_at as Date | null) ?? null,
 	startsAt: (r.starts_at as Date | null) ?? null,
 	endsAt: (r.ends_at as Date | null) ?? null,
+	adOnly: !!r.ad_only,
+	postId: (r.post_id as string | null) ?? null,
+	views: Number(r.views ?? 0),
 });
 
 export type Ad = ReturnType<typeof toAd>;
 
-export function priceFor(runningCents: number) {
-	const { base_cpm_cents, price_scale_cents } = settings().ads;
-	return Math.max(1, Math.round(base_cpm_cents * (1 + Math.log2(1 + runningCents / price_scale_cents))));
+export type Economy = { supplyCents: number; weeklyMintCents: number; projectedCents: number };
+
+export function priceFor(runningCents: number, economy: Pick<Economy, "projectedCents">) {
+	const { base_cpm_cents, price_scale_cents, economy_cpm_ppm, demand_share_pct } = settings().ads;
+	const base = Math.max(base_cpm_cents, Math.round((economy.projectedCents * economy_cpm_ppm) / 1_000_000));
+	const scale = Math.max(price_scale_cents, (economy.projectedCents * demand_share_pct) / 100);
+	return Math.max(1, Math.round(base * (1 + Math.log2(1 + runningCents / scale))));
+}
+
+let economyCache: { at: number; value: Economy } | undefined;
+
+export async function economyNow(db: typeof sql = sql): Promise<Economy> {
+	if (economyCache && Date.now() - economyCache.at < 5 * 60_000) return economyCache.value;
+	const [row] = await db`select
+		(select coalesce(sum(balance_cents), 0) from money_wallets w join users u on u.id = w.user_id where u.instance is null)::bigint as supply,
+		(select count(*) from money_wallets where created_at > now() - interval '7 days')::bigint as wallets,
+		(select coalesce(sum(cents), 0) from money_like_rewards where created_at > now() - interval '7 days')::bigint as likes,
+		(select coalesce(sum(budget_cents - spent_cents), 0) from ads where status in ('pending', 'running', 'paused'))::bigint as held`;
+	const supplyCents = Number(row.supply) + Number(row.held);
+	const weeklyMintCents = Number(row.wallets) * settings().money.starting_cents + Number(row.likes);
+	const value = { supplyCents, weeklyMintCents, projectedCents: supplyCents + Math.round((weeklyMintCents * settings().ads.max_days) / 7) };
+	economyCache = { at: Date.now(), value };
+	return value;
 }
 
 export async function currentPrice(db: typeof sql = sql) {
 	const [row] = await db`select coalesce(sum(budget_cents - spent_cents), 0)::bigint as cents from ads where status = 'running' and ends_at > now()`;
-	return priceFor(Number(row.cents));
+	return priceFor(Number(row.cents), await economyNow(db));
 }
 
 export const estimateViews = (budgetCents: number, cpmCents: number) => Math.floor((budgetCents * 1000) / cpmCents);
@@ -51,7 +77,7 @@ async function refund(tx: typeof sql, userId: string, cents: number) {
 	await tx`update money_wallets set balance_cents = balance_cents + ${cents} where user_id = ${userId}::bigint`;
 }
 
-export async function createAd(userId: string, input: { text?: unknown; url?: unknown; budgetCents?: unknown; days?: unknown }): Promise<Ad> {
+export async function createAd(userId: string, input: { text?: unknown; url?: unknown; budgetCents?: unknown; days?: unknown; adOnly?: unknown }): Promise<Ad> {
 	const rules = settings().ads;
 	if (!rules.enabled) throw new AdError("Ads aren't open on this instance.");
 	const text = typeof input.text === "string" ? input.text.trim() : "";
@@ -71,8 +97,8 @@ export async function createAd(userId: string, input: { text?: unknown; url?: un
 		const [wallet] = await tx`select balance_cents::bigint as cents from money_wallets where user_id = ${userId}::bigint for update`;
 		if (!wallet || Number(wallet.cents) < budget) throw new AdError("You don't have enough Equicoins for that budget.");
 		await tx`update money_wallets set balance_cents = balance_cents - ${budget} where user_id = ${userId}::bigint`;
-		const [made] = await tx`insert into ads (id, user_id, text, url, budget_cents, days, status)
-			values (${newId()}::bigint, ${userId}::bigint, ${text}, ${url}, ${budget}, ${days}, 'pending') returning ${adCols}`;
+		const [made] = await tx`insert into ads (id, user_id, text, url, budget_cents, days, status, ad_only)
+			values (${newId()}::bigint, ${userId}::bigint, ${text}, ${url}, ${budget}, ${days}, 'pending', ${input.adOnly !== false}) returning ${adCols}`;
 		return made;
 	});
 	return toAd(row);
@@ -106,6 +132,37 @@ export async function endExpiredAds() {
 	});
 }
 
+export const VIEWS_PER_DAY = 3;
+const RECHARGE = "1 hour";
+
+export async function pickAd(viewerId: string, onPage: string[]): Promise<{ adId: string; postId: string } | undefined> {
+	if (!settings().ads.enabled) return undefined;
+	const [ad] = await sql`select a.id::text as ad_id, a.post_id::text as post_id from ads a join posts p on p.id = a.post_id
+		where a.status = 'running' and a.ends_at > now() and a.spent_milli < a.budget_cents * 1000
+			and not p.hidden and p.user_id <> ${viewerId}::bigint
+			and p.user_id not in ${blockedFor(viewerId)} and p.user_id not in ${outOfView(viewerId)}
+			and not (a.post_id = any(${sql.array(onPage, "INT8")}))
+			and not exists (select 1 from users me where me.id = ${viewerId}::bigint and me.preferences->>'hide_ads' = 'true')
+			and coalesce((select v.n from ad_views v where v.ad_id = a.id and v.viewer_id = ${viewerId}::bigint and v.day = current_date), 0) < ${VIEWS_PER_DAY}
+		order by -ln(1 - random()) / (a.budget_cents * 1000 - a.spent_milli) limit 1`;
+	return ad ? { adId: ad.ad_id, postId: ad.post_id } : undefined;
+}
+
+export async function chargeView(adId: string, viewerId: string) {
+	await sql.begin(async (tx) => {
+		const [seen] = await tx`insert into ad_views (ad_id, viewer_id, n) values (${adId}::bigint, ${viewerId}::bigint, 1)
+			on conflict (ad_id, viewer_id, day) do update set n = ad_views.n + 1, last_at = now()
+				where ad_views.last_at < now() - ${RECHARGE}::interval
+			returning n`;
+		if (!seen) return;
+		const price = await currentPrice(tx);
+		const [ad] = await tx`update ads set views = views + 1, spent_milli = least(budget_cents * 1000, spent_milli + ${price}),
+			spent_cents = least(budget_cents, (least(budget_cents * 1000, spent_milli + ${price})) / 1000)
+			where id = ${adId}::bigint and status = 'running' returning spent_milli, budget_cents`;
+		if (ad && Number(ad.spent_milli) >= Number(ad.budget_cents) * 1000) await tx`update ads set status = 'ended', ends_at = now() where id = ${adId}::bigint`;
+	});
+}
+
 export const adActions: Record<string, Action> = {
 	ads: {
 		role: "moderator",
@@ -114,7 +171,7 @@ export const adActions: Record<string, Action> = {
 			const status = ["pending", "running", "paused", "ended", "rejected", "cancelled"].includes(String(b.status)) ? String(b.status) : "pending";
 			const rows = await sql`select ${adCols}, (select screen_name from users u where u.id = ads.user_id) as screen_name
 				from ads where status = ${status} order by id ${status === "pending" ? sql`asc` : sql`desc`} limit 200`;
-			return { ads: rows.map((r: any) => ({ ...toAd(r), screenName: r.screen_name })), price: await currentPrice() };
+			return { ads: rows.map((r: any) => ({ ...toAd(r), screenName: r.screen_name })), price: await currentPrice(), economy: await economyNow() };
 		},
 	},
 	reviewAd: {
@@ -129,7 +186,12 @@ export const adActions: Record<string, Action> = {
 				if (!row) throw new AdminError("No such ad.", 404);
 				if (row.status !== "pending") throw new AdminError("That ad has already been reviewed.");
 				if (approve) {
-					const [done] = await tx`update ads set status = 'running', reviewed_at = now(), reviewed_by = ${a.id}::bigint,
+					const postId = await createPost(row.user_id, row.url ? `${row.text}\n\n${row.url}` : row.text, { db: tx, skipReview: true });
+					if (row.ad_only) {
+						await tx`update posts set ad_only = true where id = ${postId}::bigint`;
+						await tx`update user_stats set posts = greatest(posts - 1, 0) where user_id = ${row.user_id}::bigint`;
+					}
+					const [done] = await tx`update ads set status = 'running', reviewed_at = now(), reviewed_by = ${a.id}::bigint, post_id = ${postId}::bigint,
 						starts_at = now(), ends_at = now() + days * interval '1 day' where id = ${id}::bigint returning ${adCols}`;
 					return done;
 				}

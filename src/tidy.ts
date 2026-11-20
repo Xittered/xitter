@@ -123,7 +123,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	if (u?.org) links.push({ href: "/account/organisation", text: "Organisation", description: "Manage affiliates, or answer an organisation that asked to add you.", icon: BUILDING, where: "both" });
 	if (u?.gold) links.push({ href: "/account/decor", text: "Profile decor", description: "Dress your profile with a theme, background and avatar frame from Steam.", icon: PALETTE, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/post-details", text: "Post details", description: "Show reposts, quotes and likes on a row of their own, as Twitter did.", icon: STATS, where: "settings" });
-	links.push({ href: "/account/labels", text: "Labels and checkmarks", description: "Hide parody, commentary and fan labels, or checkmarks, on every account.", icon: MASK, where: "settings" });
+	links.push({ href: "/account/labels", text: "Labels and checkmarks", description: "Hide parody labels, checkmarks or ads.", icon: MASK, where: "settings" });
 	if (feature("circles")) links.push({ href: "/account/circle", text: "Circle", description: "Choose who sees the posts you send to your Circle.", icon: CIRCLE, where: "settings" });
 	if (choiceAllowed()) links.push({ href: "/account/client", text: "Twitter client", description: "Use the current client or an older Twitter one.", icon: HISTORY, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/theme", text: "Theme", description: "Dim, a preset, or your own colours for the client.", icon: TONE, where: "settings" });

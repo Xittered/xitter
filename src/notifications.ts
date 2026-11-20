@@ -124,7 +124,7 @@ async function items(viewerId: string, opts: { before?: number; after?: number; 
 				where p.reply_to_user_id = ${viewerId}::bigint and parent.user_id = ${viewerId}::bigint and p.user_id <> ${viewerId}::bigint and p.user_id not in ${hidden} and not ${hasMutedWord(viewerId, "notifications", sql`p.id`)}
 			union all
 			select p.id, greatest(p.created_at, least(p.received_at, p.created_at + interval '1 day')) as created_at, 'mention' from posts p join post_mentions m on m.post_id = p.id
-				where m.user_id = ${viewerId}::bigint and p.user_id <> ${viewerId}::bigint and p.user_id not in ${hidden} and not ${hasMutedWord(viewerId, "notifications", sql`p.id`)}
+				where not p.ad_only and m.user_id = ${viewerId}::bigint and p.user_id <> ${viewerId}::bigint and p.user_id not in ${hidden} and not ${hasMutedWord(viewerId, "notifications", sql`p.id`)}
 			${
 				opts.mentionsOnly
 					? sql``
