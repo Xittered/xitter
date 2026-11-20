@@ -785,7 +785,7 @@ async function resizedAvatar(served: Served, body: Blob, width: number): Promise
 }
 
 export async function serveAvatar(req: Request, pathname: string, viewer: Viewer): Promise<Response> {
-	const m = /^\/profile_images\/(\d{1,19})(?:_([a-z_]+|\d{1,4}x\d{1,4}))?\.(?:jpe?g|png)$/.exec(pathname);
+	const m = /^\/profile_images\/(\d{1,19})(?:_([a-z][a-z0-9_]*|\d{1,4}x\d{1,4}))?\.(?:jpe?g|png)$/.exec(pathname);
 	const original = m && isId(m[1]) && (await remoteMediaFile(m[1]));
 	const served = original && (await servedOf(m![1]));
 	const cache = served && (await cacheFor(viewer, served));
