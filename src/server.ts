@@ -26,7 +26,7 @@ import { isPlayerPage, playerPage } from "./player-card";
 import { chatMediaRoute, chatSocket, juiceboxProxy, socketUser } from "./chat";
 import { sweepChatUploads } from "./chat-media";
 import { clientBuilds, loadBuild } from "./build";
-import { MEDIA_DIR, mediaUpload, serveMedia } from "./media";
+import { MEDIA_DIR, mediaUpload, serveAvatar, serveMedia } from "./media";
 import { serveScanCopy, startMediaScan } from "./media-scan";
 import { resumeVideos } from "./video";
 import { livePipeline, restRoute } from "./rest";
@@ -606,6 +606,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p.startsWith("/media-scan/")) return serveScanCopy(p, url);
 	// uploads stay inside the instance: only signed-in users get them
 	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p, viewer) : new Response("not found", { status: 404 });
+	if (p.startsWith("/profile_images/")) return viewer ? serveAvatar(req, p, viewer) : new Response("not found", { status: 404 });
 	// the admin panel: staff only; everyone else gets the client's not-found page
 	// the panel speaks of the instance's default build (Admin > Client), whatever its staff use
 	if (p.startsWith("/admin/api/")) return withClientDir(CLIENT_DIR, () => adminApi(req, p.slice("/admin/api/".length), viewer));

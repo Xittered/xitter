@@ -6,7 +6,7 @@
 // converted by video.ts.
 
 import { conversationVideoMap } from "./conversation-cards";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import type { SQL } from "bun";
@@ -21,7 +21,7 @@ import { isId, newId } from "./ids";
 import { settings } from "./settings";
 import { gifProxy } from "./gifs";
 import { compressUpload } from "./media-compress";
-import { cropGif, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, videoError, videoSupported } from "./video";
+import { cropGif, FFMPEG, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, spawnLimited, videoError, videoSupported } from "./video";
 
 export const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
 const maxImage = () => settings().limits.image_mb * 1024 * 1024;
@@ -744,6 +744,59 @@ export async function serveMedia(req: Request, pathname: string, viewer: Viewer)
 	// stream and whatever If-Range says; piped, it goes out whole
 	if (range && ifRange !== null) return new Response(body.stream().pipeThrough(new TransformStream()), { headers: { ...headers, "content-length": String(size) } });
 	return new Response(body, { headers });
+}
+
+const AVATAR_SIZES: Record<string, number> = { mini: 24, normal: 48, bigger: 73, x96: 96, reasonably_small: 128 };
+const AVATAR_STEPS = [24, 48, 73, 96, 128, 200, 400];
+const AVATAR_DIR = () => join(MEDIA_DIR, ".avatars");
+const RESIZABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
+const resizing = new Map<string, Promise<Blob | undefined>>();
+
+function avatarWidth(suffix: string | undefined): number | undefined {
+	if (!suffix) return undefined;
+	if (AVATAR_SIZES[suffix]) return AVATAR_SIZES[suffix];
+	const box = /^(\d{1,4})x\d{1,4}$/.exec(suffix);
+	if (!box) return undefined;
+	const want = Number(box[1]);
+	return AVATAR_STEPS.find((w) => w >= want) ?? undefined;
+}
+
+async function resizedAvatar(served: Served, body: Blob, width: number): Promise<Blob | undefined> {
+	const png = served.mime !== "image/jpeg";
+	const out = join(AVATAR_DIR(), `${served.id}_${width}.${png ? "png" : "jpg"}`);
+	if (existsSync(out)) return Bun.file(out);
+	const key = out;
+	const running = resizing.get(key);
+	if (running) return running;
+	const job = (async () => {
+		mkdirSync(AVATAR_DIR(), { recursive: true });
+		const input = await body.bytes();
+		const tmp = `${out}.${process.pid}.tmp`;
+		const p = spawnLimited([FFMPEG, "-v", "error", "-i", "pipe:0", "-vf", `scale='min(${width},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "3"]), "-y", tmp], 20_000, "ignore", input);
+		if ((await p.exited) !== 0 || !existsSync(tmp)) {
+			rmSync(tmp, { force: true });
+			return undefined;
+		}
+		renameSync(tmp, out);
+		return Bun.file(out);
+	})().finally(() => resizing.delete(key));
+	resizing.set(key, job);
+	return job;
+}
+
+export async function serveAvatar(req: Request, pathname: string, viewer: Viewer): Promise<Response> {
+	const m = /^\/profile_images\/(\d{1,19})(?:_([a-z_]+|\d{1,4}x\d{1,4}))?\.(?:jpe?g|png)$/.exec(pathname);
+	const original = m && isId(m[1]) && (await remoteMediaFile(m[1]));
+	const served = original && (await servedOf(m![1]));
+	const cache = served && (await cacheFor(viewer, served));
+	if (!m || !original || !served || !cache) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
+	const width = RESIZABLE.has(served.mime) ? avatarWidth(m[2]) : undefined;
+	const body = (width && (await resizedAvatar(served, original, width))) || original;
+	const type = body === original ? servedType(served.mime) : served.mime === "image/jpeg" ? "image/jpeg" : "image/png";
+	const tag = tagOf(served, body, cache);
+	const headers: Record<string, string> = { "content-type": type, "cache-control": cache, "x-content-type-options": "nosniff", "content-security-policy": MEDIA_CSP, ...(tag.etag ? { etag: tag.etag.replace(/"$/, `-${width ?? 0}"`) } : {}) };
+	if (unchanged(req, headers)) return new Response(null, { status: 304, headers });
+	return new Response(body.stream().pipeThrough(new TransformStream()), { headers: { ...headers, "content-length": String(body.size) } });
 }
 
 // attaches uploads to a new post; only the poster's own unused, finished

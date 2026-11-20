@@ -32,7 +32,11 @@ export function noteText(text: string) {
 	return { text, entities };
 }
 
-const DEFAULT_AVATAR = `${PUBLIC_ORIGIN}/abs/sticky/default_profile_images/default_profile_normal.png`;
+const DEFAULT_AVATAR = `${PUBLIC_ORIGIN}/abs/sticky/default_profile_images/default_profile_400x400.png`;
+export const avatarSrc = (url: string | null | undefined) => {
+	const id = url && /^\/media\/(\d{1,19})$/.exec(url)?.[1];
+	return id ? `${PUBLIC_ORIGIN}/profile_images/${id}_normal.jpg` : absolute(url);
+};
 // an account's picture as a full URL, X's default one when it has none
 export const avatarUrl = (url: string | null | undefined) => absolute(url ?? null) ?? DEFAULT_AVATAR;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -262,7 +266,7 @@ export function userResult(u: User) {
 		affiliates_highlighted_label: badgeLabel(u),
 		...(oldClient() ? { xitter_badges: badgeList(u) } : {}),
 		...(isOrganization(u) ? { business_account: { affiliates_count: u.affiliates ?? 0 } } : {}),
-		avatar: { image_url: absolute(u.avatar_url) ?? DEFAULT_AVATAR },
+		avatar: { image_url: avatarSrc(u.avatar_url) ?? DEFAULT_AVATAR },
 		...bioLanguage(u),
 		...(u.banner_url ? { banner: { image_url: absolute(u.banner_url) } } : {}),
 		core: { created_at: apiDate(u.created_at), name: u.name, screen_name: u.screen_name },
@@ -358,7 +362,7 @@ export function legacyUser(u: User) {
 		verified_user_profiles: { super_follows_user_profile: { is_active: false } },
 		verified: oldClient() ? oldVerified(isVerified(u), verification(u).verified_type, (badgeLabel(u) as any).label, badgeList(u)) : false,
 		protected: !!u.protected,
-		profile_image_url_https: oldClient() ? oldAvatar(absolute(u.avatar_url) ?? DEFAULT_AVATAR, pictureShape(u)) : (absolute(u.avatar_url) ?? DEFAULT_AVATAR),
+		profile_image_url_https: oldClient() ? oldAvatar(avatarSrc(u.avatar_url) ?? DEFAULT_AVATAR, pictureShape(u)) : (avatarSrc(u.avatar_url) ?? DEFAULT_AVATAR),
 		...(u.banner_url ? { profile_banner_url: absolute(u.banner_url) } : {}),
 		can_media_tag: u.stats?.mediaTaggable ?? true,
 		// with a default avatar and no bio or banner the client offers its "Set up

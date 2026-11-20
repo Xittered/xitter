@@ -77,6 +77,7 @@ const RULES: [RegExp, string][] = [
 	[/(_getMedia=\(\)=>\{let\{media:(\w+)\}=this\.props;return \2&&\2\.mediaFile&&)\2\.mediaFile\.isImage\?/g, "$1($2.mediaFile.isImage||$2.mediaFile.isGif)?"],
 	// the upload host is assembled from a variable, which would force https and drop the port
 	[/`https:\/\/\$\{(\w+)\}\/i\/media\//g, "`${location.origin}/i/media/"],
+	[/cdnDomains:\["pbs\.twimg\.com",/g, `cdnDomains:["${PUBLIC_HOSTNAME}","pbs.twimg.com",`],
 	[/"x\.com"/g, `"${PUBLIC_HOSTNAME}"`],
 	// cookie domain; a cookie scoped to the original domain is dropped by the browser
 	[/"\.x\.com"/g, `"${PUBLIC_HOSTNAME}"`],
