@@ -65,7 +65,7 @@ export const lockedAbove = (postId: ReturnType<typeof sql>, conversationId: Retu
 		union all
 		select q.id, q.reply_to_id, up.depth + 1 from posts q join up on q.id = up.reply_to_id where up.depth < 200
 	)
-	select 1 from posts r where (r.id in (select id from up) or r.id = ${conversationId}) and ${replyDenied(userId)})`;
+	select 1 from (select id from up union select ${conversationId}) ids join posts r on r.id = ids.id where ${replyDenied(userId)})`;
 
 export const replyRestricted = (userId: string) => lockedAbove(sql`p.id`, sql`p.conversation_id`, userId);
 
