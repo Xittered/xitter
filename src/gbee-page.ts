@@ -2,6 +2,7 @@ import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { BEE } from "./bee-icon";
 import { grokName } from "./grok";
+import { DOUG_SCRIPT } from "./doug";
 import { PIRATE_SCRIPT } from "./pirate";
 
 
@@ -61,6 +62,7 @@ export function gbeePage(req: Request, viewer: Viewer) {
 <form class="gb-form" id="gbForm"><textarea id="gbText" placeholder="Ask anything" rows="1"></textarea><button type="submit">Send</button></form>
 </div>
 <script>${SCRIPT}</script>
-<script>${PIRATE_SCRIPT}</script>`,
+<script>${PIRATE_SCRIPT}</script>
+<script>${DOUG_SCRIPT}</script>`,
 	});
 }
