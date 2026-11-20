@@ -431,6 +431,7 @@ export const THEME_SCRIPT = String.raw`(function(){
 			// Inside a dialog the page's black is the dialog's own surface, as in the
 			// media viewer's reply panel: made clear, the page behind read through it
 			css.push(wrap('[aria-modal="true"] '+layer) + "{background:var(--xt-menu)!important}");
+			css.push(wrap('[role="alertdialog"] '+layer) + "{background:var(--xt-menu)!important}");
 			glassOn=false;
 		}
 		// Over an image, the glass goes on X's own rounded boxes in the sidebar:
@@ -468,6 +469,7 @@ export const THEME_SCRIPT = String.raw`(function(){
 		add("border","border-color:var(--xt-border)!important;border-bottom-color:var(--xt-divider)!important",false);
 		add("button","background:var(--xt-button)!important",false);
 		add("buttonText","color:var(--xt-button-text)!important",false);
+		css.push(wrap(light?'[style*="background-color: rgb(15, 20, 25)"] [style*="color: rgb(255, 255, 255)"]':'[style*="background-color: rgb(239, 243, 244)"] [style*="color: rgb(15, 20, 25)"]')+"{color:var(--xt-button-text)!important}");
 		add("accentColor","color:var(--xt-accent)!important;fill:var(--xt-accent)!important",false);
 		add("accentOutline","outline-color:var(--xt-accent)!important",false);
 		add("accentBg","background:var(--xt-accent-fill,var(--xt-accent))!important",false);
@@ -532,8 +534,8 @@ export const THEME_SCRIPT = String.raw`(function(){
 		add('[style*="border-color: rgb(29, 155, 240)"]',"border-color:var(--xt-accent)!important");
 		add('[style*="border-color: rgb(26, 140, 216)"]',"border-color:var(--xt-accent-hover,var(--xt-accent))!important");
 		add('[style*="background-color: rgb(142, 205, 248)"]',"background-color:var(--xt-accent-tint)!important");
-		css.push('html[data-xitter-accent] [data-testid="tweetButton"],html[data-xitter-accent] [data-testid="tweetButtonInline"]{background:var(--xt-accent-fill,var(--xt-accent))!important;border-color:transparent!important}');
-		css.push('html[data-xitter-accent] [data-testid="tweetButton"] div,html[data-xitter-accent] [data-testid="tweetButtonInline"] div{color:var(--xt-accent-text,#fff)!important}');
+		css.push('html[data-xitter-accent]:not([data-xitter-theme]) [data-testid="tweetButton"],html[data-xitter-accent]:not([data-xitter-theme]) [data-testid="tweetButtonInline"]{background:var(--xt-accent-fill,var(--xt-accent))!important;border-color:transparent!important}');
+		css.push('html[data-xitter-accent]:not([data-xitter-theme]) [data-testid="tweetButton"] div,html[data-xitter-accent]:not([data-xitter-theme]) [data-testid="tweetButtonInline"] div{color:var(--xt-accent-text,#fff)!important}');
 		var next=css.join("");
 		if(next!==accentKey){
 			accentKey=next;
