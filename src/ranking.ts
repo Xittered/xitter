@@ -48,8 +48,9 @@ function ranking(viewerId: string, asOf: string): Promise<Ranked> {
 
 const SEEN_SINK = 0.85;
 const SEEN_RECOVERY_MS = 3 * 3600_000;
-const SEEN_PER_VIEWER = 150;
-const SEEN_VIEWERS = 2000;
+const SEEN_BELOW_MS = 2 * 3600_000;
+const SEEN_PER_VIEWER = CANDIDATES;
+const SEEN_VIEWERS = 1000;
 const JITTER = 0.25;
 const seen = new Map<string, Map<string, number>>();
 const views = new Map<string, { rows: Ranked; until: number }>();
@@ -81,9 +82,10 @@ function reorder(viewerId: string, base: Ranked, seed: number): Ranked {
 	const weighed = base.map((r) => {
 		const shownAt = mine?.get(r.post_id);
 		const sink = shownAt === undefined ? 1 : 1 - SEEN_SINK * Math.exp(-(now - shownAt) / SEEN_RECOVERY_MS);
-		return { r, score: r.score * sink * Math.exp(JITTER * (2 * chance(seed, r.post_id) - 1)) };
+		const below = shownAt !== undefined && now - shownAt < SEEN_BELOW_MS ? shownAt : 0;
+		return { r, below, score: r.score * sink * Math.exp(JITTER * (2 * chance(seed, r.post_id) - 1)) };
 	});
-	weighed.sort((a, b) => b.score - a.score || (BigInt(b.r.item_id) > BigInt(a.r.item_id) ? 1 : -1));
+	weighed.sort((a, b) => a.below - b.below || b.score - a.score ||(BigInt(b.r.item_id) > BigInt(a.r.item_id) ? 1 : -1));
 	return spreadAuthors(weighed.map((w) => w.r));
 }
 
