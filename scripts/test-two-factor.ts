@@ -48,6 +48,7 @@ try {
 	// again, so the test walks the drift window: the step before now turns it
 	// on, now signs in, the step after turns it off
 	const now = () => Math.floor(Date.now() / 30000);
+	if (Date.now() % 30000 > 25000) await Bun.sleep(30100 - (Date.now() % 30000));
 	check("a wrong code doesn't turn it on", (await (await post("/confirm", { password: "testpass123", code: "000000" })).text()).includes("isn't right"));
 	check("nor does the right code without the password", !(await (await post("/confirm", { password: "wrong", code: codeAt(secret!, now() - 1) })).text()).includes("Two-factor is on"));
 	const confirmed = await (await post("/confirm", { password: "testpass123", code: codeAt(secret!, now() - 1) })).text();
