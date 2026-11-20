@@ -4,7 +4,7 @@
 // and notifications. Muted words hide matching posts on the surfaces chosen.
 
 import { sql } from "./db";
-import { replyDenied } from "./reply-controls";
+import { lockedAbove } from "./reply-controls";
 import { newId } from "./ids";
 import { revealedSuspended, staffViewer } from "./staff-access";
 
@@ -81,8 +81,8 @@ export async function setBlock(blockerId: string, blockedId: string, on: boolean
 	return true;
 }
 
-export async function replyLimited(conversationId: string, userId: string, db: typeof sql = sql): Promise<boolean> {
-	const [limited] = await db`select exists (select 1 from posts r where r.id = ${conversationId}::bigint and ${replyDenied(userId)}) as no`;
+export async function replyLimited(parentId: string, conversationId: string, userId: string, db: typeof sql = sql): Promise<boolean> {
+	const [limited] = await db`select ${lockedAbove(sql`${parentId}::bigint`, sql`${conversationId}::bigint`, userId)} as no`;
 	return limited.no;
 }
 

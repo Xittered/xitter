@@ -523,7 +523,7 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 		const [unseenRoot] = await db`select 1 from posts p join users u on u.id = p.user_id
 			where p.id = ${conversationId}::bigint and not ${seenBy(userId)}`;
 		if (unseenRoot) throw new PostError("The post you are replying to no longer exists.", 385);
-		if (await replyLimited(String(conversationId), userId, db)) throw new PostError("The author of the original post limited who can reply to it.", 433);
+		if (await replyLimited(opts.replyToId!, String(conversationId), userId, db)) throw new PostError("The author of this post or one above it limited who can reply.", 433);
 	}
 	if (opts.quoteId) {
 		const [quoted] = await db`select p.id, p.user_id, p.circle_owner_id from posts p join users u on u.id = p.user_id where p.id = ${opts.quoteId}::bigint and ${seenBy(userId)}`;

@@ -381,7 +381,7 @@ async function applyPost(instance: string, p: any, depth = 0): Promise<string | 
 			const replyTo = await resolvePost(p.reply_to, depth);
 			const [parent] = replyTo ? await sql`select conversation_id::text, user_id::text from posts where id = ${replyTo}::bigint` : [];
 			// the same checks as a new reply: an orphan sent first mustn't get past who may reply
-			if (parent && !(await blockedBetween(author, parent.user_id)) && !(await replyLimited(parent.conversation_id, author)))
+			if (parent && !(await blockedBetween(author, parent.user_id)) && !(await replyLimited(replyTo!, parent.conversation_id, author)))
 				await sql`update posts set reply_to_id = ${replyTo}::bigint, reply_to_user_id = ${parent.user_id}::bigint, conversation_id = ${parent.conversation_id}::bigint where id = ${local}::bigint`;
 		}
 		await saveMentions(local, text, instance, lookupRemoteUser);
@@ -390,7 +390,7 @@ async function applyPost(instance: string, p: any, depth = 0): Promise<string | 
 	}
 	const replyTo = (p.reply_to ? await resolvePost(p.reply_to, depth) : undefined) ?? (p.reply_to || p.is_reply === true ? newId() : undefined);
 	const [parent] = replyTo ? await sql`select conversation_id::text, user_id::text from posts where id = ${replyTo}::bigint` : [];
-	if (parent && ((await blockedBetween(author, parent.user_id)) || (await replyLimited(parent.conversation_id, author)))) return undefined;
+	if (parent && ((await blockedBetween(author, parent.user_id)) || (await replyLimited(replyTo!, parent.conversation_id, author)))) return undefined;
 	const id = newId();
 	const created = typeof p.created_at === "string" && !Number.isNaN(Date.parse(p.created_at)) ? new Date(Math.min(Date.parse(p.created_at), Date.now())) : new Date();
 	await sql`insert into posts (id, user_id, text, reply_to_id, reply_to_user_id, conversation_id, quote_id, source, sensitive, edited_at, created_at)

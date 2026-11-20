@@ -20,6 +20,7 @@ const API_HOSTS = ["api", "upload", "caps", "jf"].flatMap((s) => [`${s}.x.com`, 
 const inRegex = (url: string) => url.replace(/[/.]/g, (c) => "\\" + c);
 
 const RULES: [RegExp, string][] = [
+	[/([\w$]+)&&!this\._shouldDisable\(([\w$]+),([\w$]+)\.zF\.ConversationControls\)/g, '($1||$2.user?.id_str===this.context.viewerUserId)&&!this._shouldDisable($2,$3.zF.ConversationControls)'],
 	[/([\w$]+)\.then\(([\w$]+)=>"linked"===\2\?"xweb":/g, '$1.then($2=>!0?"legacy":'],
 	// The Settings search index is built from X's route list: add our custom GIF
 	// provider page so searching "gif" can open it from the results.

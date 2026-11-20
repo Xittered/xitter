@@ -877,15 +877,15 @@ const handlers: Record<string, Handler> = {
 		const id = postId(vars);
 		const control = replyControl(vars.mode, vars.allowed_country_codes);
 		const rows = await sql`update posts set reply_policy = ${control.policy}, reply_selections = ${sql.array(control.selections, "TEXT")}, reply_allowed_values = ${sql.array(control.values, "TEXT")}
-			where id = ${id}::bigint and user_id = ${viewer.id}::bigint and conversation_id = id returning id`;
-		if (!rows.length) throw new PostError("You can only change reply controls on your own conversation.", 144);
+			where id = ${id}::bigint and user_id = ${viewer.id}::bigint returning id`;
+		if (!rows.length) throw new PostError("You can only change reply controls on your own posts.", 144);
 		return { data: { conversation_control_change: { __typename: "ConversationControlChangeResult", tweet_results: { result: tweetResult((await getPost(viewer.id, id))!) } } } };
 	},
 	ConversationControlDelete: async (viewer, vars) => {
 		const id = postId(vars);
 		const rows = await sql`update posts set reply_policy = null, reply_selections = '{}', reply_allowed_values = '{}'
-			where id = ${id}::bigint and user_id = ${viewer.id}::bigint and conversation_id = id returning id`;
-		if (!rows.length) throw new PostError("You can only change reply controls on your own conversation.", 144);
+			where id = ${id}::bigint and user_id = ${viewer.id}::bigint returning id`;
+		if (!rows.length) throw new PostError("You can only change reply controls on your own posts.", 144);
 		return { data: { conversation_control_delete: { __typename: "ConversationControlDeleteResult", tweet_results: { result: tweetResult((await getPost(viewer.id, id))!) } } } };
 	},
 	CreateHighlight: async (v, vars) => ({ data: { tweet_highlights_put: { success: await setHighlight(v.id, postId(vars), true) } } }),

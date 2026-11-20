@@ -445,7 +445,7 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						row &&
 						!(row.user_id !== me && (await isBlockedEitherWay(me, row.user_id))) &&
 						!(await sql`select 1 from posts p join users u on u.id = p.user_id where p.id = ${row.conversation_id}::bigint and not ${seenBy(me)}`).length &&
-						!(await replyLimited(row.conversation_id, me));
+						!(await replyLimited(parent!, row.conversation_id, me));
 					if (ok) {
 						replyTo = parent!;
 						replyToUser = row.user_id;

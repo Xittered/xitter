@@ -59,7 +59,15 @@ export async function conversationSettings() {
 	] } } };
 }
 
-export const replyRestricted = (userId: string) => sql`exists (select 1 from posts r where r.id = p.conversation_id and ${replyDenied(userId)})`;
+export const lockedAbove = (postId: ReturnType<typeof sql>, conversationId: ReturnType<typeof sql>, userId: string) => sql`exists (
+	with recursive up (id, reply_to_id, depth) as (
+		select q.id, q.reply_to_id, 0 from posts q where q.id = ${postId}
+		union all
+		select q.id, q.reply_to_id, up.depth + 1 from posts q join up on q.id = up.reply_to_id where up.depth < 200
+	)
+	select 1 from posts r where (r.id in (select id from up) or r.id = ${conversationId}) and ${replyDenied(userId)})`;
+
+export const replyRestricted = (userId: string) => lockedAbove(sql`p.id`, sql`p.conversation_id`, userId);
 
 export const replyDenied = (userId: string) => sql`r.reply_policy is not null and r.user_id <> ${userId}::bigint and not (
 	(r.reply_policy in ('Community', 'MyNetwork') and exists (select 1 from follows f where f.follower_id = r.user_id and f.followee_id = ${userId}::bigint))
