@@ -15,6 +15,8 @@ import { isId } from "./ids";
 import { feature, settings } from "./settings";
 import { posterFile } from "./video";
 
+const EMBED_BRAND = "FXitter";
+
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const clip = (s: string, n: number) => ([...s].length > n ? `${[...s].slice(0, n - 1).join("")}…` : s);
 
@@ -106,7 +108,7 @@ function page(o: { path: string; title: string; description: string; images?: Pi
 			]
 		: [["name", "twitter:card", o.large ? "summary_large_image" : "summary"]];
 	const tags: Tag[] = [
-		["property", "og:site_name", name],
+		["property", "og:site_name", EMBED_BRAND],
 		["property", "og:type", o.video ? "video.other" : o.time ? "article" : "profile"],
 		["property", "og:url", url],
 		["property", "og:title", o.title],
@@ -266,7 +268,7 @@ export async function oembed(url: URL): Promise<Response> {
 			title: postTitle(author),
 			author_name: post ? stats(post.counts) : `👥 ${count(follows.followers)} followers   ${count(follows.following)} following`,
 			author_url: post ? `${PUBLIC_ORIGIN}/${author.screen_name}/status/${post.id}` : `${PUBLIC_ORIGIN}/${author.screen_name}`,
-			provider_name: settings().instance_name,
+			provider_name: EMBED_BRAND,
 			provider_url: PUBLIC_ORIGIN,
 		},
 		{ headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } },
