@@ -606,7 +606,8 @@ const ACTIONS: Record<string, Action> = {
 			if (id === a.id) throw new AdminError("You can't delete your own account here.");
 			const u = await guard(a, id);
 			if (String(b.confirm ?? "").toLowerCase() !== u.screen_name.toLowerCase()) throw new AdminError("Type the handle to confirm.");
-			if (u.status === "suspended") await retireAccount(id, `deleted while suspended by @${a.screen_name}`);
+			const [{ deactivated }] = await sql`select deactivated_at is not null as deactivated from users where id = ${id}::bigint`;
+			if (u.status === "suspended" && !deactivated) await retireAccount(id, `deleted while suspended by @${a.screen_name}`);
 			await sql`delete from users where id = ${id}::bigint`;
 			await audit(a, "delete_account", id, { screen_name: u.screen_name });
 			return {};
