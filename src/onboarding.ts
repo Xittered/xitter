@@ -27,6 +27,9 @@ import { checkSignupCode, sendSignupCode } from "./email-address";
 import { settings } from "./settings";
 import { hit } from "./ratelimit";
 import { requestCountry, requestIp } from "./login-history";
+import { capPassed } from "./cap";
+
+const CAP_NEEDED = "Check \"Verify you're human\" before signing up.";
 
 async function appendSignIn(headers: Headers, req: Request, session: { token: string; csrf: string; userId: string }) {
 	for (const c of await signInCookies(req, session)) headers.append("set-cookie", c);
@@ -354,6 +357,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 		const token = String(f.session_token ?? "");
 		const s = await pending(token);
 		if (!s) return respond(fieldError("username", STALE));
+		if (!capPassed(req, false)) return respond(fieldError("message", CAP_NEEDED));
 		// the setup screen (jf/setup.json) shows errors under name, username and
 		// password, and anything else in its message line; one sent to a field it
 		// doesn't have (email) was never seen
@@ -368,6 +372,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 				if (!(e instanceof SignupError)) throw e;
 				return respond(fieldError(fieldOf(e), e.message));
 			}
+			capPassed(req, true);
 			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: requestCountry(req) ?? null };
 			// a code sent for an earlier address mustn't confirm this one
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb, email_code_hash = null where token = ${token}::uuid`;
@@ -394,6 +399,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			if (!(e instanceof SignupError)) throw e;
 			return respond(fieldError(fieldOf(e), e.message));
 		}
+		capPassed(req, true);
 		await sql`delete from signup_sessions where token = ${token}::uuid`;
 		const session = await login(String(f.username ?? s.username), String(f.password ?? ""));
 		const headers = new Headers();

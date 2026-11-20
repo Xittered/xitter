@@ -372,6 +372,11 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `GOOGLE_FONTS_CSS_ORIGIN`, `GOOGLE_FONTS_FILE_ORIGIN` | Google's | Where theme fonts are fetched from before this instance serves them |
 | `FEDERATION` | on | `off` stops federating (see [FEDERATION.md](FEDERATION.md)) |
 | `FEDERATION_KEY_FILE` | `data/federation-key.json` | This instance's federation key; back it up |
+| `CAP_SIGNUP` | on | `off` turns off the Cap check on the sign-up screen |
+| `CAP_SECRET` | from `CAP_SECRET_FILE` | Secret that signs Cap challenges, at least 16 bytes |
+| `CAP_SECRET_FILE` | `data/cap-secret` | Where the Cap secret is made and kept when `CAP_SECRET` isn't set |
+| `CAP_RSW_FILE` | `data/cap-rsw.json` | The Cap RSW keypair, made on first use |
+| `CAP_RSW_T` | `10000` | How much sequential work the Cap RSW puzzle asks for |
 | `FEDERATION_REGISTRY_URL` | `instances.json` on this repository's `main` | The list of instances to federate with |
 | `FEDERATION_MEDIA`, `FEDERATION_MEDIA_CACHE_MB` | unset, `64` | `store` keeps other instances' media on disk; otherwise it's fetched on view and the newest kept in memory |
 | `FEDERATION_EVENTS_PER_HOUR`, `FEDERATION_MAX_ACCOUNTS` | `20000`, `100000` | Changes taken from one other instance per hour before its sync pauses, and the most of its accounts this instance takes |

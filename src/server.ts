@@ -49,6 +49,7 @@ import { gifProxy } from "./gifs";
 import { accountIndexRoute } from "./account-page";
 import { gifSettingsRoute } from "./gif-settings";
 import { classicDetailRoute, postCounts } from "./classic-detail";
+import { capRoute } from "./cap";
 import { parodyLabelsRoute } from "./parody-labels";
 import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
@@ -414,6 +415,10 @@ async function route(req: Request): Promise<Response | undefined> {
 	// A new route under /i/xitter/ must go ABOVE the catch-all, or it is never
 	// reached. JSON endpoints belong under /i/api/xitter/ instead (serveApi).
 	if (p.startsWith("/i/xitter/decoration/")) return (await decorationFile(url)) ?? new Response("not found", { status: 404 });
+	if (p.startsWith("/i/xitter/cap/")) {
+		const cap = await capRoute(req, p);
+		if (cap) return cap;
+	}
 	if (p.startsWith("/i/xitter/fonts/")) return serveFont(url, url.searchParams.has("family") && !!(await getViewer(req)));
 	if (p.startsWith("/i/xitter/boot-")) {
 		const body = bootScript(p);

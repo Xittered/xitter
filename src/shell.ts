@@ -27,6 +27,7 @@ import { NOTICE_SCRIPT } from "./automod-notice";
 import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-picker";
 import { PRONOUNS_CSS, PRONOUNS_SCRIPT, pronounsData } from "./pronouns";
 import { CLASSIC_DETAIL_CSS, CLASSIC_DETAIL_SCRIPT } from "./classic-detail";
+import { CAP_SCRIPT, capOn } from "./cap";
 import { MAX_POST_MEDIA, PUBLIC_ORIGIN } from "./config";
 import { SQUARE_MARK, legacyUser } from "./model";
 import { patchText } from "./patch";
@@ -312,6 +313,7 @@ ${TIDY_SCRIPT}
 ${FRESH_SCRIPT}
 ${FORGOT_SCRIPT}
 ${signedIn ? "" : PASSKEY_SCRIPT}
+${CAP_SCRIPT}
 ${PRONOUNS_SCRIPT}
 ${FLAG_PICKER_SCRIPT}
 ${signedIn ? COMPOSER_BUTTON_SCRIPT : ""}
@@ -442,7 +444,7 @@ ${user?.classic_post_details ? CLASSIC_DETAIL_CSS : ""}
 [data-testid="sidebarColumn"] div:has(> [data-testid="emptyState"]),[data-testid="sidebarColumn"] div:has(> div > aside) ~ div:empty{display:none}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)))};window.__META_DATA__=${inline(meta)};</script>
-<script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
+<script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, cap: capOn() && settings().signup_mode !== "closed", circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
 <script id="nonce-csp"></script>
 <script>${runtimeText}</script>

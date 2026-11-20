@@ -20,6 +20,9 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "1.9.0",
+		"@cap.js/wasm": "0.0.8",
+		"cap-widget": "0.1.63",
+		"capjs-core": "0.1.18",
 		"eld": "2.1.0",
 		"nodemailer": "6.9.16",
 		"zod": "4.6.7"
