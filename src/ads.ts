@@ -153,6 +153,18 @@ export async function extendAd(userId: string, adId: string, input: { budgetCent
 	return toAd(row);
 }
 
+export type AdStats = { reach: number; days: { day: string; views: number }[] };
+
+export async function adStats(adIds: string[]): Promise<Map<string, AdStats>> {
+	const out = new Map<string, AdStats>();
+	if (!adIds.length) return out;
+	const reach = await sql`select ad_id::text, count(distinct viewer_id)::int as n from ad_views where ad_id in ${sql(adIds)} group by ad_id`;
+	for (const r of reach) out.set(r.ad_id, { reach: Number(r.n), days: [] });
+	const days = await sql`select ad_id::text, to_char(day, 'YYYY-MM-DD') as day, sum(n)::int as views from ad_views where ad_id in ${sql(adIds)} group by ad_id, day order by day`;
+	for (const d of days) out.get(d.ad_id)?.days.push({ day: d.day, views: Number(d.views) });
+	return out;
+}
+
 export async function endExpiredAds() {
 	await sql.begin(async (tx) => {
 		const done = await tx`update ads set status = 'ended', refunded_cents = budget_cents - spent_cents

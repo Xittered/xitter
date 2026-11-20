@@ -1,5 +1,5 @@
 import { accountPage, esc } from "./account-page";
-import { type Ad, AdError, cancelAd, createAd, currentPrice, estimateViews, extendAd, myAds, pauseAd } from "./ads";
+import { type Ad, AdError, type AdStats, adStats, cancelAd, createAd, currentPrice, estimateViews, extendAd, myAds, pauseAd } from "./ads";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { formatCents } from "./money";
@@ -23,7 +23,17 @@ const CSS = `.ads{display:grid;gap:12px}
 .who label{display:flex;gap:10px;align-items:flex-start;margin:0;border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--text);font-size:15px;line-height:20px}
 .who label:has(input:checked){border-color:var(--text)}
 .who input{width:18px;min-height:18px;height:18px;margin:2px 0 0;padding:0;flex:none;accent-color:var(--accent)}
-.price{font-variant-numeric:tabular-nums}`;
+.price{font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.stats>div{background:var(--surface);border-radius:12px;padding:8px 10px;min-width:0}
+.stats b{display:block;font-size:17px;line-height:22px;font-variant-numeric:tabular-nums;color:var(--text)}
+.stats span{font-size:12px;line-height:16px;color:var(--muted)}
+.chart{display:flex;align-items:flex-end;gap:4px;height:64px;margin-top:10px}
+.chart>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%;min-width:0}
+.chart i{display:block;width:100%;min-height:2px;border-radius:4px 4px 0 0;background:var(--accent)}
+.chart small{font-size:11px;line-height:12px;color:var(--muted)}
+.estimate{font-size:14px;color:var(--text);font-variant-numeric:tabular-nums;min-height:20px;margin:0}
+@media (max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}}`;
 
 const STATUS: Record<Ad["status"], string> = {
 	pending: "Waiting for review",
@@ -43,7 +53,49 @@ const toCents = (v: FormDataEntryValue | null) => {
 
 const when = (d: Date) => d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-function adCard(ad: Ad, csrf: string, maxDays: number) {
+const ESTIMATE = String.raw`var out=document.getElementById("estimate"),b=document.getElementById("budget"),d=document.getElementById("days");
+	if(!out||!b||!d)return;
+	var cpm=+out.dataset.cpm,min=+out.dataset.min;
+	function show(){
+		var s=b.value.trim().replace(/^\$/,""),cents=Math.round(parseFloat(s)*100),days=Math.max(1,parseInt(d.value,10)||1);
+		if(!/^\d+(\.\d{1,2})?$/.test(s)||!(cents>0)){out.textContent="";return}
+		if(cents<min){out.textContent="The minimum is $"+(min/100).toFixed(2)+".";return}
+		var views=Math.floor(cents*1000/cpm);
+		out.textContent="About "+views.toLocaleString("en-US")+" views, or "+Math.floor(views/days).toLocaleString("en-US")+" a day over "+days+(days===1?" day":" days")+", at today's price.";
+	}
+	b.addEventListener("input",show);d.addEventListener("input",show);show();`;
+
+const num = (n: number) => n.toLocaleString("en-US");
+
+function analytics(ad: Ad, stats: AdStats | undefined, cpm: number) {
+	if (ad.status === "pending" || ad.status === "rejected" || !ad.startsAt) return "";
+	const live = ad.status === "running" || ad.status === "paused";
+	const cost = ad.views ? formatCents(Math.round((ad.spentCents * 1000) / ad.views)) : "None yet";
+	const left = live ? `about ${num(estimateViews(ad.budgetCents - ad.spentCents, cpm))}` : "0";
+	const tiles = [
+		[num(ad.views), ad.views === 1 ? "view" : "views"],
+		[num(stats?.reach ?? 0), "people reached"],
+		[cost, "per 1000 views"],
+		[left, "views left"],
+	]
+		.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`)
+		.join("");
+	const byDay = new Map((stats?.days ?? []).map((d) => [d.day, d.views]));
+	const end = Math.min(Date.now(), ad.endsAt?.getTime() ?? Date.now());
+	const days: { day: string; views: number }[] = [];
+	for (let t = ad.startsAt.getTime(); t <= end + 86_400_000 && days.length < 31; t += 86_400_000) {
+		const day = new Date(t).toISOString().slice(0, 10);
+		if (day > new Date(end).toISOString().slice(0, 10)) break;
+		days.push({ day, views: byDay.get(day) ?? 0 });
+	}
+	const max = Math.max(1, ...days.map((d) => d.views));
+	const chart = days.length > 1
+		? `<div class="chart" role="img" aria-label="Views per day">${days.map((d) => `<div title="${d.day}: ${num(d.views)} views"><i style="height:${Math.round((d.views / max) * 100)}%"></i><small>${new Date(`${d.day}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "narrow" })}</small></div>`).join("")}</div>`
+		: "";
+	return `<div class="stats">${tiles}</div>${chart}`;
+}
+
+function adCard(ad: Ad, csrf: string, maxDays: number, stats: AdStats | undefined, cpm: number) {
 	const live = ad.status === "running" || ad.status === "paused";
 	const left = ad.endsAt ? Math.max(0, ad.endsAt.getTime() - Date.now()) : 0;
 	const roomDays = Math.floor((maxDays * 86_400_000 - left) / 86_400_000);
@@ -73,7 +125,7 @@ function adCard(ad: Ad, csrf: string, maxDays: number) {
 	return `<div class="card ad"><div class="split"><span class="status ${ad.status}">${STATUS[ad.status]}</span><span class="meta">${when(ad.createdAt)}</span></div>
 <p class="text">${esc(ad.text)}</p>${ad.url ? `<a class="link" href="${esc(ad.url)}" target="_blank" rel="noopener noreferrer">${esc(ad.url)}</a>` : ""}
 ${ad.status === "rejected" && ad.rejectReason ? `<p class="error">${esc(ad.rejectReason)}</p>` : ""}
-<div class="meta">${lines.join(" · ")}</div>${live ? `<div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>` : ""}
+<div class="meta">${lines.join(" · ")}</div>${live ? `<div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>` : ""}${analytics(ad, stats, cpm)}
 ${acts.length ? `<div class="acts">${acts.join("")}</div>` : ""}${extend}</div>`;
 }
 
@@ -81,6 +133,7 @@ async function page(req: Request, viewer: Viewer, opts: { error?: string; notice
 	const rules = settings().ads;
 	if (!rules.enabled) return accountPage({ req, viewer, title: "Ads Manager", body: `<h1>Ads Manager</h1><p class="dim">Ads aren't open on this instance.</p>` });
 	const [ads, cpm, [wallet]] = await Promise.all([myAds(viewer.id), currentPrice(), sql`select balance_cents::bigint as cents from money_wallets where user_id = ${viewer.id}::bigint`]);
+	const stats = await adStats(ads.map((a) => a.id));
 	const balance = Number(wallet?.cents ?? 0);
 	const d = opts.draft ?? {};
 	const adOnly = d.who !== "everyone";
@@ -99,13 +152,14 @@ ${opts.error ? `<p class="error" role="alert">${esc(opts.error)}</p>` : ""}${opt
 <label><input type="radio" name="who" value="ad"${adOnly ? " checked" : ""}><span><b>Only as an ad</b><br><span class="dim">The post shows up only in timelines as an ad, never on your profile.</span></span></label>
 <label><input type="radio" name="who" value="everyone"${adOnly ? "" : " checked"}><span><b>Also on your profile</b><br><span class="dim">The post is a normal post anyone can see, and it also runs as an ad.</span></span></label>
 </div>
+<p class="estimate" id="estimate" aria-live="polite" data-cpm="${cpm}" data-min="${rules.min_spend_cents}"></p>
 <p class="dim price">The minimum is ${formatCents(rules.min_spend_cents)}. Right now each Equicoin buys about ${perDollar.toLocaleString("en-US")} views, and the price rises as more Equicoins go into ads. You have ${formatCents(balance)}.</p>
 <button type="submit">Send for review</button>
 </form>
 <h2>Your ads</h2>
-${ads.length ? `<div class="ads">${ads.map((a) => adCard(a, viewer.csrf, rules.max_days)).join("")}</div>` : `<p class="dim">You haven't made any ads yet.</p>`}
+${ads.length ? `<div class="ads">${ads.map((a) => adCard(a, viewer.csrf, rules.max_days, stats.get(a.id), cpm)).join("")}</div>` : `<p class="dim">You haven't made any ads yet.</p>`}
 <p class="dim">Don't want to see ads? <a href="/account/labels">Hide them for free</a>.</p>`;
-	return accountPage({ req, viewer, title: "Ads Manager", css: CSS, body, status: opts.error ? 400 : 200 });
+	return accountPage({ req, viewer, title: "Ads Manager", css: CSS, head: `<script>addEventListener("DOMContentLoaded",function(){${ESTIMATE}})</script>`, body, status: opts.error ? 400 : 200 });
 }
 
 const back = (notice: string) => new Response(null, { status: 303, headers: { location: `/account/ads?done=${encodeURIComponent(notice)}` } });

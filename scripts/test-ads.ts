@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { AdminError } from "../src/admin";
 import { adActions } from "../src/ads-admin";
-import { AdError, VIEWS_PER_DAY, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, extendAd, myAds, pauseAd, pickAd, priceFor } from "../src/ads";
+import { AdError, VIEWS_PER_DAY, adStats, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, extendAd, myAds, pauseAd, pickAd, priceFor } from "../src/ads";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
 import { createPost } from "../src/posts";
