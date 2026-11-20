@@ -16,7 +16,7 @@ import { flagSvg } from "./flags";
 import { onboarding } from "./onboarding";
 import { cachedPatch, patchFile, patchText } from "./patch";
 import { clientError, recordError } from "./errors";
-import { asRequest, markStaff, setRequestLanguage, staffGate } from "./staff-access";
+import { asRequest, markStaff, setHideParody, setRequestLanguage, staffGate } from "./staff-access";
 import { backupPath, startBackups } from "./backups";
 import { startUpdateChecks } from "./update-check";
 import { memberInvitesRoute } from "./member-invites";
@@ -49,6 +49,7 @@ import { gifProxy } from "./gifs";
 import { accountIndexRoute } from "./account-page";
 import { gifSettingsRoute } from "./gif-settings";
 import { classicDetailRoute, postCounts } from "./classic-detail";
+import { parodyLabelsRoute } from "./parody-labels";
 import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
 import { cardImage } from "./explore-cards";
@@ -103,7 +104,7 @@ const MIME: Record<string, string> = {
 // The client also calls outside services on its own (grok.com checkout, ads
 // measurement). Requests from the page may only reach this instance.
 const SETTINGS_PAGES = new Set(
-	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details", "client"].map((s) => `/account/${s}`),
+	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details", "labels", "client"].map((s) => `/account/${s}`),
 );
 
 const PAGE_CSP = "connect-src 'self' blob: data:; font-src 'self'";
@@ -527,6 +528,7 @@ async function route(req: Request): Promise<Response | undefined> {
 
 	const viewer = await getViewer(req);
 	setRequestLanguage(viewer?.language ?? undefined);
+	setHideParody(!!viewer?.hide_parody_labels);
 	if (req.method === "GET" && url.searchParams.has("client") && !API_PREFIX.test(p)) {
 		const switched = await switchByQuery(url, viewer ?? undefined);
 		if (switched) return switched;
@@ -560,6 +562,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/account/gifs" && viewer) return gifSettingsRoute(req, viewer);
 	if (p === "/account/client" && viewer) return clientRoute(req, viewer, clientBuilds().find((b) => b.dir === clientDir()));
 	if (p === "/account/post-details" && viewer) return classicDetailRoute(req, viewer);
+	if (p === "/account/labels" && viewer) return parodyLabelsRoute(req, viewer);
 	if (p === "/account/circle" && viewer) return circleRoute(req, viewer);
 	if (p === "/account/apps/developer" && viewer) return developerAppsRoute(req, viewer);
 	if (p === "/federation/superadmin" || p.startsWith("/federation/superadmin/")) return superadminHomeRoute(req, url, viewer);

@@ -23,7 +23,7 @@ test("GIF provider is nested under Your Account", () => {
     ];
     const result = new Function("d", "s", `${patched};return e;`)({ Dp: () => groups }, { kF: (title: string) => title.toLowerCase() });
     expect(result).toHaveLength(2);
-    expect(result[0].items.map((item: { id: string }) => item.id)).toEqual(["accountInformation", "xitterGifProvider", "xitterPostDetails", "xitterEquicoins"]);
+    expect(result[0].items.map((item: { id: string }) => item.id)).toEqual(["accountInformation", "xitterGifProvider", "xitterPostDetails", "xitterProfileLabels", "xitterEquicoins"]);
     const paths = result[0].items.map((item: { path: string }) => item.path);
     expect(paths).toContain("/settings/xitter/post-details");
     expect(paths).toContain("/settings/xitter/merchant");

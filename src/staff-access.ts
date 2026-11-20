@@ -45,7 +45,7 @@ export async function staffGate(req: Request, viewer: Viewer): Promise<string | 
 	return null;
 }
 
-const staffRequest = new AsyncLocalStorage<{ staff: boolean; language?: string; suspended?: string }>();
+const staffRequest = new AsyncLocalStorage<{ staff: boolean; language?: string; suspended?: string; hideParody?: boolean }>();
 
 export const asRequest = <T>(run: () => T) => staffRequest.run({ staff: false }, run);
 
@@ -53,6 +53,14 @@ export const setRequestLanguage = (language: string | undefined) => {
 	const request = staffRequest.getStore();
 	if (request) request.language = language;
 };
+
+// Settings > Profile labels (parody-labels.ts): this viewer doesn't want to
+// see parody, commentary or fan labels on anyone
+export const setHideParody = (hide: boolean) => {
+	const request = staffRequest.getStore();
+	if (request) request.hideParody = hide;
+};
+export const hidesParody = () => !!staffRequest.getStore()?.hideParody;
 
 export const requestLanguage = () => staffRequest.getStore()?.language;
 

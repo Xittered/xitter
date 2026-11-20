@@ -15,7 +15,7 @@ import { homeOf, mentionsIn } from "./mentions";
 import { type MediaRow, absolute, mediaEntity, mediaUrl, posterUrl } from "./media";
 import { placeById } from "./places";
 import { shownSource } from "./platforms";
-import { requestLanguage } from "./staff-access";
+import { hidesParody, requestLanguage } from "./staff-access";
 import { feature, settings } from "./settings";
 import { SHORT_POST, previewOf, weightedLength } from "./textlen";
 import { badgeUrl } from "./users";
@@ -145,7 +145,7 @@ export function badgeList(u: User): Badge[] {
 // the first badge. The client puts a parody, commentary or fan label there
 // before anything we send. When a label has it, every badge goes through the
 // page script (badges.ts). A bot's other labels go the same way (hiddenLabels).
-const hasParodyLabel = (u: User) => !!u.parody_label && u.parody_label !== "None";
+const hasParodyLabel = (u: User) => !!u.parody_label && u.parody_label !== "None" && !hidesParody();
 export const labelTakesSlot = (u: User) => !!u.automated_by || hasParodyLabel(u) || !!u.label;
 
 // the client's own mask icon, for a staff-made label without a badge; its
