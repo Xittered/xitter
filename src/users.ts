@@ -47,7 +47,11 @@ export const userCols = (viewerId: string) => sql`
 	exists (select 1 from blocks x where x.blocker_id = u.id and x.blocked_id = ${viewerId}::bigint) as a_blocked_by,
 	exists (select 1 from mutes x where x.muter_id = ${viewerId}::bigint and x.muted_id = u.id) as a_muting,
 	exists (select 1 from post_notifications x where x.user_id = ${viewerId}::bigint and x.target_id = u.id) as a_notifying,
-	exists (select 1 from repost_mutes x where x.user_id = ${viewerId}::bigint and x.target_id = u.id) as a_reposts_muted`;
+	exists (select 1 from repost_mutes x where x.user_id = ${viewerId}::bigint and x.target_id = u.id) as a_reposts_muted,
+	(u.id = ${viewerId}::bigint or case coalesce(u.preferences->>'allow_media_tagging', 'all')
+		when 'none' then false
+		when 'following' then exists (select 1 from follows x where x.follower_id = u.id and x.followee_id = ${viewerId}::bigint)
+		else true end) as a_media_taggable`;
 
 export function toUser(r: any): User {
 	return {
@@ -93,6 +97,7 @@ export function toUser(r: any): User {
 			muting: r.a_muting,
 			notifying: !!r.a_notifying,
 			repostsMuted: !!r.a_reposts_muted,
+			mediaTaggable: r.a_media_taggable !== false,
 		},
 	};
 }

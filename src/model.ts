@@ -270,7 +270,7 @@ export function userResult(u: User) {
 		id: globalId("User", u.id),
 		is_blue_verified: isVerified(u),
 		location: { location: u.location },
-		media_permissions: { can_media_tag: true },
+		media_permissions: { can_media_tag: u.stats?.mediaTaggable ?? true },
 		notifications_settings: { notifications_enabled: !!u.stats?.notifying },
 		// "None": the slot is affiliates_highlighted_label (badgeLabel); extras a
 		// bot hid go through badges.ts. this field's label isn't shown
@@ -359,7 +359,7 @@ export function legacyUser(u: User) {
 		protected: !!u.protected,
 		profile_image_url_https: oldClient() ? oldAvatar(absolute(u.avatar_url) ?? DEFAULT_AVATAR, pictureShape(u)) : (absolute(u.avatar_url) ?? DEFAULT_AVATAR),
 		...(u.banner_url ? { profile_banner_url: absolute(u.banner_url) } : {}),
-		can_media_tag: true,
+		can_media_tag: u.stats?.mediaTaggable ?? true,
 		// with a default avatar and no bio or banner the client offers its "Set up
 		// profile" onboarding flow, which we don't run; this keeps the Edit profile dialog
 		default_profile_image: false,

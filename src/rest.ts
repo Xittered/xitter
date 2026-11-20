@@ -364,9 +364,12 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 		const findable = form?.get("discoverable_by_email");
 		if (findable === "true" || findable === "false")
 			await sql`update users set preferences = preferences || ${JSON.stringify({ discoverable_by_email: findable })}::text::jsonb where id = ${viewer.id}::bigint`;
+		const tagging = form?.get("allow_media_tagging");
+		if (tagging === "all" || tagging === "following" || tagging === "none")
+			await sql`update users set preferences = preferences || ${JSON.stringify({ allow_media_tagging: tagging })}::text::jsonb where id = ${viewer.id}::bigint`;
 		const lang = form?.get("lang") ?? form?.get("language");
 		if (typeof lang === "string" && /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(lang)) await sql`update users set language = ${lang} where id = ${viewer.id}::bigint`;
-		const [fresh] = await sql`select screen_name, language, protected, preferences->>'discoverable_by_email' = 'true' as discoverable_by_email from users where id = ${viewer.id}::bigint`;
+		const [fresh] = await sql`select screen_name, language, protected, preferences->>'discoverable_by_email' = 'true' as discoverable_by_email, preferences->>'allow_media_tagging' as allow_media_tagging from users where id = ${viewer.id}::bigint`;
 		return Response.json(settingsFor({ ...viewer, ...fresh }) ?? {});
 	}
 	// Settings > Account information > Country

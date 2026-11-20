@@ -46,7 +46,7 @@ export function settingsFor(user: User): Record<string, unknown> {
 		discoverable_by_email: !!user.discoverable_by_email,
 		discoverable_by_mobile_phone: false,
 		personalized_trends: false,
-		allow_media_tagging: "all",
+		allow_media_tagging: user.allow_media_tagging ?? "all",
 		allow_contributor_request: "none",
 		allow_ads_personalization: false,
 		allow_logged_out_device_personalization: false,

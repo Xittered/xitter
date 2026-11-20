@@ -84,7 +84,7 @@ function legacyFromResult(u: Obj): Obj {
 		has_extended_profile: false,
 		// 2020 DMs (legacy-dm.ts) take anyone not blocked; sending checks that
 		can_dm: true,
-		can_media_tag: true,
+		can_media_tag: u.media_permissions?.can_media_tag ?? true,
 		following: !!rel.following,
 		followed_by: !!rel.followed_by,
 		blocking: !!rel.blocking,
