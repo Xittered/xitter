@@ -68,6 +68,7 @@ const RULES: [RegExp, string][] = [
 	[/https:\/\/x\.com(?=["'`$/?#])/g, PUBLIC_ORIGIN],
 	// The profile editor leaves GIFs out of its avatar and banner pickers even
 	// though the upload API and the crop patch below support animated GIFs.
+	[/(new URL\(`x-safari-https:\/\/redirect\.x\.com[\s\S]{0,120}?;)window\.location\.href=[\w$]+\}/g, "$1}"],
 	[/(location:\w+\.rz\.(?:Avatar|ProfileBanner),mediaItem:)/g, "acceptGifs:!0,$1"],
 	// ...and its "Edit media" cropper takes only isImage files, which a GIF
 	// isn't (it is isGif), so it got nothing and spun forever
