@@ -132,6 +132,10 @@ const RULES: [RegExp, string][] = [
 		"$4}",
 	],
 	[
+		/(\.then\((\w+)=>\{this\._maybeAutoSave\(\);)(let \w+=\2\.map\(\w+=>\w+\.id\);if\(\(0,[\w$]+\.[\w$]+\)\(\[\.\.\.(\w+)\.media,\.\.\.\2\],this\._maxMediaUploads\)\)\{)/g,
+		'$1{let xitterRoom=Math.max(0,this._maxMediaUploads-$4.media.length);if($2.length>xitterRoom){this.props.addToast({text:"Please choose up to "+this._maxMediaUploads+" photos, videos, or GIFs."});this.props.removeMediaUpload($2.slice(xitterRoom).map(e=>e.id));$2=$2.slice(0,xitterRoom);if(!$2.length)return}}$3',
+	],
+	[
 		/(\w+)=(\w+)\.toDataURL\("image\/jpeg",(\w+)\),(\w+)=\1\.split\(";base64,"\)/g,
 		'$1=$2.toDataURL(function(c){try{var p=c.getContext("2d").getImageData(0,0,c.width,c.height).data;for(var i=3;i<p.length;i+=4)if(p[i]<255)return"image/png"}catch(e){}return"image/jpeg"}($2),$3),$4=$1.split(";base64,")',
 	],
