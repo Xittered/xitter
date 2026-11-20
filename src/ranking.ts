@@ -24,7 +24,8 @@ const HALF_LIFE = 12;
 
 export type RankedPage = { items: FeedItem[]; next?: number };
 
-type Ranked = { item_id: string; post_id: string; reposter_id: string | null; created_at: Date }[];
+type Row = { item_id: string; post_id: string; reposter_id: string | null; created_at: Date; author_id: string; score: number };
+type Ranked = Row[];
 
 // The pages of one scroll share a ranking (same viewer and asOf), so it is kept
 // a while instead of ranking every candidate again for each page.
@@ -44,6 +45,63 @@ function ranking(viewerId: string, asOf: string): Promise<Ranked> {
 	rows.catch(() => rankings.delete(key));
 	return rows;
 }
+
+const SEEN_SINK = 0.85;
+const SEEN_RECOVERY_MS = 3 * 3600_000;
+const SEEN_PER_VIEWER = 150;
+const SEEN_VIEWERS = 2000;
+const JITTER = 0.25;
+const seen = new Map<string, Map<string, number>>();
+const views = new Map<string, { rows: Ranked; until: number }>();
+
+function remember(viewerId: string, rows: Row[]) {
+	const now = Date.now();
+	let mine = seen.get(viewerId);
+	if (mine) seen.delete(viewerId);
+	else mine = new Map();
+	seen.set(viewerId, mine);
+	for (const r of rows) {
+		mine.delete(r.post_id);
+		mine.set(r.post_id, now);
+	}
+	while (mine.size > SEEN_PER_VIEWER) mine.delete(mine.keys().next().value!);
+	while (seen.size > SEEN_VIEWERS) seen.delete(seen.keys().next().value!);
+}
+
+function chance(seed: number, postId: string) {
+	let h = seed >>> 0;
+	for (let i = 0; i < postId.length; i++) h = Math.imul(h ^ postId.charCodeAt(i), 2654435761) >>> 0;
+	h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+	return (h ^ (h >>> 13)) / 4294967296;
+}
+
+function reorder(viewerId: string, base: Ranked, seed: number): Ranked {
+	const now = Date.now();
+	const mine = seen.get(viewerId);
+	const weighed = base.map((r) => {
+		const shownAt = mine?.get(r.post_id);
+		const sink = shownAt === undefined ? 1 : 1 - SEEN_SINK * Math.exp(-(now - shownAt) / SEEN_RECOVERY_MS);
+		return { r, score: r.score * sink * Math.exp(JITTER * (2 * chance(seed, r.post_id) - 1)) };
+	});
+	weighed.sort((a, b) => b.score - a.score || (BigInt(b.r.item_id) > BigInt(a.r.item_id) ? 1 : -1));
+	return spreadAuthors(weighed.map((w) => w.r));
+}
+
+async function view(viewerId: string, asOf: string, seed: number): Promise<Ranked> {
+	const base = await ranking(viewerId, asOf);
+	if (!seed) return spreadAuthors(base);
+	const key = `${viewerId}:${asOf}:${seed}`;
+	const now = Date.now();
+	const hit = views.get(key);
+	if (hit && hit.until > now) return hit.rows;
+	for (const [k, v] of views) if (v.until <= now) views.delete(k);
+	while (views.size >= MAX_RANKINGS) views.delete(views.keys().next().value!);
+	const rows = reorder(viewerId, base, seed);
+	views.set(key, { rows, until: now + RANKING_TTL });
+	return rows;
+}
+
+export const newView = () => 1 + Math.floor(Math.random() * 2_000_000_000);
 
 // Opening "For you" (a reload, the app coming back, several tabs at once) made
 // a new ranking each time, the costliest query here by far. For a minute the
@@ -72,9 +130,10 @@ export const forgetRanking = (viewerId: string) => void latest.delete(viewerId);
 // One page of the ranked feed. `asOf` (an item id) pins the ranking for the pages of one
 // scroll: posts newer than it wait for the next refresh, and ages are measured
 // from it, so the order does not shift while the viewer pages down.
-export async function rankedFeed(viewerId: string, opts: { asOf: string; offset: number; limit: number }): Promise<RankedPage> {
-	const ranked = await ranking(viewerId, opts.asOf);
+export async function rankedFeed(viewerId: string, opts: { asOf: string; offset: number; limit: number; view?: number }): Promise<RankedPage> {
+	const ranked = await view(viewerId, opts.asOf, opts.view ?? 0);
 	const pageRows = ranked.slice(opts.offset, opts.offset + opts.limit);
+	remember(viewerId, pageRows);
 	const items = await itemsFromRows(viewerId, pageRows);
 	const nextOffset = opts.offset + pageRows.length;
 	return { items, ...(nextOffset < ranked.length ? { next: nextOffset } : {}) };
@@ -147,7 +206,7 @@ async function rank(viewerId: string, asOf: string): Promise<Ranked> {
 		select * from best order by score desc, item_id desc limit ${CANDIDATES}`;
 
 	// only what a page needs is kept
-	return spreadAuthors(rows as any[]).map((r) => ({ item_id: r.item_id, post_id: r.post_id, reposter_id: r.reposter_id, created_at: r.created_at }));
+	return (rows as any[]).map((r) => ({ item_id: String(r.item_id), post_id: String(r.post_id), reposter_id: r.reposter_id === null ? null : String(r.reposter_id), created_at: r.created_at, author_id: String(r.author_id), score: Number(r.score) }));
 }
 
 // Keep one author from filling the screen: an entry that would make a run
