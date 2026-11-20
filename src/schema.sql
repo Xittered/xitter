@@ -1894,3 +1894,23 @@ create table if not exists grok_items (
 	created_at timestamptz not null default now()
 );
 create index if not exists grok_items_conversation on grok_items (conversation_id, id);
+
+create table if not exists ads (
+	id bigint primary key,
+	user_id bigint not null references users (id) on delete cascade,
+	text text not null,
+	url text,
+	budget_cents bigint not null check (budget_cents > 0),
+	spent_cents bigint not null default 0 check (spent_cents >= 0 and spent_cents <= budget_cents),
+	refunded_cents bigint not null default 0 check (refunded_cents >= 0),
+	days int not null check (days > 0),
+	status text not null check (status in ('pending', 'running', 'paused', 'ended', 'rejected', 'cancelled')),
+	reject_reason text,
+	created_at timestamptz not null default now(),
+	reviewed_at timestamptz,
+	reviewed_by bigint references users (id) on delete set null,
+	starts_at timestamptz,
+	ends_at timestamptz
+);
+create index if not exists ads_status_idx on ads (status, ends_at);
+create index if not exists ads_user_idx on ads (user_id, id desc);

@@ -38,6 +38,7 @@ import { oauthAppActions } from "./oauth-admin";
 import { hashflagActions } from "./hashflags";
 import { switchActions } from "./feature-switches";
 import { moneyActions } from "./money-admin";
+import { adActions } from "./ads";
 import { AFFILIATION_LIMIT } from "./org-manage";
 import { staffGate } from "./staff-access";
 import { countryCode, countryDisplayName } from "./countries";
@@ -58,7 +59,7 @@ export type Action = { role: Role; run: (actor: Viewer, b: Body, req?: Request) 
 // Every action the code logs (grep audit( and audit_log inserts when adding one),
 // so the audit filter offers them all, logged yet or not.
 export const AUDIT_ACTIONS = [
-	"add_affiliate", "add_staff_note", "add_sticker", "archive_import", "article_visibility", "auto_suspend_name", "automod_second_chance",
+	"ad_approve", "ad_reject", "add_affiliate", "add_staff_note", "add_sticker", "archive_import", "article_visibility", "auto_suspend_name", "automod_second_chance",
 	"automod_strike", "backup_schedule", "block_oauth_app", "bulk_status", "bulk_strike", "compress_stored", "create_backup", "create_badge",
 	"create_hashflag", "create_invites", "create_label", "create_org", "create_platform", "create_sticker_pack", "delete_account", "delete_backup",
 	"delete_badge", "delete_community_note", "delete_explore_card", "delete_hashflag", "delete_label", "delete_media", "delete_post", "delete_sticker",
@@ -1038,6 +1039,7 @@ Object.assign(ACTIONS, oauthAppActions);
 Object.assign(ACTIONS, hashflagActions);
 Object.assign(ACTIONS, switchActions);
 Object.assign(ACTIONS, moneyActions);
+Object.assign(ACTIONS, adActions);
 
 // every permission names real actions, and its default is the role written on them
 for (const [key, p] of Object.entries(PERMISSIONS))
@@ -1045,7 +1047,7 @@ for (const [key, p] of Object.entries(PERMISSIONS))
 		if (ACTIONS[name]?.role !== p.role) throw new Error(`Staff permission ${key}: ${name} ${ACTIONS[name] ? `needs ${ACTIONS[name].role}, not ${p.role}` : "is no action"}.`);
 
 const READS = new Set(
-	"federation platforms mail cards topics me staffPermissions stats users user orgs affiliates posts reports invites settings audit badges labels staffNotes staffMessages appeals handleHistory userSessions blockedNameAccounts articles media mediaAccount operations heldIdentities updateStatus health security backups archiveImports client checkClient errors inviteTree featureSwitches hashflags oauthApps stickers automodScan money".split(
+	"ads federation platforms mail cards topics me staffPermissions stats users user orgs affiliates posts reports invites settings audit badges labels staffNotes staffMessages appeals handleHistory userSessions blockedNameAccounts articles media mediaAccount operations heldIdentities updateStatus health security backups archiveImports client checkClient errors inviteTree featureSwitches hashflags oauthApps stickers automodScan money".split(
 		" ",
 	),
 );

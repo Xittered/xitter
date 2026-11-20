@@ -82,6 +82,7 @@ jobs:
           bun scripts/test-money-api.ts
           bun scripts/test-money-move.ts
           bun scripts/test-money-shop.ts
+          bun scripts/test-ads.ts
           bun scripts/test-api-badges.ts
           bun scripts/test-scheduled-threads.ts
           bun scripts/test-scheduled-quota.ts
