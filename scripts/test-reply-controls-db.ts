@@ -22,7 +22,7 @@ async function fixture(id: string) {
 
 async function expectReply(userId: string, postId: string, allowed: boolean) {
 	const post = await getPost(userId, postId);
-	assert.equal(await replyLimited(post!.conversation_id, userId), !allowed);
+	assert.equal(await replyLimited(postId, post!.conversation_id, userId), !allowed);
 	assert.equal(post!.reply_limited, !allowed);
 	if (allowed) await createPost(userId, "allowed reply", { replyToId: postId, skipPreview: true });
 	else await assert.rejects(createPost(userId, "disallowed reply", { replyToId: postId, skipPreview: true }), /limited who can reply/);
@@ -70,7 +70,7 @@ try {
 	await expectReply(overridden, id, true);
 	await expectReply(custom, id, true);
 	await expectReply(network, id, false);
-	await assert.rejects(callOperation("ConversationControlDelete", { id: outsider } as any, { tweet_id: id }), /own conversation/);
+	await assert.rejects(callOperation("ConversationControlDelete", { id: outsider } as any, { tweet_id: id }), /your own posts/);
 	await callOperation("ConversationControlDelete", viewer, { tweet_id: id });
 	await expectReply(outsider, id, true);
 	result = await (await runOperation("CreateTweet", viewer, { tweet_text: "invalid", conversation_control: { mode: "Country", allowed_country_codes: [] } })).json();
