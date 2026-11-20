@@ -11,8 +11,6 @@ const RSW_T = Number(process.env.CAP_RSW_T ?? 10_000);
 const COOKIE = "xitter_cap";
 const TOKEN_TTL_MS = 20 * 60 * 1000;
 
-export const capOn = () => process.env.CAP_SIGNUP !== "off";
-
 function keep<T>(file: string, make: () => T, encode: (v: T) => string, decode: (s: string) => T): T {
 	if (existsSync(file)) return decode(readFileSync(file, "utf8"));
 	const value = make();
@@ -55,7 +53,6 @@ export async function capRoute(req: Request, path: string): Promise<Response | u
 	if (wasm) return new Response(Bun.file(`node_modules/@cap.js/wasm/browser/${wasm[1]}.wasm`), { headers: { "content-type": "application/wasm", "cache-control": "public, max-age=86400" } });
 	if (path !== "/i/xitter/cap/challenge" && path !== "/i/xitter/cap/redeem") return undefined;
 	if (req.method !== "POST") return json({ error: "Use POST." }, 405);
-	if (!capOn()) return json({ error: "Cap is off on this instance." }, 404);
 	if (!hit("auth", requestIp(req) ?? "unknown").ok) return json({ error: "Too many tries. Wait a few minutes." }, 429);
 	if (path === "/i/xitter/cap/challenge") return json(await generateChallenge(capSecret(), { protocols: ["hashwx", "rsw", "instrumentation"], keypair: rswKeypair(), t: RSW_T }));
 	const body = await req.json().catch(() => undefined);
@@ -68,7 +65,6 @@ export async function capRoute(req: Request, path: string): Promise<Response | u
 }
 
 export function capPassed(req: Request, spend: boolean): boolean {
-	if (!capOn()) return true;
 	const raw = cookieOf(req);
 	if (!raw) return false;
 	const [id, verToken] = decodeURIComponent(raw).split(":");
