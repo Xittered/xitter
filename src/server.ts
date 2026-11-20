@@ -52,6 +52,7 @@ import { classicDetailRoute, postCounts } from "./classic-detail";
 import { capRoute } from "./cap";
 import { parodyLabelsRoute } from "./parody-labels";
 import { adsRoute } from "./ads-page";
+import { endExpiredAds } from "./ads";
 import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
 import { cardImage } from "./explore-cards";
@@ -338,6 +339,14 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 
 await migrate();
 await expireSanctions();
+setInterval(
+	() =>
+		endExpiredAds().catch((e) => {
+			console.error("ad expiry failed", e.message);
+			recordError("job", e, { path: "ad expiry" });
+		}),
+	60_000,
+).unref();
 // temporary sanctions end on their own
 setInterval(
 	() =>

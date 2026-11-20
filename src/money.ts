@@ -270,9 +270,9 @@ export async function rewardLike(likerId: string, postId: string, likerInstance?
 	await sql.begin(async (tx) => {
 		const [p] = likerInstance
 			? await tx`select p.user_id::text as author from posts p join users a on a.id = p.user_id join users l on l.id = ${likerId}::bigint
-				where p.id = ${postId}::bigint and a.instance is null and l.instance = ${likerInstance} and l.status <> 'suspended'`
+				where p.id = ${postId}::bigint and not p.ad_only and a.instance is null and l.instance = ${likerInstance} and l.status <> 'suspended'`
 			: await tx`select p.user_id::text as author from posts p join users a on a.id = p.user_id join users l on l.id = ${likerId}::bigint
-				where p.id = ${postId}::bigint and a.instance is null and l.instance is null and l.status <> 'suspended'`;
+				where p.id = ${postId}::bigint and not p.ad_only and a.instance is null and l.instance is null and l.status <> 'suspended'`;
 		if (!p || p.author === likerId) return;
 		if (likerInstance) {
 			await lockPeer(tx, likerInstance);

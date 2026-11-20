@@ -4,7 +4,7 @@ import { adActions } from "../src/ads-admin";
 import { AdError, VIEWS_PER_DAY, adStats, cancelAd, chargeView, createAd, endExpiredAds, estimateViews, extendAd, myAds, pauseAd, pickAd, priceFor } from "../src/ads";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
-import { createPost } from "../src/posts";
+import { createPost, repost } from "../src/posts";
 import { loadSettings, setSetting, settings } from "../src/settings";
 
 const database = new URL(process.env.DATABASE_URL ?? "postgres://localhost/xitter");
@@ -34,7 +34,7 @@ try {
 
 	await setSetting("ads", { ...before, enabled: false });
 	await refused(createAd(people.alice, ad), AdError, /aren't open/);
-	await setSetting("ads", { ...before, enabled: true, min_spend_cents: 500, max_days: 7, max_pending: 3, reject_refund_pct: 70 });
+	await setSetting("ads", { ...before, enabled: true, min_spend_cents: 500, max_days: 7, max_pending: 3, reject_refund_pct: 70, min_viewer_age_days: 3 });
 
 	await refused(createAd(people.alice, { ...ad, budgetCents: 499 }), AdError, /at least/);
 	await refused(createAd(people.alice, { ...ad, days: 8 }), AdError, /1 to 7 days/);
@@ -118,12 +118,23 @@ try {
 	assert.equal(await pickAd(people.alice, []), undefined, "nobody is shown their own ad");
 	assert.equal(await pickAd(people.bob, [second2, openRun.postId]), undefined, "an ad already on the page isn't picked again");
 	await chargeView(hidden.id, people.bob);
+	const [young] = await sql`select views from ads where id = ${hidden.id}::bigint`;
+	assert.equal(young.views, 0, "a brand new account's views cost nothing");
+	await sql`update users set created_at = now() - interval '10 days' where id in ${sql([people.bob, people.mod])}`;
+	await sql`update ad_views set last_at = '-infinity' where viewer_id = ${people.bob}::bigint`;
 	await chargeView(hidden.id, people.bob);
+	await chargeView(hidden.id, people.bob);
+	const again = await pickAd(people.bob, []);
+	assert.equal(again?.adId, open.id, "every showing counts toward the daily cap, charged or not");
+	await refused(repost(people.bob, second2), Error, /Ads can't be reposted/);
+	await refused(createPost(people.bob, "look", { quoteId: second2 }), Error, /Ads can't be quoted/);
+	await sql`insert into reposts (id, user_id, post_id) values (${newId()}::bigint, ${people.bob}::bigint, ${second2}::bigint)`;
+	const viaRepost = await sql`select 1 from feed_items where post_id = ${second2}::bigint`;
+	assert.equal(viaRepost.length, 0, "an ad-only post never reaches timelines through a repost");
 	const [afterViews] = await sql`select views, spent_milli::bigint as milli from ads where id = ${hidden.id}::bigint`;
 	assert.equal(afterViews.views, 1, "a second view within the hour costs nothing");
 	assert(Number(afterViews.milli) > 0, "a view is charged");
-	await sql`insert into ad_views (ad_id, viewer_id, n) values (${open.id}::bigint, ${people.bob}::bigint, ${VIEWS_PER_DAY}) on conflict (ad_id, viewer_id, day) do update set n = ${VIEWS_PER_DAY}`;
-	await sql`update ad_views set n = ${VIEWS_PER_DAY} where viewer_id = ${people.bob}::bigint`;
+	await sql`insert into ad_views (ad_id, viewer_id, shown) values (${open.id}::bigint, ${people.bob}::bigint, ${VIEWS_PER_DAY}) on conflict (ad_id, viewer_id, day) do update set shown = ${VIEWS_PER_DAY}`;
 	assert.equal(await pickAd(people.bob, []), undefined, "nobody sees one ad more than the daily cap");
 	await sql`delete from ad_views where viewer_id = ${people.bob}::bigint`;
 	await sql`update users set preferences = '{"hide_ads": true}' where id = ${people.bob}::bigint`;
@@ -140,7 +151,16 @@ try {
 	assert.equal(await pickAd(people.bob, []), undefined, "a paused ad isn't shown");
 	await refused(pauseAd(people.alice, hidden.id, true), AdError, /running/);
 	await refused(pauseAd(people.bob, hidden.id, false), AdError, /paused/);
-	await pauseAd(people.alice, hidden.id, false);
+	await sql`update ads set ends_at = ends_at - interval '1 day' where id = ${hidden.id}::bigint`;
+	const [beforeResume] = await sql`select extract(epoch from paused_left)::float8 as s from ads where id = ${hidden.id}::bigint`;
+	const resumed = await pauseAd(people.alice, hidden.id, false);
+	assert(Math.abs((resumed.endsAt!.getTime() - Date.now()) / 1000 - Number(beforeResume.s)) < 5, "a paused ad keeps the time it had left");
+	await pauseAd(people.alice, hidden.id, true);
+	await sql`update ads set paused_at = now() - interval '8 days' where id = ${hidden.id}::bigint`;
+	await endExpiredAds();
+	const [stale] = await sql`select status from ads where id = ${hidden.id}::bigint`;
+	assert.equal(stale.status, "ended", "an ad paused longer than the longest run ends and refunds");
+	await sql`update ads set status = 'running', paused_at = null, paused_left = null, refunded_cents = 0, ends_at = now() + interval '3 days' where id = ${hidden.id}::bigint`;
 	const wallet = await balance(people.alice);
 	const longer = await extendAd(people.alice, hidden.id, { budgetCents: 300, days: 2 });
 	assert.equal(longer.budgetCents, 1300);

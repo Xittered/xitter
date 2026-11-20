@@ -97,7 +97,7 @@ function analytics(ad: Ad, stats: AdStats | undefined, cpm: number) {
 
 function adCard(ad: Ad, csrf: string, maxDays: number, stats: AdStats | undefined, cpm: number) {
 	const live = ad.status === "running" || ad.status === "paused";
-	const left = ad.endsAt ? Math.max(0, ad.endsAt.getTime() - Date.now()) : 0;
+	const left = ad.pausedLeftMs ?? (ad.endsAt ? Math.max(0, ad.endsAt.getTime() - Date.now()) : 0);
 	const roomDays = Math.floor((maxDays * 86_400_000 - left) / 86_400_000);
 	const pct = ad.budgetCents ? Math.min(100, Math.round((ad.spentCents / ad.budgetCents) * 100)) : 0;
 	const lines = [
@@ -105,7 +105,8 @@ function adCard(ad: Ad, csrf: string, maxDays: number, stats: AdStats | undefine
 		`${ad.views.toLocaleString("en-US")} ${ad.views === 1 ? "view" : "views"}`,
 		ad.adOnly ? "Only as an ad" : "Also on your profile",
 	];
-	if (live && ad.endsAt) lines.push(`ends ${when(ad.endsAt)}`);
+	if (ad.status === "paused" && ad.pausedLeftMs != null) lines.push(`${Math.max(1, Math.round(ad.pausedLeftMs / 3_600_000))} hours left once resumed`);
+	else if (live && ad.endsAt) lines.push(`ends ${when(ad.endsAt)}`);
 	if (ad.status === "pending") lines.push(`runs ${ad.days} ${ad.days === 1 ? "day" : "days"} once approved`);
 	if (ad.refundedCents) lines.push(`${formatCents(ad.refundedCents)} refunded`);
 	const form = (action: string, label: string, cls = "secondary small") =>

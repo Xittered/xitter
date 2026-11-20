@@ -36,7 +36,7 @@ export const adActions: Record<string, Action> = {
 						starts_at = now(), ends_at = now() + days * interval '1 day' where id = ${id}::bigint returning ${adCols}`;
 					return done;
 				}
-				const back = Math.floor((Number(row.budget_cents) * settings().ads.reject_refund_pct) / 100);
+				const back = Math.floor((Number(row.budget_cents) * Math.min(100, Math.max(0, settings().ads.reject_refund_pct))) / 100);
 				await refund(tx, row.user_id, back);
 				const [done] = await tx`update ads set status = 'rejected', reviewed_at = now(), reviewed_by = ${a.id}::bigint,
 					reject_reason = ${reason}, refunded_cents = ${back} where id = ${id}::bigint returning ${adCols}`;

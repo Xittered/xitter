@@ -322,7 +322,8 @@ create or replace view feed_items as
 	where not p.ad_only
 	union all
 	select r.id, r.post_id, r.user_id, r.user_id, false, r.created_at
-	from reposts r;
+	from reposts r
+	where not exists (select 1 from posts x where x.id = r.post_id and x.ad_only);
 create index if not exists posts_top_level_idx on posts (id) where reply_to_id is null;
 
 -- videos: converted after upload; 'processing' until ffmpeg is done
@@ -1928,3 +1929,8 @@ create table if not exists ad_views (
 	last_at timestamptz not null default now(),
 	primary key (ad_id, viewer_id, day)
 );
+alter table ad_views add column if not exists shown int not null default 0;
+alter table ad_views alter column day set default (now() at time zone 'utc')::date;
+alter table ad_views alter column last_at set default '-infinity';
+alter table ads add column if not exists paused_left interval;
+alter table ads add column if not exists paused_at timestamptz;

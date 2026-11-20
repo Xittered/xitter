@@ -526,9 +526,10 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 		if (await replyLimited(opts.replyToId!, String(conversationId), userId, db)) throw new PostError("The author of this post or one above it limited who can reply.", 433);
 	}
 	if (opts.quoteId) {
-		const [quoted] = await db`select p.id, p.user_id, p.circle_owner_id from posts p join users u on u.id = p.user_id where p.id = ${opts.quoteId}::bigint and ${seenBy(userId)}`;
+		const [quoted] = await db`select p.id, p.user_id, p.circle_owner_id, p.ad_only from posts p join users u on u.id = p.user_id where p.id = ${opts.quoteId}::bigint and ${seenBy(userId)}`;
 		if (!quoted) throw new PostError("The post you are quoting no longer exists.", 385);
 		if (quoted.circle_owner_id) throw new PostError("Circle posts can't be quoted.", 460);
+		if (quoted.ad_only) throw new PostError("Ads can't be quoted.", 460);
 		if (await isBlockedEitherWay(userId, String(quoted.user_id), db)) throw new PostError("You can't quote this post.", 433);
 		const [owner] = await db`select protected from users where id = ${quoted.user_id}::bigint`;
 		if (owner?.protected && String(quoted.user_id) !== userId) throw new PostError("Posts from protected accounts can't be quoted.", 433);
@@ -609,9 +610,10 @@ export async function setMark(table: Mark, userId: string, postId: string, on: b
 export async function repost(userId: string, postId: string): Promise<string> {
 	postId = await originalPostId(postId);
 	// a protected account's posts can't be passed on
-	const [owner] = await sql`select u.protected, u.id::text as owner, p.circle_owner_id is not null as circle from posts p join users u on u.id = p.user_id where p.id = ${postId}::bigint`;
+	const [owner] = await sql`select u.protected, u.id::text as owner, p.circle_owner_id is not null as circle, p.ad_only from posts p join users u on u.id = p.user_id where p.id = ${postId}::bigint`;
 	if (!owner || !(await getPost(userId, postId))) throw new PostError("No status found with that ID.", 144);
 	if (owner.circle) throw new PostError("Circle posts can't be reposted.", 456);
+	if (owner.ad_only) throw new PostError("Ads can't be reposted.", 456);
 	if (owner?.protected && owner.owner !== userId) throw new PostError("Posts from protected accounts can't be reposted.", 328);
 	const id = newId();
 	const rows = await sql`insert into reposts (id, user_id, post_id) values (${id}::bigint, ${userId}::bigint, ${postId}::bigint)
