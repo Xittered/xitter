@@ -11,3 +11,5 @@ export const PASSKEY_ORIGINS = [
 		.map((s) => s.trim().replace(/\/$/, ""))
 		.filter((s) => /^https:\/\/[^/]+$/.test(s) && new URL(s).hostname.endsWith("." + PUBLIC_HOSTNAME)),
 ];
+
+export const MAX_POST_MEDIA = 20;

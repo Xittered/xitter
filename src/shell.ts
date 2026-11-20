@@ -27,7 +27,7 @@ import { NOTICE_SCRIPT } from "./automod-notice";
 import { FLAG_PICKER_CSS, FLAG_PICKER_SCRIPT, flagPickerData } from "./flag-picker";
 import { PRONOUNS_CSS, PRONOUNS_SCRIPT, pronounsData } from "./pronouns";
 import { CLASSIC_DETAIL_CSS, CLASSIC_DETAIL_SCRIPT } from "./classic-detail";
-import { PUBLIC_ORIGIN } from "./config";
+import { MAX_POST_MEDIA, PUBLIC_ORIGIN } from "./config";
 import { SQUARE_MARK, legacyUser } from "./model";
 import { patchText } from "./patch";
 import { PWA_SCRIPT, pwaHead } from "./pwa";
@@ -133,6 +133,8 @@ const HOST_SWITCHES = ["responsive_web_media_upload_host"];
 const ownSwitches = (): Record<string, { value: unknown }> => ({
 	user_display_name_max_limit: { value: NAME_MAX },
 	responsive_web_birdwatch_note_writing_enabled: { value: true },
+	rweb_mixed_media_uploads_cap: { value: MAX_POST_MEDIA },
+	rweb_media_carousel_enabled: { value: true },
 	responsive_web_pinned_replies_enabled: { value: true },
 	// Circles (circles.ts): the label on Circle posts stays even with the
 	// feature off; the composer sends its Circle choice only with the second

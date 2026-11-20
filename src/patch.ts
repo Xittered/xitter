@@ -41,6 +41,8 @@ const RULES: [RegExp, string][] = [
 	[/(restID:\w+\.rest_id,tweetCreateRequest:)(\w+)(,userMentions:\w+\}\))/g, '$1($2?.xitter_conversation_card&&!$2.status?{...$2,status:window.__XITTER_CONVERSATION_DRAFT_LABEL__?.($2.xitter_conversation_card)||"Conversation card"}:$2)$3'],
 	[/(\w+)=(\w+)\.status\|\|"",(\w+)="Failed"===/g, '$1=$2.status||($2.xitter_conversation_card&&window.__XITTER_CONVERSATION_DRAFT_LABEL__?.($2.xitter_conversation_card))||"",$3="Failed"==='],
 	[/(_handleClick=(\w+)=>\(\)=>\{)(let \w+=\2\.scheduling_info&&\2\.scheduling_info\.execute_at;if\(!this\.isDraftsTab)/g, '$1document.dispatchEvent(new CustomEvent("xitter:restore-conversation-cards",{detail:$2.tweet_create_request}));$3'],
+	[/(\{isCondensed:([\w$]+),mediaCount:([\w$]+),withMediaCarousel:([\w$]+)\}\)\{return )\3>1&&/g, "$1$3>4&&"],
+	[/(\.extended_entities\?\.media\?\.length\?\?0\))>1&&([\w$]+\(\))/g, "$1>4&&$2"],
 	[/(_areComposersEmptyOrUnchanged=\(\)=>\{)/g, '$1if(!this.props.isInline&&window.__XITTER_CONVERSATION_HAS_DRAFT__?.())return!1;'],
 	// Settings > Post details, classic (classic-detail.ts): a post's engagements
 	// screen shows its Likes tab, and who liked it, to everyone and not only to

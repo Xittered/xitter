@@ -2,6 +2,7 @@
 // (status, media_ids, reply target, ...); it is kept as sent and replayed when
 // the time comes.
 
+import { MAX_POST_MEDIA } from "./config";
 import { replyControl, replyCountrySelections } from "./reply-controls";
 import { conversationCard } from "./conversation-cards";
 import { checkConversationCard } from "./conversation-card-moderation";
@@ -33,7 +34,7 @@ function cleanPart(value: unknown, draft = false): Vars {
 	const r = value && typeof value === "object" && !Array.isArray(value) ? value as Vars : {};
 	const out: Vars = {
 		status: typeof r.status === "string" ? r.status : "",
-		media_ids: ids(r.media_ids).slice(0, 4),
+		media_ids: ids(r.media_ids).slice(0, MAX_POST_MEDIA),
 		exclude_reply_user_ids: ids(r.exclude_reply_user_ids).slice(0, 50),
 	};
 	const selections = replyCountrySelections(r.conversation_control_region_codes);
@@ -47,7 +48,7 @@ function cleanPart(value: unknown, draft = false): Vars {
 		catch (error) { throw new PostError(error instanceof Error ? error.message : "Invalid conversation card.", 214); }
 		if (r.attachment_url || r.card_uri) throw new PostError("Conversation cards cannot be combined with quotes or other cards.", 214);
 	}
-	if (Array.isArray(r.media_ids) && (r.media_ids.length > 4 || r.media_ids.some((id: unknown) => !isId(id))))
+	if (Array.isArray(r.media_ids) && (r.media_ids.length > MAX_POST_MEDIA || r.media_ids.some((id: unknown) => !isId(id))))
 		throw new PostError("A post can have up to four valid attachments.", 186);
 	if (isId(r.in_reply_to_status_id)) out.in_reply_to_status_id = r.in_reply_to_status_id;
 	if (typeof r.attachment_url === "string" && r.attachment_url.length <= 300) out.attachment_url = r.attachment_url;
@@ -79,7 +80,7 @@ const quoteOf = (request: Vars) => {
 
 function mediaIdsOf(request: Vars | null): string[] {
 	return [request, ...(Array.isArray(request?.thread_tweets) ? request.thread_tweets.slice(0, 25) : [])]
-		.flatMap((part) => Array.isArray(part?.media_ids) ? part.media_ids.slice(0, 4).filter(isId) : []);
+		.flatMap((part) => Array.isArray(part?.media_ids) ? part.media_ids.slice(0, MAX_POST_MEDIA).filter(isId) : []);
 }
 
 // Unsent posts use ApiImage/ApiVideo/ApiGif, not the published tweet's legacy

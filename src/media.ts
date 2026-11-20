@@ -12,7 +12,7 @@ import { join } from "node:path";
 import type { SQL } from "bun";
 import type { Viewer } from "./auth";
 import { remoteMediaFile } from "./federation-sync";
-import { PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
+import { MAX_POST_MEDIA, PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
 import { blockedFor, protectedFor, suspendedFor } from "./blocks";
 import { isStaffRequest, staffViewer } from "./staff-access";
 import { circleSeen } from "./circles";
@@ -747,12 +747,12 @@ export async function serveMedia(req: Request, pathname: string, viewer: Viewer)
 }
 
 // attaches uploads to a new post; only the poster's own unused, finished
-// uploads count. A video goes alone, photos up to four.
+// uploads count. A video goes alone, photos up to MAX_POST_MEDIA.
 export class MediaError extends Error {}
 
 export async function attachMedia(userId: string, postId: string, mediaIds: string[], opts: { db?: SQL; strict?: boolean } = {}) {
 	const db = opts.db ?? sql;
-	const ids = [...new Set(mediaIds.filter(isId).slice(0, 4))];
+	const ids = [...new Set(mediaIds.filter(isId).slice(0, MAX_POST_MEDIA))];
 	if (opts.strict && (ids.length !== mediaIds.length || !isId(postId))) throw new MediaError("Invalid media attachments.");
 	if (!ids.length) return;
 	const [post] = await db`select id from posts where id = ${postId}::bigint and user_id = ${userId}::bigint`;

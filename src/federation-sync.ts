@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PUBLIC_ORIGIN } from "./config";
+import { MAX_POST_MEDIA, PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { flagValue } from "./flags";
 import { pronounsValue } from "./pronouns";
@@ -404,7 +404,7 @@ async function applyPost(instance: string, p: any, depth = 0): Promise<string | 
 }
 
 async function attachMedia(instance: string, author: string, post: string, list: unknown) {
-	const items = Array.isArray(list) ? list.slice(0, 4) : [];
+	const items = Array.isArray(list) ? list.slice(0, MAX_POST_MEDIA) : [];
 	const kept: string[] = [];
 	for (const [i, m] of items.entries()) {
 		const id = await remoteMedia(instance, author, m, post, i);
