@@ -1753,6 +1753,7 @@ const RENDER = {
 				'</select></div><div class="field"><input data-k="text" maxlength="280" placeholder="Text (blank: the usual one for the label)" value="' + esc(n.text || "") + '"></div>' +
 				'<div class="field"><input data-k="url" placeholder="Learn more link (blank: the rules page)" value="' + esc(n.url || "") + '"></div>' +
 				'<p class="dim small">Visibility limited also keeps the post out of For you and search.</p><button class="btn primary" data-save-notice>Save label</button></div>' : "") +
+				(can("setPostNote") ? '<div><b>Community note</b><p class="dim small">Shows on the post right away, without ratings. Leave it blank to remove it.</p><div class="field"><textarea data-k="note" maxlength="500" rows="4" placeholder="Readers added context...">' + esc(p.staff_note || "") + '</textarea></div><button class="btn primary" data-save-note>Save note</button></div>' : "") +
 				(can("setPostCounts") ? '<div><b>Shown counts</b><p class="dim small">Blank shows the real number. Only the number changes, not who liked or reposted.</p><div class="row" style="flex-wrap:wrap">' +
 					["likes", "replies", "reposts", "quotes", "bookmarks", "views"].map((k) => '<label class="small" style="width:30%">' + k + '<input data-k="' + k + '" type="number" min="0" value="' + (c[k] ?? "") + '"></label>').join("") +
 					'</div><button class="btn primary" data-save-counts style="margin-top:8px">Save counts</button></div>' : "") + "</div>";
@@ -1785,7 +1786,7 @@ const RENDER = {
 						'<div class="row" style="flex-wrap:nowrap">' +
 							(can("setPostVisibility") ? '<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !p.hidden + '" data-sensitive="' + !!p.sensitive + '" title="Hidden posts are seen by staff only">' + (p.hidden ? "Show" : "Hide") + "</button>" +
 								'<button class="btn" data-vis="' + esc(p.id) + '" data-hidden="' + !!p.hidden + '" data-sensitive="' + !p.sensitive + '" title="Media behind a content warning">' + (p.sensitive ? "Not sensitive" : "Sensitive") + "</button>" : "") +
-							(can("setPostNotice") || can("setPostCounts") ? '<button class="btn" data-edit="' + esc(p.id) + '">Edit</button>' : "") +
+							(can("setPostNotice") || can("setPostNote") || can("setPostCounts") ? '<button class="btn" data-edit="' + esc(p.id) + '">Edit</button>' : "") +
 							(can("deletePost") ? '<button class="btn danger" data-del="' + esc(p.id) + '">Delete</button>' : "") + "</div></td></tr>" +
 						'<tr data-editor="' + esc(p.id) + '" hidden><td colspan="' + (pickable ? 5 : 4) + '">' + postEditor(p) + "</td></tr>").join("") + "</table>"
 				: '<div class="empty">No posts match.</div>';
@@ -1803,6 +1804,8 @@ const RENDER = {
 				const val = (k) => row.querySelector('[data-k="' + k + '"]').value;
 				const ns = row.querySelector("[data-save-notice]");
 				if (ns) ns.onclick = () => act(() => api("setPostNotice", { id, type: val("type"), text: val("text"), url: val("url") }), "Label saved").then(load);
+				const nb = row.querySelector("[data-save-note]");
+				if (nb) nb.onclick = () => act(() => api("setPostNote", { id, text: val("note") }), "Note saved").then(load);
 				const cs = row.querySelector("[data-save-counts]");
 				if (cs) cs.onclick = () => act(() => api("setPostCounts", { id, counts: Object.fromEntries(["likes", "replies", "reposts", "quotes", "bookmarks", "views"].map((k) => [k, val(k)])) }), "Counts saved").then(load);
 			});

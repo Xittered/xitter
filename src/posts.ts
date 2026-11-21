@@ -127,12 +127,12 @@ async function hydrate(viewerId: string, posts: PostRow[], quotes = true): Promi
 		cardSourceIds.length ? sql`${select(viewerId)} where p.id = any(${sql.array(cardSourceIds, "INT8")}) and p.conversation_card_post_id is null` : [],
 		mediaForPosts(cardSourceIds),
 		ids.length
-			? sql`select n.id::text, n.post_id::text, n.text, count(*)::int as ratings,
-				count(*) filter(where r.rating = 'Helpful')::int as helpful, count(*) filter(where r.rating = 'NotHelpful')::int as not_helpful
+			? sql`select n.id::text, n.post_id::text, n.text, n.staff, count(r.user_id)::int as ratings,
+				count(r.user_id) filter(where r.rating = 'Helpful')::int as helpful, count(r.user_id) filter(where r.rating = 'NotHelpful')::int as not_helpful
 				from community_notes n join users author on author.id = n.author_id and author.status <> 'suspended'
-				join community_note_ratings r on r.note_id = n.id join users voter on voter.id = r.user_id and voter.status = 'active'
-				where n.post_id = any(${sql.array(ids, "INT8")}) and n.classification = 'Misleading' and n.author_id not in ${blockedFor(viewerId)}
-				group by n.id order by n.id desc`
+				left join (select x.* from community_note_ratings x join users voter on voter.id = x.user_id and voter.status = 'active') r on r.note_id = n.id
+				where n.post_id = any(${sql.array(ids, "INT8")}) and n.classification = 'Misleading' and (n.staff or n.author_id not in ${blockedFor(viewerId)})
+				group by n.id order by n.staff desc, n.id desc`
 			: [],
 		ids.length
 			? sql`select m.post_id, u.id, u.screen_name, u.name from post_mentions m join users u on u.id = m.user_id
@@ -155,7 +155,7 @@ async function hydrate(viewerId: string, posts: PostRow[], quotes = true): Promi
 		}
 	}
 	for (const p of posts) p.media = (media.get(p.id) ?? []).map((m) => (p.never_sensitive ? { ...m, sensitive_warning: null } : m));
-	for (const p of posts) { const note = notes.find((n: any) => n.post_id === p.id && noteStatus(n.ratings, n.helpful, n.not_helpful) === "Helpful"); if (note) p.communityNote = { id: note.id, text: note.text }; }
+	for (const p of posts) { const note = notes.find((n: any) => n.post_id === p.id && noteStatus(n.ratings, n.helpful, n.not_helpful, n.staff) === "Helpful"); if (note) p.communityNote = { id: note.id, text: note.text }; }
 	if (ids.length) for (const p of posts) p.mentions = mentions.filter((m: any) => String(m.post_id) === p.id).map((m: any) => ({ id: String(m.id), screen_name: m.screen_name, name: m.name }));
 	if (polls)
 		for (const p of posts) {

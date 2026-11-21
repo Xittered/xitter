@@ -205,6 +205,7 @@ create table if not exists community_notes (
 );
 create index if not exists community_notes_author_idx on community_notes(author_id);
 alter table community_notes add column if not exists data_v1 jsonb not null default '{}';
+alter table community_notes add column if not exists staff boolean not null default false;
 create table if not exists community_note_ratings (
 	note_id bigint not null references community_notes(id) on delete cascade,
 	user_id bigint not null references users(id) on delete cascade,

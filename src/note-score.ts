@@ -10,7 +10,8 @@ function lowerBound(positive: number, total: number): number {
 	return (p + z * z / (2 * total) - z * Math.sqrt((p * (1 - p) + z * z / (4 * total)) / total)) / (1 + z * z / total);
 }
 
-export function noteStatus(ratings: number, helpful: number, notHelpful: number): NoteStatus {
+export function noteStatus(ratings: number, helpful: number, notHelpful: number, staff = false): NoteStatus {
+	if (staff) return "Helpful";
 	if (!Number.isInteger(ratings) || ratings < 5) return "NeedsMoreRatings";
 	if (lowerBound(helpful, ratings) > 0.5) return "Helpful";
 	if (lowerBound(notHelpful, ratings) > 0.5) return "NotHelpful";

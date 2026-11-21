@@ -77,6 +77,7 @@ jobs:
           bun scripts/test-email-issuance.ts
           bun scripts/test-password-reset-issuance.ts
           bun scripts/test-admin-password-reset.ts
+          bun scripts/test-admin-post-note.ts
           bun scripts/test-api-token-security.ts
           bun scripts/test-oauth.ts
           bun scripts/test-money-api.ts

@@ -484,6 +484,26 @@ export const toolActions: Record<string, Action> = {
 			return {};
 		},
 	},
+	setPostNote: {
+		role: "admin",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			const [p] = await sql`select user_id::text from posts where id = ${id}::bigint`;
+			if (!p) throw new AdminError("No such post.", 404);
+			const text = optionalText(b.text, 500);
+			if (!text) {
+				await sql`delete from community_notes where post_id = ${id}::bigint and staff`;
+				await audit(a, "remove_post_note", p.user_id, { post: id });
+				return {};
+			}
+			await sql`delete from community_notes where post_id = ${id}::bigint and staff and author_id <> ${a.id}::bigint`;
+			await sql`insert into community_notes(id, post_id, author_id, text, classification, staff)
+				values(${newId()}::bigint, ${id}::bigint, ${a.id}::bigint, ${text}, 'Misleading', true)
+				on conflict(post_id, author_id) do update set text = excluded.text, classification = 'Misleading', staff = true`;
+			await audit(a, "set_post_note", p.user_id, { post: id, text });
+			return {};
+		},
+	},
 	// the counts a post shows; a blank one goes back to the real count
 	setPostCounts: {
 		role: "admin",

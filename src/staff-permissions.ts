@@ -37,6 +37,7 @@ export const PERMISSIONS: Record<string, Permission> = {
 	sessions: { group: "Accounts", label: "Sign accounts out and revoke their API tokens", role: "support", actions: ["signOut", "revokeSession", "revokeApiTokens"] },
 	profiles: { group: "Accounts", label: "Edit profiles and the counts shown on profiles and posts", role: "admin", actions: ["updateUser", "setUserCounts", "setPostCounts"] },
 	account_badges: { group: "Accounts", label: "Give badges, labels and flags", role: "admin", actions: ["setBadge", "setTranslator", "setFlag", "setBadges", "setProfileLabel", "setOrgBadge"] },
+	staff_community_notes: { group: "Accounts", label: "Put community notes on posts, shown without ratings", role: "admin", actions: ["setPostNote"] },
 	notes_access: { group: "Accounts", label: "Give Community Notes writing access", role: "admin", actions: ["setNotesAccess"] },
 	delete_accounts: { group: "Accounts", label: "Delete accounts", role: "admin", actions: ["deleteUser"] },
 	orgs: { group: "Accounts", label: "Create organisations and manage their affiliates", role: "admin", actions: ["createOrg", "addAffiliate", "removeAffiliate"] },

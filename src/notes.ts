@@ -50,7 +50,7 @@ export async function notesFor(v: Viewer, postId: string) {
 
 async function notesMany(v: Viewer, postIds: string[], noteIds?: string[]) {
 	if (!postIds.length) return new Map<string, any[]>();
-	const rows = await sql`select n.id::text, n.post_id::text, n.author_id::text, n.text, n.classification, n.created_at, n.data_v1, u.notes_alias as alias, a.status as appeal_status,
+	const rows = await sql`select n.id::text, n.post_id::text, n.author_id::text, n.text, n.classification, n.created_at, n.data_v1, n.staff, u.notes_alias as alias, a.status as appeal_status,
 		count(r.user_id)::int as ratings, count(r.user_id) filter(where r.rating = 'Helpful')::int as helpful,
 		count(r.user_id) filter(where r.rating = 'NotHelpful')::int as not_helpful,
 		max(r.rating) filter(where r.user_id = ${v.id}::bigint) as viewer_rating,
@@ -61,7 +61,7 @@ async function notesMany(v: Viewer, postIds: string[], noteIds?: string[]) {
 	const result = new Map<string, any[]>();
 	for (const n of rows) {
 		const list = result.get(n.post_id) ?? [];
-		if (list.length < 100 || n.author_id === v.id) list.push({ ...n, own: n.author_id === v.id, status: noteStatus(n.ratings, n.helpful, n.not_helpful) });
+		if (list.length < 100 || n.author_id === v.id) list.push({ ...n, own: n.author_id === v.id, status: noteStatus(n.ratings, n.helpful, n.not_helpful, n.staff) });
 		result.set(n.post_id, list);
 	}
 	return result;
