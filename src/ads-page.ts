@@ -206,6 +206,11 @@ function est(){var s=b.value.trim().replace(/^\$/,""),c=Math.round(parseFloat(s)
 f.addEventListener("input",function(e){if(e.target.name==="mode")mode();else{text();est()}});
 f.addEventListener("change",function(e){if(e.target.name==="mode")mode();else text()});
 f.querySelectorAll("[data-set]").forEach(function(x){x.addEventListener("click",function(){var i=f[x.dataset.set];i.value=x.dataset.v;est()})});
+var find=document.getElementById("find");
+if(find)find.addEventListener("input",function(e){e.stopPropagation();var q=find.value.trim().toLowerCase(),n=0;
+	f.querySelectorAll(".posts label").forEach(function(l){var hit=!q||l.textContent.toLowerCase().indexOf(q)>=0;l.hidden=!hit;if(hit)n++});
+	document.getElementById("nomatch").hidden=n>0});
+find&&find.addEventListener("keydown",function(e){if(e.key==="Enter")e.preventDefault()});
 mode();est();`;
 
 async function create(req: Request, viewer: Viewer, opts: { error?: string; draft?: Record<string, string> } = {}) {
@@ -236,7 +241,7 @@ ${notices(opts)}${busy ? `<p class="card warning">That post is already in a camp
 <label><input type="radio" name="mode" value="post"${mode === "post" ? " checked" : ""}><span><b>One of your posts</b><small>It keeps its likes and replies, and shows up in more timelines.</small></span></label>
 <label><input type="radio" name="mode" value="new"${mode === "new" ? " checked" : ""}><span><b>A new ad</b><small>Write a post just for this campaign.</small></span></label>
 </div>
-<div class="only-post">${postList}</div>
+<div class="only-post fields">${posts.length > 3 ? `<input type="search" id="find" aria-label="Search your posts" placeholder="Search your posts" autocomplete="off"><p class="dim" id="nomatch" hidden>No posts match.</p>` : ""}${postList}</div>
 <div class="only-new fields">
 <label for="text">What it says</label><textarea id="text" name="text" maxlength="280">${esc(d.text ?? "")}</textarea>
 <label for="url">Link</label><input id="url" name="url" type="url" inputmode="url" placeholder="https://" value="${esc(d.url ?? "")}">
@@ -257,7 +262,7 @@ ${notices(opts)}${busy ? `<p class="card warning">That post is already in a camp
 <label for="name">Campaign name, only you see it</label><input id="name" name="name" maxlength="60" placeholder="Optional" value="${esc(d.name ?? "")}">
 </section>
 <div class="sum"><div><span>You pay now</span><b id="pay">$0.00</b></div><div><span>Left in your wallet</span><span id="left">${formatCents(balance)}</span></div>
-<p class="dim">What the campaign doesn't spend comes back when it ends or you stop it. If staff reject it, ${rules.reject_refund_pct}% comes back.</p></div>
+<p class="dim">What the campaign doesn't spend comes back when it ends or you stop it. ${rules.reject_refund_pct >= 100 ? "If staff reject it, all of it comes back." : `If staff reject it, ${rules.reject_refund_pct}% comes back.`}</p></div>
 <div class="acts"><button type="submit">Send for review</button><a class="button secondary" href="/account/ads">Cancel</a></div>
 </form>`;
 	return accountPage({

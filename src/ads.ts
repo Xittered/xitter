@@ -141,7 +141,7 @@ export async function promotablePosts(userId: string) {
 		exists (select 1 from media m where m.post_id = p.id) as media
 		from posts p where p.user_id = ${userId}::bigint and not p.hidden and not p.ad_only and p.circle_owner_id is null and p.community_id is null
 			and not exists (select 1 from ads a where a.post_id = p.id and a.status in ('pending', 'running', 'paused'))
-		order by p.id desc limit 40`;
+		order by p.id desc limit 300`;
 	return rows.map((r: any) => ({ id: r.id as string, text: r.text as string, createdAt: r.created_at as Date, reply: !!r.reply, media: !!r.media }));
 }
 
