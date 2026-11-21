@@ -1,6 +1,7 @@
 // The HTML page that boots the client, built from the pinned build snapshot.
 // Everything about the signed-in account is ours.
 
+import { GUEST_CSS } from "./guest-home";
 import { BEE } from "./bee-icon";
 import { grokName } from "./grok";
 import type { User } from "./auth";
@@ -443,7 +444,7 @@ ${user ? MONEY_UI_CSS : ""}
 ${user?.classic_post_details ? CLASSIC_DETAIL_CSS : ""}
 [data-testid="sidebarColumn"] div:has(> [data-testid="emptyState"]),[data-testid="sidebarColumn"] div:has(> div > aside) ~ div:empty{display:none}</style>
 </head><body><div id="react-root" style="height:100%;display:flex;"></div>
-<script>window.__INITIAL_STATE__=${inline(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)))};window.__META_DATA__=${inline(meta)};</script>
+<script>window.__INITIAL_STATE__=${inline(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)))};window.__META_DATA__=${inline(meta)};${!user && settings().operations.guest_reading ? "window.__XITTER_GUEST_HOME__=true;" : ""}</script>${!user && settings().operations.guest_reading ? `<style>${GUEST_CSS}</style>` : ""}
 <script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, cap: settings().signup_mode !== "closed", circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
 <script id="nonce-csp"></script>

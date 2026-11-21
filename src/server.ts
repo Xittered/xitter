@@ -242,12 +242,12 @@ const GUEST_OPERATIONS = new Set([
 	"UserByScreenName", "UserByRestId", "UsersByRestIds", "UserResultByScreenNameQuery",
 	"UserTweets", "UserTweetsAndReplies", "UserMedia", "UserHighlightsTweets",
 	"TweetDetail", "TweetResultByRestId", "TweetResultsByRestIds", "ProfileSpotlightsQuery",
-	"UserOriginalsTimeline", "UserSportsProfile",
+	"UserOriginalsTimeline", "UserSportsProfile", "HomeTimeline", "HomeLatestTimeline", "useStoryTopicQuery", "ExploreSidebar", "NflScoresSidebarFollow", "SportsLeagueFollow", "TopicToFollowSidebar",
 ]);
 
 export const guestViewer = (): Viewer => ({ id: GUEST_ID, screen_name: "", name: "", bio: "", location: "", avatar_url: null, banner_url: null, verified_type: null, status: "active", role: null, created_at: new Date(0), csrf: "", token: "" });
 
-const guestPage = (p: string) => !RESERVED_PATHS.has(p.split("/")[1]?.toLowerCase() ?? "") && /^\/[A-Za-z0-9_]{1,15}(?:\/(?:status\/\d{1,19}(?:\/(?:photo|video)\/\d)?|with_replies|media|highlights))?\/?$/.test(p);
+const guestPage = (p: string) => p === "/home" || !RESERVED_PATHS.has(p.split("/")[1]?.toLowerCase() ?? "") && /^\/[A-Za-z0-9_]{1,15}(?:\/(?:status\/\d{1,19}(?:\/(?:photo|video)\/\d)?|with_replies|media|highlights))?\/?$/.test(p);
 const RESERVED_PATHS = new Set(["home", "explore", "notifications", "messages", "settings", "i", "compose", "search", "login", "logout", "signup", "account", "admin", "abs", "api", "media", "public", "jobs", "tos", "privacy"]);
 
 async function guestApi(url: URL): Promise<Response> {
