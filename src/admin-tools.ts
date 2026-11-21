@@ -55,6 +55,17 @@ function optionalText(value: unknown, max: number) {
 	return text;
 }
 
+function linkOf(value: unknown) {
+	const raw = optionalText(value, 500).replace(/^<|>$/g, "");
+	if (!raw) return "";
+	const url = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw.replace(/^\/+/, "")}`;
+	try {
+		const parsed = new URL(url);
+		if ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.includes(".")) return parsed.href;
+	} catch {}
+	throw new AdminError("The link must be a web address, like example.com/page.");
+}
+
 function textOf(value: unknown, max = 2000) {
 	const text = typeof value === "string" ? value.trim() : "";
 	if (!text || [...text].length > max) throw new AdminError(`Enter 1–${max} characters.`);
@@ -130,8 +141,7 @@ export const toolActions: Record<string, Action> = {
 			const text = textOf(b.text, 40);
 			const badge = b.badgeId ? idOf(b.badgeId, "badge") : null;
 			await badgeExists(badge);
-			const url = optionalText(b.url, 500);
-			if (url && !/^https?:\/\/\S+$/.test(url)) throw new AdminError("The link must be an http or https address.");
+			const url = linkOf(b.url);
 			const id = newId();
 			await sql`insert into account_labels (id, text, badge_id, url) values (${id}::bigint, ${text}, ${badge}::bigint, ${url || null})`;
 			await audit(a, "create_label", id, { text });
@@ -467,8 +477,7 @@ export const toolActions: Record<string, Action> = {
 			const type = b.type || null;
 			if (type !== null && !(type in NOTICE_TYPES)) throw new AdminError("Unknown label.");
 			const text = optionalText(b.text, 280);
-			const url = optionalText(b.url, 500);
-			if (url && !/^https?:\/\/\S+$/.test(url)) throw new AdminError("The link must be an http or https address.");
+			const url = linkOf(b.url);
 			const notice = type ? { type, text: text || NOTICE_TYPES[type as keyof typeof NOTICE_TYPES], ...(url ? { url } : {}) } : null;
 			await sql`update posts set notice = ${notice ? sql`${JSON.stringify(notice)}::text::jsonb` : null} where id = ${id}::bigint`;
 			await audit(a, "set_post_notice", p.user_id, { post: id, notice });
