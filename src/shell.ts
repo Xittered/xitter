@@ -437,6 +437,7 @@ ${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};window.__XITT
 <style>html,body{height:100%}body{margin:0;background-color:#000}
 html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 @media (display-mode:standalone){body{overscroll-behavior-y:none}}${LOGO_CSS}
+[data-testid="primaryColumn"] div:not(a *):not(article *):not(:has(img)):has(>div[style^="padding-bottom: 33.3333%"])>div[style^="padding-bottom: 33.3333%"]{padding-bottom:20%!important}
 ${hideCss()}
 ${FLAG_PICKER_CSS}
 ${PRONOUNS_CSS}

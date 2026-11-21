@@ -285,7 +285,7 @@ const wears = (d: Decor) => !!(d.theme || d.background || d.frame || d.font);
 
 // what the page script draws: the files as our addresses
 const forClient = (d: Decor) => ({
-	theme: d.theme ? { id: d.theme, background: themeBackground(THEMES[d.theme]!), header: THEMES[d.theme]!.header, button: THEMES[d.theme]!.btn, buttonHover: THEMES[d.theme]!.btnHover, outline: THEMES[d.theme]!.outline, glass: `color-mix(in srgb,rgb(from ${THEMES[d.theme]!.bg} r g b) 30%,rgb(0 0 0 / .58))` } : null,
+	theme: d.theme ? { id: d.theme, background: themeBackground(THEMES[d.theme]!), header: THEMES[d.theme]!.header, button: THEMES[d.theme]!.btn, buttonHover: THEMES[d.theme]!.btnHover, outline: THEMES[d.theme]!.outline, glass: `color-mix(in srgb,rgb(from ${THEMES[d.theme]!.bg} r g b) 30%,rgb(0 0 0 / .44))` } : null,
 	background: d.background
 		? { image: fileUrl(d.background.appid, d.background.image), movie: d.background.movie ? fileUrl(d.background.appid, d.background.movie) : null, mp4: d.background.mp4 ? fileUrl(d.background.appid, d.background.mp4) : null }
 		: null,
@@ -600,7 +600,7 @@ export const DECOR_SCRIPT = String.raw`(function(){
 		}
 		var t=k.theme;
 		if(t||k.background){
-			var glass=light?"rgba(255,255,255,.78)":"rgba(10,12,14,.68)",edge="transparent",line=light?"rgba(0,0,0,.06)":"rgba(255,255,255,.08)",nested=light?"rgba(0,0,0,.04)":"rgba(255,255,255,.06)";
+			var glass=light?"rgba(255,255,255,.78)":"rgba(10,12,14,.5)",edge="transparent",line=light?"rgba(0,0,0,.06)":"rgba(255,255,255,.08)",nested=light?"rgba(0,0,0,.04)":"rgba(255,255,255,.06)";
 			layer=document.createElement("div");
 			layer.setAttribute("data-xitter-decor-bg","");
 			var bg=k.background;
@@ -668,8 +668,8 @@ export const DECOR_SCRIPT = String.raw`(function(){
 		var col=document.querySelector('[data-testid="primaryColumn"]'),nav=document.querySelector('header[role="banner"]>div>div'),side=document.querySelector('[data-testid="sidebarColumn"]');
 		if(col){
 			var c=col.getBoundingClientRect(),root=document.documentElement.style;
-			root.setProperty("--xd-l",Math.max(48,c.left-(nav?nav.getBoundingClientRect().left:c.left-220))+"px");
-			root.setProperty("--xd-r",Math.max(48,(side?side.getBoundingClientRect().right:c.right+220)-c.right)+"px");
+			root.setProperty("--xd-l",Math.max(200,c.left-(nav?nav.getBoundingClientRect().left:c.left-220))+"px");
+			root.setProperty("--xd-r",Math.max(200,(side?side.getBoundingClientRect().right:c.right+220)-c.right)+"px");
 		}
 		var page=document.body.style.backgroundColor||"rgb(0, 0, 0)";
 		document.querySelectorAll('[data-testid="sidebarColumn"] div,[data-testid="primaryColumn"] div').forEach(function(el){
