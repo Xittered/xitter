@@ -88,6 +88,7 @@ const DEFAULTS = {
 	operations: {
 		maintenance: false,
 		message: "The instance is undergoing maintenance.",
+		guest_reading: false,
 		blocked_phrases: [] as string[],
 		// words no handle or display name may contain (names.ts)
 		blocked_names: [] as string[],

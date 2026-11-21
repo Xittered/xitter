@@ -637,6 +637,7 @@ export const toolActions: Record<string, Action> = {
 			await setSetting("operations", {
 				maintenance: b.maintenance,
 				message: b.message.trim() || "The instance is undergoing maintenance.",
+				guest_reading: typeof b.guest_reading === "boolean" ? b.guest_reading : settings().operations.guest_reading,
 				blocked_phrases: lines(b.blocked_phrases, "phrase"),
 				blocked_names: lines(b.blocked_names ?? [], "name"),
 				hidden_trends: lines(b.hidden_trends, "trend", true),

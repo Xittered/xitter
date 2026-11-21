@@ -51,6 +51,8 @@ import { gifSettingsRoute } from "./gif-settings";
 import { classicDetailRoute, postCounts } from "./classic-detail";
 import { capRoute } from "./cap";
 import { parodyLabelsRoute } from "./parody-labels";
+import { guestVisibilityRoute } from "./guest-visibility";
+import { GUEST_ID } from "./blocks";
 import { adsRoute } from "./ads-page";
 import { endExpiredAds } from "./ads";
 import { legacyAnalyticsPage } from "./legacy-analytics";
@@ -67,7 +69,7 @@ import { apiTokensRoute, publicApi } from "./public-api";
 import { connectedAppsRoute, developerAppsRoute, oauthAppIcon, oauthAuthorize, oauthToken } from "./oauth";
 import { authorizationServerMetadata } from "./oauth-metadata";
 import { apiDocsPage } from "./api-docs";
-import { hashflagAsset } from "./hashflags";
+import { hashflagAsset, hashflagsJson } from "./hashflags";
 import { startMailDigests } from "./mail-digest";
 import { SERVICE_WORKER, startPush } from "./push";
 import { manifest } from "./pwa";
@@ -107,7 +109,7 @@ const MIME: Record<string, string> = {
 // The client also calls outside services on its own (grok.com checkout, ads
 // measurement). Requests from the page may only reach this instance.
 const SETTINGS_PAGES = new Set(
-	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details", "labels", "client"].map((s) => `/account/${s}`),
+	["apps", "invites", "organisation", "decor", "theme", "decoration", "automation", "notices", "instances", "passkeys", "import", "migrate", "api", "notes/appeals", "email", "2fa", "merchant", "gifs", "post-details", "labels", "guests", "client"].map((s) => `/account/${s}`),
 );
 
 const PAGE_CSP = "connect-src 'self' blob: data:; font-src 'self'";
@@ -236,11 +238,39 @@ function parseJson(text: string | null): any {
 	}
 }
 
+const GUEST_OPERATIONS = new Set([
+	"UserByScreenName", "UserByRestId", "UsersByRestIds", "UserResultByScreenNameQuery",
+	"UserTweets", "UserTweetsAndReplies", "UserMedia", "UserHighlightsTweets",
+	"TweetDetail", "TweetResultByRestId", "TweetResultsByRestIds", "ProfileSpotlightsQuery",
+	"UserOriginalsTimeline", "UserSportsProfile",
+]);
+
+export const guestViewer = (): Viewer => ({ id: GUEST_ID, screen_name: "", name: "", bio: "", location: "", avatar_url: null, banner_url: null, verified_type: null, status: "active", role: null, created_at: new Date(0), csrf: "", token: "" });
+
+const guestPage = (p: string) => !RESERVED_PATHS.has(p.split("/")[1]?.toLowerCase() ?? "") && /^\/[A-Za-z0-9_]{1,15}(?:\/(?:status\/\d{1,19}(?:\/(?:photo|video)\/\d)?|with_replies|media|highlights))?\/?$/.test(p);
+const RESERVED_PATHS = new Set(["home", "explore", "notifications", "messages", "settings", "i", "compose", "search", "login", "logout", "signup", "account", "admin", "abs", "api", "media", "public", "jobs", "tos", "privacy"]);
+
+async function guestApi(url: URL): Promise<Response> {
+	if (url.pathname.endsWith("/1.1/hashflags.json")) return Response.json(await hashflagsJson());
+	const parts = url.pathname.split("/").filter(Boolean);
+	const name = parts.includes("graphql") ? parts[parts.length - 1] : undefined;
+	if (!name || !GUEST_OPERATIONS.has(name) || !knownOperation(name)) {
+		if (process.env.LOG_REQUESTS) console.log(`api guest refused ${name ?? url.pathname}`);
+		return apiError(401, 32, "Could not authenticate you.");
+	}
+	const vars = parseJson(url.searchParams.get("variables"));
+	if (!shapeFits(vars)) return apiError(413, 324, "That request is too large.");
+	if (process.env.LOG_REQUESTS) console.log(`api guest graphql:${name}`);
+	return runOperation(name, guestViewer(), vars ?? {});
+}
+
 async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Promise<Response> {
 	// the signed-out home page asks for a guest token first; it gets one, but
 	// nothing is readable without signing in. Signed in, a guest token would make
 	// the client act as a guest and stop sending its csrf header.
 	if (!viewer && url.pathname.endsWith("/1.1/guest/activate.json")) return Response.json({ guest_token: "1" });
+	if (!viewer && settings().operations.guest_reading && req.method === "POST" && url.pathname.endsWith("/1.1/graphql/app_context.json")) return new Response(null, { status: 204 });
+	if (!viewer && settings().operations.guest_reading && req.method === "GET") return guestApi(url);
 	if (!viewer) return apiError(401, 32, "Could not authenticate you.");
 	const source = await platformSource(req);
 	if (source === null) return apiError(401, 32, "Invalid or revoked client token.");
@@ -579,6 +609,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/account/client" && viewer) return clientRoute(req, viewer, clientBuilds().find((b) => b.dir === clientDir()));
 	if (p === "/account/post-details" && viewer) return classicDetailRoute(req, viewer);
 	if (p === "/account/labels" && viewer) return parodyLabelsRoute(req, viewer);
+	if (p === "/account/guests" && viewer) return guestVisibilityRoute(req, viewer);
 	if ((p === "/account/ads" || /^\/account\/ads\/\d{1,19}$/.test(p)) && viewer) return adsRoute(req, viewer, p);
 	if (p === "/account/circle" && viewer) return circleRoute(req, viewer);
 	if (p === "/account/apps/developer" && viewer) return developerAppsRoute(req, viewer);
@@ -622,8 +653,9 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (isPlayerPage(p)) return viewer ? playerPage(p, viewer.id) : new Response("not found", { status: 404 });
 	if (p.startsWith("/media-scan/")) return serveScanCopy(p, url);
 	// uploads stay inside the instance: only signed-in users get them
-	if (p.startsWith("/media/")) return viewer ? serveMedia(req, p, viewer) : new Response("not found", { status: 404 });
-	if (p.startsWith("/profile_images/")) return viewer ? serveAvatar(req, p, viewer) : new Response("not found", { status: 404 });
+	const reader = viewer ?? (settings().operations.guest_reading ? guestViewer() : undefined);
+	if (p.startsWith("/media/")) return reader ? serveMedia(req, p, reader) : new Response("not found", { status: 404 });
+	if (p.startsWith("/profile_images/")) return reader ? serveAvatar(req, p, reader) : new Response("not found", { status: 404 });
 	// the admin panel: staff only; everyone else gets the client's not-found page
 	// the panel speaks of the instance's default build (Admin > Client), whatever its staff use
 	if (p.startsWith("/admin/api/")) return withClientDir(CLIENT_DIR, () => adminApi(req, p.slice("/admin/api/".length), viewer));
@@ -650,13 +682,15 @@ async function route(req: Request): Promise<Response | undefined> {
 
 	// signed out: a public post or profile gives other apps' link fetchers its preview
 	if (!viewer && req.method === "GET") {
-		const preview = await linkPreview(p);
+		const browsing = settings().operations.guest_reading && guestPage(p) && req.headers.get("sec-fetch-mode") === "navigate";
+		const preview = browsing ? undefined : await linkPreview(p);
 		if (preview) return preview;
 	}
 	// signed out: X's own home page with its sign-in form, and the dialog
 	// (an old build has its own sign-in page at /login, and /login/error after a wrong password)
 	const oldLogin = !!loadBuild()?.build.stateBase && (p === "/login" || p.startsWith("/login/"));
-	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding") && !oldLogin) return Response.redirect("/", 302);
+	const guestReading = !viewer && settings().operations.guest_reading && guestPage(p);
+	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding") && !oldLogin && !guestReading) return Response.redirect("/", 302);
 	// maintenance: guests see the notice; ?staff=1 is the sign-in page, for staff
 	if (!viewer && p === "/" && settings().operations.maintenance && !url.searchParams.has("staff")) return maintenancePage(true);
 	const [communityRows, flagRows, links] = viewer

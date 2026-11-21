@@ -1978,6 +1978,7 @@ const RENDER = {
 			'<div class="box"><h2>Maintenance</h2><p class="dim small">While it\'s on, everyone except staff sees this message instead of the site.</p>' +
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="maint"' + (o.maintenance ? " checked" : "") + dis + "> Maintenance mode</label>" +
 			'<div class="field"><label>Message</label><input id="maintMsg" maxlength="500" value="' + esc(o.message) + '"' + dis + "></div>" +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="guestReading"' + (o.guest_reading ? " checked" : "") + dis + "> Signed-out visitors can read public profiles and posts</label>" +
 			(admin ? '<button class="btn primary" data-save-ops>Save</button>' : "") + "</div></div></section>" +
 			'<section class="settings-section" id="settings-safety"><h2>Safety and moderation</h2><div class="settings-grid">' +
 			'<div class="box"><h2>Blocked phrases</h2><p class="dim small">Posts, articles, profiles, poll choices, image descriptions, lists and communities containing any of these are refused. One per line; case, look-alike letters from other alphabets and invisible characters are ignored.</p>' +
@@ -2147,6 +2148,7 @@ const RENDER = {
 		main.querySelectorAll("[data-save-ops]").forEach((b) => b.onclick = () => act(() => api("saveOperations", {
 			maintenance: $("#maint").checked,
 			message: $("#maintMsg").value,
+			guest_reading: $("#guestReading").checked,
 			blocked_phrases: listOf("#blocked"),
 			blocked_names: listOf("#blockedNames"),
 			hidden_trends: listOf("#hiddenTrends"),

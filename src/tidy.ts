@@ -41,7 +41,7 @@ const BY_FEATURE: Record<Feature, string[]> = {
 // never offered: ads, x.com's help and footer pages, paid partnerships, jobs
 const ALWAYS = [
 	...links("/jobs"),
-	...ids("contentDisclosureButton", "ProfessionalButton_Switch_To_Professional"),
+	...ids("contentDisclosureButton", "ProfessionalButton_Switch_To_Professional", "google_sign_in_container", "apple_sign_in_button"),
 	'[data-testid="toolBar"] [data-testid="ScrollSnap-List"] > [role="presentation"]:has([data-testid="contentDisclosureButton"])',
 	'a[href^="https://ads.x.com"]',
 	'a[href^="https://help.x.com"]',
@@ -90,6 +90,7 @@ export const MONEY_ICON = "M9.69 5.11L10.04 3.60L15.04 3.60L14.76 4.80L18.46 4.8
 export const MONEY_ICON_FILLED = "M10.80 4.20L14 4.20L13.65 5.70L17.65 5.70L16.92 8.90L10.41 8.91L10.11 9.01L9.92 9.13L9.76 9.29L9.60 9.57L9.55 9.87L9.62 10.14L9.80 10.34L10.06 10.44L14.06 10.45L14.86 10.56L15.32 10.72L15.90 11.04L16.25 11.34L16.70 11.92L16.97 12.53L17.11 13.30L17.09 14.01L16.90 14.84L16.69 15.35L16.42 15.85L16.09 16.32L15.72 16.76L15.29 17.16L14.83 17.51L14.33 17.81L13.82 18.05L12.94 18.31L12.51 20.20L9.31 20.20L9.72 18.40L5.42 18.40L6.16 15.20L12.96 15.19L13.27 15.09L13.46 14.97L13.68 14.72L13.78 14.53L13.83 14.23L13.76 13.96L13.58 13.76L13.32 13.66L9.32 13.65L8.52 13.54L8.06 13.38L7.48 13.06L6.94 12.56L6.67 12.18L6.41 11.57L6.27 10.80L6.29 10.09L6.39 9.57L6.56 9.05L6.96 8.25L7.28 7.78L7.66 7.34L8.09 6.94L8.55 6.59L9.04 6.29L9.56 6.05L10.43 5.79Z";
 const MEGAPHONE = "M720-440v-80h160v80H720Zm48 280-128-96 48-64 128 96-48 64Zm-80-480-48-64 128-96 48 64-128 96ZM200-200v-160h-40q-33 0-56.5-23.5T80-440v-80q0-33 23.5-56.5T160-600h160l200-120v480L320-360h-40v160h-80Zm240-182v-196l-98 58H160v80h182l98 58Zm120 36v-268q27 24 43.5 58.5T620-480q0 41-16.5 75.5T560-346ZM300-480Z";
 const STATS = "M4 20V10h3v10H4zm6.5 0V4h3v16h-3zM17 20v-7h3v7h-3z";
+const VISIBILITY_OFF = "m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z";
 const MASK = "M2 7c3-1.5 6.5-1.5 10 0 3.5-1.5 7-1.5 10 0v3c0 4-2.5 7-5.5 7-2 0-3.2-1.2-4.5-3-1.3 1.8-2.5 3-4.5 3C4.5 17 2 14 2 10V7zm2 1.3V10c0 3 1.7 5 3.5 5 1.2 0 2-.8 3.3-2.8l1.2-1.7 1.2 1.7c1.3 2 2.1 2.8 3.3 2.8 1.8 0 3.5-2 3.5-5V8.3c-2.4-.9-5-.8-7.6.3L12 9l-.4-.4C9 7.2 6.4 7.4 4 8.3zM6 10h4v2H6v-2zm8 0h4v2h-4v-2z";
 const CIRCLE = "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-3 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5c-2.2 0-4 1.1-4 2.5V17h8v-.5c0-1.4-1.8-2.5-4-2.5z";
 const TONE = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 1.8v14.4a7.2 7.2 0 0 0 0-14.4z";
@@ -126,6 +127,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	if (u?.gold) links.push({ href: "/account/decor", text: "Profile decor", description: "Dress your profile with a theme, background and avatar frame from Steam.", icon: PALETTE, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/post-details", text: "Post details", description: "Show reposts, quotes and likes on a row of their own, as Twitter did.", icon: STATS, where: "settings" });
 	links.push({ href: "/account/labels", text: "Labels and checkmarks", description: "Hide parody labels, checkmarks or ads.", icon: MASK, where: "settings" });
+	if (s.operations.guest_reading) links.push({ href: "/account/guests", text: "Signed-out visitors", description: "Choose whether people without an account can see your posts.", icon: VISIBILITY_OFF, viewBox: "0 -960 960 960", where: "settings" });
 	if (feature("circles")) links.push({ href: "/account/circle", text: "Circle", description: "Choose who sees the posts you send to your Circle.", icon: CIRCLE, where: "settings" });
 	if (choiceAllowed()) links.push({ href: "/account/client", text: "Twitter client", description: "Use the current client or an older Twitter one.", icon: HISTORY, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/theme", text: "Theme", description: "Dim, a preset, or your own colours for the client.", icon: TONE, where: "settings" });

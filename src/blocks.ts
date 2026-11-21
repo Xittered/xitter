@@ -24,10 +24,14 @@ export const outOfView = (viewerId: string) =>
 		and id not in (select followee_id from follows where follower_id = ${viewerId}::bigint)
 		and not ${staffViewer(viewerId)}))`;
 
+export const GUEST_ID = "0";
+export const hiddenFromGuests = (u = sql`users`) => sql`coalesce(${u}.preferences->>'hide_from_guests', '') = 'true'`;
+
 // Protected accounts: their posts are for themselves and the accounts they let
 // follow. Staff see everything.
-export const protectedFor = (viewerId: string) =>
-	sql`(select id from users where protected and id <> ${viewerId}::bigint
+export const protectedFor = (viewerId: string) => viewerId === GUEST_ID
+	? sql`(select id from users where protected or ${hiddenFromGuests()})`
+	: sql`(select id from users where protected and id <> ${viewerId}::bigint
 		and id not in (select followee_id from follows where follower_id = ${viewerId}::bigint)
 		and not ${staffViewer(viewerId)})`;
 

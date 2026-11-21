@@ -7,6 +7,7 @@
 // post marked sensitive. Admin > Settings > Features turns previews off.
 
 import { existsSync } from "node:fs";
+import { hiddenFromGuests } from "./blocks";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { remoteMediaFile } from "./federation-sync";
@@ -25,7 +26,7 @@ type Author = { id: string; screen_name: string; name: string; bio: string; avat
 // an account anyone may see: not protected, suspended, limited or deactivated
 async function publicAuthor(where: ReturnType<typeof sql>): Promise<Author | undefined> {
 	const [u] = await sql`select id::text, screen_name, name, bio, avatar_url from users
-		where ${where} and not protected and not instance_blocked and status in ('active', 'restricted') and deactivated_at is null`;
+		where ${where} and not protected and not ${hiddenFromGuests()} and not instance_blocked and status in ('active', 'restricted') and deactivated_at is null`;
 	return u as Author | undefined;
 }
 

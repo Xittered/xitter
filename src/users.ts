@@ -1,5 +1,5 @@
 import type { User } from "./auth";
-import { blockedFor, federatedHiddenFor, isBlockedEitherWay, mutedFor, outOfView } from "./blocks";
+import { blockedFor, federatedHiddenFor, GUEST_ID, hiddenFromGuests, isBlockedEitherWay, mutedFor, outOfView } from "./blocks";
 import { staffViewer } from "./staff-access";
 import { sql } from "./db";
 import { PUBLIC_ORIGIN } from "./config";
@@ -24,7 +24,7 @@ const stat = (name: string) => sql`coalesce((select s.${sql(name)} from user_sta
 // same account never reaches the client in two different states.
 export const userCols = (viewerId: string) => sql`
 	u.id as a_id, u.screen_name as a_screen_name, u.name as a_name, u.bio as a_bio, u.location as a_location,
-	u.website as a_website, u.avatar_url as a_avatar_url, u.banner_url as a_banner_url, u.pinned_post_id as a_pinned_post_id, u.protected as a_protected, u.verified_type as a_verified_type, u.verified_at as a_verified_at, u.translator as a_translator, u.flag as a_flag, u.pronouns as a_pronouns, u.status as a_status, u.instance as a_instance, u.created_at as a_created_at,
+	u.website as a_website, u.avatar_url as a_avatar_url, u.banner_url as a_banner_url, u.pinned_post_id as a_pinned_post_id, ${viewerId === GUEST_ID ? sql`(u.protected or ${hiddenFromGuests(sql`u`)})` : sql`u.protected`} as a_protected, u.verified_type as a_verified_type, u.verified_at as a_verified_at, u.translator as a_translator, u.flag as a_flag, u.pronouns as a_pronouns, u.status as a_status, u.instance as a_instance, u.created_at as a_created_at,
 	${badgesOf(sql`u.id`)} as a_badges, u.remote_badges as a_remote_badges,
 	greatest((u.remote_counts->>'posts')::int, ${stat("posts")}) as a_posts,
 	(select json_build_object('id', o.id::text, 'name', o.name, 'screen_name', o.screen_name, 'avatar_url', case when o.org_badge_id is not null then '/public/badge-' || o.org_badge_id::text || '.png' else coalesce(o.remote_org_badge, o.avatar_url) end, 'since', af.created_at)
