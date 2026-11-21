@@ -99,11 +99,7 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 
 	// a new flow
 	if (url.searchParams.get("flow_name") || !body?.flow_token) {
-		let { postId, userId } = target(body);
-		if (postId && !userId) {
-			const [p] = await sql`select user_id::text as user_id from posts where id = ${postId}::bigint`;
-			userId = p?.user_id ?? null;
-		}
+		const { postId, userId } = target(body);
 		const draft = { reporter: viewer.id, postId, userId, at: now };
 		return Response.json(flow(tokenOf(draft), reasonStep(postId ? "post" : "account")));
 	}
@@ -120,6 +116,10 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 	const details = inputs.find((i) => i.subtask_id === "report_details")?.enter_text;
 	if (details && draft.reason) {
 		const textIn = details.link === "skip_link" ? "" : String(details.text ?? "").slice(0, 1000);
+		if (draft.postId && !draft.userId) {
+			const [p] = await sql`select user_id::text as user_id from posts where id = ${draft.postId}::bigint`;
+			draft.userId = p?.user_id ?? null;
+		}
 		// a resent last step files once
 		const [dupe] = await sql`select 1 from reports where reporter_id = ${viewer.id}::bigint and post_id is not distinct from ${draft.postId}::bigint
 			and user_id is not distinct from ${draft.userId}::bigint and reason = ${draft.reason} and created_at > now() - interval '1 minute'`;
