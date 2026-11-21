@@ -4,6 +4,7 @@ import type { Viewer } from "../src/auth";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
 import { runDue, scheduledHandlers as h } from "../src/scheduled";
+import { loadSettings, setSetting, settings } from "../src/settings";
 const database=new URL(process.env.DATABASE_URL??"postgres://localhost/xitter");
 assert(["localhost","127.0.0.1"].includes(database.hostname)&&/test|codex/.test(database.pathname),"Use a disposable local test database.");
 const author=newId(),known=newId(),learned=newId(),v={id:author} as Viewer;
@@ -12,6 +13,9 @@ const created=[author,known];
 const nativeFetch=globalThis.fetch;
 let networkCalls=0;
 globalThis.fetch=(async()=>{networkCalls++;throw new Error("No external network is permitted in this regression");}) as typeof fetch;
+await loadSettings();
+const limitsBefore=settings().mention_limits;
+await setSetting("mention_limits",{...limitsBefore,enabled:false});
 try {
  await sql`insert into users(id,screen_name,name,password_hash) values (${author}::bigint,${`ma${author.slice(-10)}`},'Mention author','!')`;
  await sql`insert into users(id,screen_name,name,password_hash,instance) values (${known}::bigint,${knownHandle},'Known remote','!','peer.invalid')`;
@@ -48,6 +52,7 @@ try {
  console.log("Scheduled mentions passed:20 bounded deduplicated preflight lookups with queue rows freely lockable, known/new fullhandles saved on both posts, failed remote lookups still publish complete threads, no external network");
 } finally {
  globalThis.fetch=nativeFetch;
+ await setSetting("mention_limits",limitsBefore);
  for(const id of created)await sql`delete from users where id=${id}::bigint`;
  await sql.close();
 }
