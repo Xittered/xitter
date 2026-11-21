@@ -288,6 +288,27 @@ export const analyticsHandlers = {
 		const days = await postSeries(p.id, ...span(p.created_at.getTime(), Date.now() + 1), DAY);
 		return tweetWrap(p.id, { uec_metrics_daily_time_series_count: days, uec_country_metrics_daily_time_series_count: [] });
 	},
+	TweetActivityQuery: async (v: Viewer, vars: Vars) => {
+		const p = await ownPost(v, vars.restId ?? vars.rest_id);
+		if (!p) return tweetWrap(String(vars.restId ?? vars.rest_id ?? ""), undefined);
+		const start = p.created_at.getTime();
+		const [totals, hours] = await Promise.all([
+			postTotals([p.id]),
+			postSeries(p.id, ...span(ms(vars.from_time, start), Math.min(ms(vars.first_48_hours_time, start + 2 * DAY), Date.now()) + 1), 3_600_000),
+		]);
+		const t = totals.get(p.id);
+		return tweetWrap(p.id, {
+			ad: null,
+			organic_metrics_time_series: organic(hours),
+			audience_follow_status: [],
+			datapoints_grid: metricList(t, vars.requested_organic_metrics),
+			promotion_info: metricList(t, ["Impressions"]),
+			video: [],
+			audience_gender: [],
+			audience_age: [],
+			audience_top_countries: [],
+		});
+	},
 	overviewDataPostQuery: async (v: Viewer, vars: Vars) => {
 		const p = await ownPost(v, vars.rest_id);
 		if (!p) return { data: { result: { id: gid("TweetResults", String(vars.rest_id ?? "")) } } };
