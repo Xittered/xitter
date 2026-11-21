@@ -151,6 +151,9 @@ export function badgeList(u: User): Badge[] {
 // before anything we send. When a label has it, every badge goes through the
 // page script (badges.ts). A bot's other labels go the same way (hiddenLabels).
 const hasParodyLabel = (u: User) => !!u.parody_label && u.parody_label !== "None" && !hidesParody();
+// a staff label that only says the account is a bot shows as X's own automated
+// label instead, so a bot never wears two labels saying the same thing
+const isBotLabel = (u: User) => !!u.label && /^\W*(bots?|automated( account)?)\W*$/iu.test(u.label.text.trim());
 export const labelTakesSlot = (u: User) => !!u.automated_by || hasParodyLabel(u) || !!u.label;
 
 // the client's own mask icon, for a staff-made label without a badge; its
@@ -203,7 +206,7 @@ export function hiddenLabels(u: User): { text: string; url?: string; icon?: stri
 		const icon = parodyMaskIcon();
 		out.push({ text: parodyText(u), url: `${PUBLIC_ORIGIN}/rules`, ...(icon ? { icon } : {}) });
 	}
-	if (u.label) {
+	if (u.label && !isBotLabel(u)) {
 		const icon = u.label.badge_id ? badgeUrl(u.label.badge_id) : parodyMaskIcon();
 		out.push({ text: u.label.text, ...(u.label.url ? { url: u.label.url } : {}), ...(icon ? { icon } : {}) });
 	}
@@ -222,13 +225,13 @@ function profileLabel(l: NonNullable<User["label"]>) {
 	};
 }
 
-function automatedLabel(owner: string) {
-	const text = `Automated by @${owner}`;
+function automatedLabel(owner: string | null) {
+	const text = owner ? `Automated by @${owner}` : "Automated account";
 	return {
 		label: {
 			description: "Automated",
 			// the mention links to the managing account
-			longDescription: { text, entities: [{ fromIndex: text.indexOf("@"), toIndex: text.length, ref: { type: "TimelineRichTextMention", screen_name: owner, mention_results: {} } }] },
+			longDescription: { text, entities: owner ? [{ fromIndex: text.indexOf("@"), toIndex: text.length, ref: { type: "TimelineRichTextMention", screen_name: owner, mention_results: {} } }] : [] },
 			userLabelType: "AutomatedLabel",
 		},
 	};
@@ -236,6 +239,7 @@ function automatedLabel(owner: string) {
 
 function badgeLabel(u: User) {
 	if (u.automated_by) return automatedLabel(u.automated_by);
+	if (isBotLabel(u)) return automatedLabel(null);
 	// the profile reads parody_commentary_fan_label, but search results, lists
 	// and other user cells only ask for this slot: the label goes in both
 	if (hasParodyLabel(u)) return profileLabel({ text: parodyText(u), badge_id: null, url: `${PUBLIC_ORIGIN}/rules` });
