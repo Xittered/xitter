@@ -890,6 +890,21 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("daily_caps", { enabled: !!b.daily_caps.enabled, posts: cap(b.daily_caps.posts, "post"), replies: cap(b.daily_caps.replies, "reply") });
 				changed.push("daily_caps");
 			}
+			if (b.ads && typeof b.ads === "object") {
+				const num = (v: unknown, name: string, min: number, max: number) => {
+					const x = Number(v);
+					if (!Number.isInteger(x) || x < min || x > max) throw new AdminError(`${name} must be a whole number from ${min} to ${max}.`);
+					return x;
+				};
+				await setSetting("ads", {
+					...s.ads,
+					enabled: !!b.ads.enabled,
+					min_spend_cents: num(b.ads.min_spend_cents, "The smallest budget", 1, 10_000_000),
+					max_days: num(b.ads.max_days, "The longest run", 1, 365),
+					reject_refund_pct: num(b.ads.reject_refund_pct, "The refund on rejection", 0, 100),
+				});
+				changed.push("ads");
+			}
 			if (b.mention_limits && typeof b.mention_limits === "object") {
 				const cap = (v: unknown, name: string, max: number) => {
 					const x = Number(v);

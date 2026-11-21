@@ -1964,7 +1964,12 @@ const RENDER = {
 			'<div class="field"><label>Accounts per post</label><input type="number" min="1" max="50" id="mentionsPost" value="' + esc(s.mention_limits.per_post) + '"' + dis + "></div>" +
 			'<div class="field"><label>Mentions a day</label><input type="number" min="1" id="mentionsDay" value="' + esc(s.mention_limits.per_day) + '"' + dis + "></div>" +
 			(admin ? '<button class="btn primary" id="saveMentions">Save mention limits</button>' : "") +
-			"</div></div><div class=\"settings-column\">" +
+			'<h3 style="margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--line);font-size:15px">Ads</h3><p class="dim small">People pay Equicoins to show a post in timelines, after staff approve it under Moderation, Ads. Off hides Ads Manager and stops showing ads.</p>' +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="adsOn"' + (s.ads.enabled ? " checked" : "") + dis + "> Open Ads Manager</label>" +
+			'<div class="field"><label>Smallest budget, in cents</label><input type="number" min="1" id="adsMin" value="' + esc(s.ads.min_spend_cents) + '"' + dis + "></div>" +
+			'<div class="field"><label>Longest run, in days</label><input type="number" min="1" max="365" id="adsDays" value="' + esc(s.ads.max_days) + '"' + dis + "></div>" +
+			'<div class="field"><label>Refund when rejected, in percent</label><input type="number" min="0" max="100" id="adsRefund" value="' + esc(s.ads.reject_refund_pct) + '"' + dis + "></div>" +
+			(admin ? '<button class="btn primary" id="saveAds">Save ads</button>' : "") + "</div></div><div class=\"settings-column\">" +
 			'<div class="box"><h2>Post length</h2><p class="dim small">The longest post each badge may write, counted like X counts (links 23, Chinese, Japanese, Korean and emoji 2). Past 280 a post shows a preview with "Show more". Changes reach the composer on its next page load.</p>' +
 			[["none", "No badge"], ["blue", "Blue check"], ["business", "Gold check (organisations)"], ["government", "Grey check (government organisations and officials)"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" min="1" data-postlen="' + k + '" value="' + esc(s.post_limits[k]) + '"' + dis + "></div>").join("") +
@@ -2119,6 +2124,7 @@ const RENDER = {
 			main.querySelectorAll("[data-postlen]").forEach((i) => r[i.dataset.postlen] = i.value);
 			save({ post_limits: r }, "Post lengths saved");
 		};
+		if ($("#saveAds")) $("#saveAds").onclick = () => save({ ads: { enabled: $("#adsOn").checked, min_spend_cents: $("#adsMin").value, max_days: $("#adsDays").value, reject_refund_pct: $("#adsRefund").value } }, "Ads saved");
 		if ($("#saveMentions")) $("#saveMentions").onclick = () => save({ mention_limits: { enabled: $("#mentionsOn").checked, per_post: $("#mentionsPost").value, per_day: $("#mentionsDay").value } }, "Mention limits saved");
 		if ($("#saveCaps")) $("#saveCaps").onclick = () => save({ daily_caps: { enabled: $("#capsOn").checked, posts: $("#capPosts").value, replies: $("#capReplies").value } }, "Daily caps saved");
 		const annList = $("#annButtons");
