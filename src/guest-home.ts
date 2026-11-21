@@ -46,4 +46,4 @@ export function patchGuestTimeline(text: string): string {
 	return text.replace(VIEWER_GUARD, (whole, viewer) => `if(!${viewer}){if(!window.__XITTER_GUEST_HOME__)throw Error("RichHomeTimeline: useModule requires a viewerUserId");${viewer}="0"}`);
 }
 
-export const GUEST_CSS = `[data-testid="primaryColumn"] nav:has(div[role="tab"]),[data-testid="primaryColumn"] div:has([data-testid="tweetTextarea_0_label"]):has([data-testid="toolBar"]):not(:has([data-testid="cellInnerDiv"])){display:none!important}`;
+export const GUEST_CSS = `[data-testid="primaryColumn"] div:has(nav div[role="tab"]):not(:has([data-testid="cellInnerDiv"])),[data-testid="primaryColumn"] div:has([data-testid="tweetTextarea_0_label"]):has([data-testid="toolBar"]):not(:has([data-testid="cellInnerDiv"])){display:none!important}`;
