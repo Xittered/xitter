@@ -275,7 +275,7 @@ export const BADGES_SCRIPT = String.raw`(function(){
 		else{
 			row=document.createElement("span");
 			row.setAttribute("data-xitter-badges",name);
-			row.style.cssText="display:inline-flex;align-items:center;vertical-align:text-bottom";
+			row.style.cssText="display:inline-flex;align-items:center;vertical-align:-0.15em";
 			k.badges.forEach(function(b){
 				var img=document.createElement("img");
 				img.src=b.url;img.alt=b.description;img.title=b.description;img.draggable=false;
