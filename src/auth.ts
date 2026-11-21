@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { newId } from "./ids";
@@ -102,6 +103,7 @@ export const MULTI_COOKIE = `${HOST_ONLY}auth_multi`;
 const YEAR = 60 * 60 * 24 * 365;
 // a session unused this long is over, whatever its cookie's Max-Age says
 export const SESSION_IDLE_DAYS = 90;
+export const sessionKey = (cookieToken: string) => createHash("sha256").update(cookieToken).digest("hex");
 const randomHex = (bytes: number) => Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("hex");
 
 export async function createUser(screenName: string, name: string, password: string): Promise<string> {
@@ -136,7 +138,7 @@ export async function login(screenName: string, password: string): Promise<{ tok
 				where id = ${u.id}::bigint and deactivated_at > now() - interval '30 days' returning id`;
 			if (!back.length) return false;
 		} else if (current.status === "suspended") return false;
-		await tx`insert into sessions (token, user_id, csrf) values (${token}, ${u.id}::bigint, ${csrf})`;
+		await tx`insert into sessions (token, user_id, csrf) values (${sessionKey(token)}, ${u.id}::bigint, ${csrf})`;
 		await tx`update users set last_seen_at = now() where id = ${u.id}::bigint`;
 		return true;
 	});
@@ -150,7 +152,7 @@ export type Session = { token: string; csrf: string; userId: string };
 export async function startSession(userId: string, executor: typeof sql = sql): Promise<Session> {
 	const token = randomHex(20);
 	const csrf = randomHex(32);
-	const made = await executor`insert into sessions (token, user_id, csrf) select ${token}, id, ${csrf} from users where id = ${userId}::bigint and status <> 'suspended' returning token`;
+	const made = await executor`insert into sessions (token, user_id, csrf) select ${sessionKey(token)}, id, ${csrf} from users where id = ${userId}::bigint and status <> 'suspended' returning token`;
 	if (!made.length) throw new Error("account suspended");
 	await executor`update users set last_seen_at = now() where id = ${userId}::bigint`;
 	return { token, csrf, userId };
@@ -201,8 +203,9 @@ const MAX_TOUCHED = 50_000;
 const touched = new Map<string, number>();
 
 async function loadViewer(req: Request): Promise<Viewer | undefined> {
-	const token = parseCookies(req)[SESSION_COOKIE];
-	if (!token) return undefined;
+	const cookieToken = parseCookies(req)[SESSION_COOKIE];
+	if (!cookieToken) return undefined;
+	const token = sessionKey(cookieToken);
 	const [row] = await sql`select ${viewerCols()}, s.csrf, s.token, s.superadmin
 		from sessions s join users u on u.id = s.user_id
 		where s.token = ${token} and u.status <> 'suspended' and (s.expires_at is null or s.expires_at > now())

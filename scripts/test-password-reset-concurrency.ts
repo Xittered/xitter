@@ -2,7 +2,7 @@
 // DATABASE_URL=postgres://localhost/xitter_test bun scripts/test-password-reset-concurrency.ts
 import { createHash, randomBytes } from "node:crypto";
 import { strict as assert } from "node:assert";
-import { createUser } from "../src/auth";
+import { createUser, sessionKey } from "../src/auth";
 import { sql } from "../src/db";
 import { resetRoute } from "../src/password-reset";
 
@@ -25,7 +25,7 @@ try {
 		const second = differentLinks ? await token() : first;
 		const old = await token();
 		const session = randomBytes(20).toString("hex");
-		await sql`insert into sessions (token, user_id, csrf) values (${session}, ${id}::bigint, 'test')`;
+		await sql`insert into sessions (token, user_id, csrf) values (${sessionKey(session)}, ${id}::bigint, 'test')`;
 		const responses = await Promise.all([reset(first, "firstpass123"), reset(second, "secondpass456")]);
 		assert.deepEqual(responses.map((r) => r.status).sort(), [200, 410]);
 		const [user] = await sql`select password_hash from users where id = ${id}::bigint`;

@@ -150,6 +150,7 @@ alter table sessions add column if not exists id uuid not null default gen_rando
 create unique index if not exists sessions_id_key on sessions(id);
 alter table sessions add column if not exists last_seen_at timestamptz not null default now();
 alter table sessions add column if not exists user_agent text;
+update sessions set token = encode(sha256(convert_to(token, 'UTF8')), 'hex') where token !~ '^[0-9a-f]{64}$';
 
 create table if not exists staff_notes (
 	id bigint primary key, user_id bigint not null references users(id) on delete cascade,

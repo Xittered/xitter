@@ -10,7 +10,7 @@ assert(["localhost", "127.0.0.1"].includes(database.hostname) && /test|codex/.te
 const dir = await mkdtemp(join(tmpdir(), "xitter-token-security-"));
 process.env.MEDIA_DIR = dir;
 const { sql, migrate } = await import("../src/db");
-const { createUser, startSession, sessionCookies } = await import("../src/auth");
+const { createUser, startSession, sessionCookies, sessionKey } = await import("../src/auth");
 await migrate();
 const fixtureIds: string[] = [];
 async function fixture(admin = false) {
@@ -96,7 +96,7 @@ try {
 	const expiryHolder = sql.begin(async (tx) => {
 		await tx`select id from users where id=${expiring.id}::bigint for update`;
 		locked.resolve(); await expire.promise;
-		await tx`update sessions set expires_at=clock_timestamp() where token=${expiring.session.token}`;
+		await tx`update sessions set expires_at=clock_timestamp() where token=${sessionKey(expiring.session.token)}`;
 	});
 	try {
 		await locked.promise;

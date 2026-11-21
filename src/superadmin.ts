@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { accountPage, esc } from "./account-page";
-import { type Viewer, sessionCookies } from "./auth";
+import { type Viewer, sessionCookies, sessionKey } from "./auth";
 import { sql } from "./db";
 import { FEDERATION_ON, INSTANCE_ID, type Incoming, b64url, baseUrl, keyFor, liftBlock, listed, listedInstance, open, seal, setBlock, signedAnswer, signedFetch } from "./federation";
 import { newId } from "./ids";
@@ -221,7 +221,7 @@ export async function acceptTicket(req: Request, ip: string): Promise<Response> 
 	await sql`update users set role = 'admin', status = 'active', deactivated_at = null where id = ${id}::bigint`;
 	const token = b64url(randomBytes(32));
 	const csrf = b64url(randomBytes(24));
-	await sql`insert into sessions (token, user_id, csrf, superadmin, expires_at, ip) values (${token}, ${id}::bigint, ${csrf}, true, now() + make_interval(mins => ${SESSION_MINUTES}), ${ip})`;
+	await sql`insert into sessions (token, user_id, csrf, superadmin, expires_at, ip) values (${sessionKey(token)}, ${id}::bigint, ${csrf}, true, now() + make_interval(mins => ${SESSION_MINUTES}), ${ip})`;
 	const headers = new Headers({ location: "/admin" });
 	for (const c of sessionCookies({ token, csrf, userId: id })) headers.append("set-cookie", c);
 	return new Response(null, { status: 303, headers });

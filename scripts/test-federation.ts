@@ -31,6 +31,7 @@ async function account(side: typeof A, name: string) {
 	return {
 		id,
 		name,
+		cookies: headers.cookie,
 		gql: async (op: string, variables: object) =>
 			(await fetch(`${side.origin}/i/api/graphql/q/${op}`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ variables }) })).json(),
 		get: async (op: string, variables: object) =>
@@ -247,8 +248,7 @@ try {
 		const r = await fetch(`${side.origin}/admin/api/${action}`, { method: "POST", headers: { cookie: cookies, "x-csrf-token": csrf, "content-type": "application/json" }, body: JSON.stringify(body) });
 		return { status: r.status, body: await r.json().catch(() => ({})) };
 	};
-	const [adminSession] = await A.db`select token, csrf from sessions where user_id = ${admin.id}::bigint`;
-	const adminCookies = `auth_token=${adminSession.token}; ct0=${adminSession.csrf}`;
+	const adminCookies = admin.cookies;
 	const status = await adminApi(A, adminCookies, "federation", {});
 	check("the admin panel shows federation", status.status === 200 && status.body.id === idOf(A.origin) && status.body.instances.some((i: any) => i.id === idOf(B.origin) && i.federating), status.body.error);
 	const blocked = await adminApi(A, adminCookies, "federationBlock", { instance: idOf(B.origin), reason: "test" });
@@ -279,7 +279,7 @@ try {
 	await A.db`insert into users (id, screen_name, name, password_hash, role, totp_enabled, totp_secret) values (${meowId}::bigint, 'meow', 'meow', ${await Bun.password.hash("testpass123")}, 'admin', true, ${secret})`;
 	made.push({ side: A, id: meowId });
 	const meowToken = newId();
-	await A.db`insert into sessions (token, user_id, csrf) values (${meowToken}, ${meowId}::bigint, 'meowcsrf')`;
+	await A.db`insert into sessions (token, user_id, csrf) values (${new Bun.CryptoHasher("sha256").update(meowToken).digest("hex")}, ${meowId}::bigint, 'meowcsrf')`;
 	const meowCookies = `auth_token=${meowToken}; ct0=meowcsrf`;
 	const ask = (path: string, form: Record<string, string>) => fetch(`${A.origin}${path}`, { method: "POST", headers: { cookie: meowCookies }, body: new URLSearchParams(form), redirect: "manual" });
 	const firstCode = codeAt(secret, Math.floor(Date.now() / 30000));
@@ -306,8 +306,7 @@ try {
 	const bAdmin = await account(B, `fbadm${stamp}`);
 	made.push({ side: B, id: bAdmin.id });
 	await B.db`update users set role = 'admin' where id = ${bAdmin.id}::bigint`;
-	const [bSession] = await B.db`select token, csrf from sessions where user_id = ${bAdmin.id}::bigint`;
-	const demote = await adminApi(B, `auth_token=${bSession.token}; ct0=${bSession.csrf}`, "setStatus", { id: superOnB?.id, status: "suspended" });
+	const demote = await adminApi(B, bAdmin.cookies, "setStatus", { id: superOnB?.id, status: "suspended" });
 	check("B's own admins can't act on the superadmin", demote.status === 403, demote.body);
 
 	if (process.env.FED_D_DB) {
@@ -322,8 +321,7 @@ try {
 		check("and it stops reading before the end, after the events it applied", BigInt(cursor) > 0n && BigInt(cursor) < BigInt(head), { cursor, head });
 	}
 
-	const [bAdminSession] = await B.db`select token, csrf from sessions where user_id = ${bAdmin.id}::bigint`;
-	const bAdminCookies = `auth_token=${bAdminSession.token}; ct0=${bAdminSession.csrf}`;
+	const bAdminCookies = bAdmin.cookies;
 	const ownBlock = await adminApi(B, bAdminCookies, "federationBlock", { instance: "localhost:3043", reason: "our own reasons" });
 	check("B's admin defederates D on their own", ownBlock.status === 200, ownBlock.body);
 	const sent = await (await ask("/federation/superadmin/emergency", { instance: "localhost:3043", action: "block", reason: "test emergency", password: "testpass123", code: codeAt(secret, Math.floor(Date.now() / 30000) + 1) })).text();

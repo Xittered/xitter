@@ -2,7 +2,7 @@
 // DATABASE_URL=postgres://localhost/xitter_test bun scripts/test-login-concurrency.ts
 import { strict as assert } from "node:assert";
 import { createHash, randomBytes } from "node:crypto";
-import { createUser, login, startSession, viewerById, type Viewer } from "../src/auth";
+import { createUser, login, sessionKey, startSession, viewerById, type Viewer } from "../src/auth";
 import { accountSettingsRoute } from "../src/account-settings";
 import { resetRoute } from "../src/password-reset";
 import { sql } from "../src/db";
@@ -18,7 +18,7 @@ try {
 		let pending: ReturnType<typeof login> | undefined;
 		try {
 			const session = await startSession(id);
-			const viewer = { ...(await viewerById(id)), ...session } as Viewer;
+			const viewer = { ...(await viewerById(id)), ...session, token: sessionKey(session.token) } as Viewer;
 			Bun.password.verify = async (password, hash, algorithm) => {
 				const ok = await nativeVerify(password, hash, algorithm);
 				if (!paused && password === "original123" && ok) {
@@ -46,7 +46,7 @@ try {
 			} else await sql`update users set totp_enabled = true where id = ${id}::bigint`;
 			resume.resolve();
 			assert.equal(await pending, undefined, `an in-flight sign-in cannot survive ${action}`);
-			assert.equal((await sql`select 1 from sessions where user_id = ${id}::bigint and token <> ${session.token}`).length, 0);
+			assert.equal((await sql`select 1 from sessions where user_id = ${id}::bigint and token <> ${sessionKey(session.token)}`).length, 0);
 			console.log(`ok: an in-flight password sign-in cannot bypass ${action}`);
 			if (action !== "two-factor") assert(await login(name, "newPassword123"));
 		} finally {

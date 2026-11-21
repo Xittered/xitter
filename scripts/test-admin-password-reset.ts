@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { adminApi } from "../src/admin";
-import { createUser, login, startSession, viewerById, type Viewer } from "../src/auth";
+import { createUser, login, sessionKey, startSession, viewerById, type Viewer } from "../src/auth";
 import { sql } from "../src/db";
 const database = new URL(process.env.DATABASE_URL ?? "postgres://localhost/xitter");
 assert(["localhost", "127.0.0.1"].includes(database.hostname) && /test|codex/.test(database.pathname), "Use a disposable local test database.");
@@ -16,7 +16,7 @@ const make = async (prefix: string, role: string | null = null) => {
  const id = await createUser(name, name, "OriginalFixture123"); ids.push(id);
  await sql`update users set role=${role}, totp_enabled=${role === "admin"} where id=${id}::bigint`;
  const session = await startSession(id);
- return { name, id, viewer: { ...(await viewerById(id)), ...session } as Viewer };
+ return { name, id, viewer: { ...(await viewerById(id)), ...session, token: sessionKey(session.token) } as Viewer };
 };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 let triggerCreated = false;

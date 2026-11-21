@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
-import type { Viewer } from "../src/auth";
+import { type Viewer, sessionKey } from "../src/auth";
 import { connectedAppsRoute, developerAppsRoute, oauthAppIcon, oauthAuthorize, oauthToken, validRedirect } from "../src/oauth";
 import { publicApi } from "../src/public-api";
 import { PUBLIC_ORIGIN } from "../src/config";
@@ -180,7 +180,7 @@ try {
 	assert.equal(signedIn.headers.get("location"), `/oauth/authorize?${new URLSearchParams(ask)}`, "and goes back to the same request");
 	const sessionCookie = signedIn.headers.getSetCookie().find((c) => c.startsWith("auth_token="));
 	const sessionToken = sessionCookie?.split(";")[0]?.split("=")[1];
-	assert(sessionToken && (await sql`select 1 from sessions where token = ${sessionToken} and user_id = ${other}::bigint`).length, "with a real session for that account");
+	assert(sessionToken && (await sql`select 1 from sessions where token = ${sessionKey(sessionToken)} and user_id = ${other}::bigint`).length, "with a real session for that account");
 	const denied = await oauthAuthorize(postForm("/oauth/authorize", { ...ask, decision: "deny" }), askUrl, undefined);
 	assert.equal(new URL(denied.headers.get("location")!).searchParams.get("error"), "access_denied", "Cancel tells the app no without signing in");
 	// with two-factor on, the code comes next

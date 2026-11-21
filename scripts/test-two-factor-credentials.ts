@@ -2,7 +2,7 @@
 // DATABASE_URL=postgres://localhost/xitter_test RATE_LIMITS=off bun scripts/test-two-factor-credentials.ts
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { createUser, startSession, viewerById, type Viewer } from "../src/auth";
+import { createUser, sessionKey, startSession, viewerById, type Viewer } from "../src/auth";
 import { accountSettingsRoute } from "../src/account-settings";
 import { resetRoute } from "../src/password-reset";
 import { answerChallenge, startChallenge } from "../src/two-factor";
@@ -17,7 +17,7 @@ async function fixture() {
 	const name = `c${randomBytes(6).toString("hex")}`;
 	const id = await createUser(name, "Credential race test", "original123");
 	const session = await startSession(id);
-	const viewer = { ...(await viewerById(id)), ...session } as Viewer;
+	const viewer = { ...(await viewerById(id)), ...session, token: sessionKey(session.token) } as Viewer;
 	const secret = newSecret();
 	await sql`update users set totp_enabled = true, totp_secret = ${secret} where id = ${id}::bigint`;
 	return { id, name, viewer, code: () => codeAt(secret, Math.floor(Date.now() / 30_000)) };
@@ -81,7 +81,7 @@ try {
 			const accepted = await answerChallenge(fresh, f.code());
 			assert.equal(accepted.userId, f.id);
 			assert(accepted.session, "challenge completion must issue its session atomically");
-			assert.equal((await sql`select 1 from sessions where token = ${accepted.session.token}`).length, 1);
+			assert.equal((await sql`select 1 from sessions where token = ${sessionKey(accepted.session.token)}`).length, 1);
 			console.log(`ok: ${action} revokes pending challenges, denies in-flight old passwords, and accepts fresh credentials`);
 		} finally {
 			resume.resolve();
