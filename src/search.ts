@@ -19,6 +19,7 @@ import { settings } from "./settings";
 import { isId } from "./ids";
 import { localName } from "./users";
 import { staffViewer } from "./staff-access";
+import { circleSeen } from "./circles";
 
 type Clause = ReturnType<typeof sql>;
 
@@ -123,7 +124,7 @@ export async function searchPosts(
 	// loaded: the paging cursor is made of these ids.
 	const hidden = sql`and not p.ad_only and p.user_id not in ${blockedFor(opts.viewerId)} and p.user_id not in ${outOfView(opts.viewerId)}
 		and p.user_id not in (select id from users where status = 'suspended') and p.notice->>'type' is distinct from 'Fosnr'
-		and p.user_id not in ${protectedFor(opts.viewerId)} and (not p.hidden or ${staffViewer(opts.viewerId)})
+		and p.user_id not in ${protectedFor(opts.viewerId)} and (not p.hidden or ${staffViewer(opts.viewerId)}) and ${circleSeen(opts.viewerId)}
 		${namesOtherInstance(query) ? sql`` : sql`and p.user_id not in ${federatedHiddenFor(opts.viewerId)}`}`;
 	if (opts.top) {
 		const rows = await sql`select p.id from (select p.id from posts p where ${cond} ${media} ${hidden} order by p.id desc limit ${TOP_POOL}) p
