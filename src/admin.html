@@ -1954,7 +1954,12 @@ const RENDER = {
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="capsOn"' + (s.daily_caps.enabled ? " checked" : "") + dis + "> Cap posts and replies per day</label>" +
 			'<div class="field"><label>Posts a day</label><input type="number" min="1" id="capPosts" value="' + esc(s.daily_caps.posts) + '"' + dis + "></div>" +
 			'<div class="field"><label>Replies a day</label><input type="number" min="1" id="capReplies" value="' + esc(s.daily_caps.replies) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveCaps">Save daily caps</button>' : "") + "</div></div><div class=\"settings-column\">" +
+			(admin ? '<button class="btn primary" id="saveCaps">Save daily caps</button>' : "") +
+			'<h3 style="margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--line);font-size:15px">Mention limits</h3><p class="dim small">How many accounts one post may mention, and how many mentions one account may send in any 24 hours. Mentioning yourself doesn\'t count. Staff have no limits.</p>' +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="mentionsOn"' + (s.mention_limits.enabled ? " checked" : "") + dis + "> Limit mentions</label>" +
+			'<div class="field"><label>Accounts per post</label><input type="number" min="1" max="50" id="mentionsPost" value="' + esc(s.mention_limits.per_post) + '"' + dis + "></div>" +
+			'<div class="field"><label>Mentions a day</label><input type="number" min="1" id="mentionsDay" value="' + esc(s.mention_limits.per_day) + '"' + dis + "></div>" +
+			(admin ? '<button class="btn primary" id="saveMentions">Save mention limits</button>' : "") + "</div></div><div class=\"settings-column\">" +
 			'<div class="box"><h2>Post length</h2><p class="dim small">The longest post each badge may write, counted like X counts (links 23, Chinese, Japanese, Korean and emoji 2). Past 280 a post shows a preview with "Show more". Changes reach the composer on its next page load.</p>' +
 			[["none", "No badge"], ["blue", "Blue check"], ["business", "Gold check (organisations)"], ["government", "Grey check (government organisations and officials)"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" min="1" data-postlen="' + k + '" value="' + esc(s.post_limits[k]) + '"' + dis + "></div>").join("") +
@@ -2109,6 +2114,7 @@ const RENDER = {
 			main.querySelectorAll("[data-postlen]").forEach((i) => r[i.dataset.postlen] = i.value);
 			save({ post_limits: r }, "Post lengths saved");
 		};
+		if ($("#saveMentions")) $("#saveMentions").onclick = () => save({ mention_limits: { enabled: $("#mentionsOn").checked, per_post: $("#mentionsPost").value, per_day: $("#mentionsDay").value } }, "Mention limits saved");
 		if ($("#saveCaps")) $("#saveCaps").onclick = () => save({ daily_caps: { enabled: $("#capsOn").checked, posts: $("#capPosts").value, replies: $("#capReplies").value } }, "Daily caps saved");
 		const annList = $("#annButtons");
 		const annFull = () => { if ($("#addAnnBtn")) $("#addAnnBtn").disabled = annList.children.length >= 4; };

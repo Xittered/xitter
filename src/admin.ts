@@ -890,6 +890,15 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("daily_caps", { enabled: !!b.daily_caps.enabled, posts: cap(b.daily_caps.posts, "post"), replies: cap(b.daily_caps.replies, "reply") });
 				changed.push("daily_caps");
 			}
+			if (b.mention_limits && typeof b.mention_limits === "object") {
+				const cap = (v: unknown, name: string, max: number) => {
+					const x = Number(v);
+					if (!Number.isInteger(x) || x < 1 || x > max) throw new AdminError(`Mentions ${name} must be a whole number from 1 to ${max}.`);
+					return x;
+				};
+				await setSetting("mention_limits", { enabled: !!b.mention_limits.enabled, per_post: cap(b.mention_limits.per_post, "per post", 50), per_day: cap(b.mention_limits.per_day, "a day", 100_000) });
+				changed.push("mention_limits");
+			}
 			if (b.announcement && typeof b.announcement === "object") {
 				const text = String(b.announcement.text ?? "").trim().slice(0, 500);
 				const raw = Array.isArray(b.announcement.buttons) ? b.announcement.buttons : [];

@@ -73,6 +73,8 @@ const DEFAULTS = {
 	post_limits: { none: 4000, blue: 25000, business: 128000, government: 256000 },
 	// posts and replies each account may make in any 24 hours; staff have none
 	daily_caps: { enabled: true, posts: 1000, replies: 3000 },
+	// distinct accounts one post may mention, and mentions an account may send in any 24 hours; staff have none
+	mention_limits: { enabled: true, per_post: 10, per_day: 300 },
 	// shown above every timeline until the viewer closes it; a new id shows it again
 	announcement: { id: "", text: "", link: "", buttons: [] as { label: string; url: string }[] },
 	// handles every new account follows
