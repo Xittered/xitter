@@ -139,6 +139,7 @@ async function entity(row: ArticleRow, author: User | undefined, withContent: bo
 		id: Buffer.from(`ArticleEntity:${row.id}`).toString("base64"),
 		title: row.title,
 		preview_text: preview,
+		is_grok_summary_eligible: false,
 		...(cover ? { cover_media: articleMedia(cover) } : {}),
 		...(withContent
 			? {
