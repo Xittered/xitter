@@ -26,6 +26,12 @@ export const adActions: Record<string, Action> = {
 				const [row] = await tx`select ${adCols} from ads where id = ${id}::bigint for update`;
 				if (!row) throw new AdminError("No such ad.", 404);
 				if (row.status !== "pending") throw new AdminError("That ad has already been reviewed.");
+				if (approve && row.existing_post) {
+					if (!row.post_id) throw new AdminError("The promoted post was deleted. Reject the ad to refund it.");
+					const [done] = await tx`update ads set status = 'running', reviewed_at = now(), reviewed_by = ${a.id}::bigint,
+						starts_at = now(), ends_at = now() + days * interval '1 day' where id = ${id}::bigint returning ${adCols}`;
+					return done;
+				}
 				if (approve) {
 					const postId = await createPost(row.user_id, row.url ? `${row.text}\n\n${row.url}` : row.text, { db: tx, skipReview: true });
 					if (row.ad_only) {

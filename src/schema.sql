@@ -1938,3 +1938,6 @@ alter table ad_views alter column day set default (now() at time zone 'utc')::da
 alter table ad_views alter column last_at set default '-infinity';
 alter table ads add column if not exists paused_left interval;
 alter table ads add column if not exists paused_at timestamptz;
+alter table ads add column if not exists name text;
+alter table ads add column if not exists existing_post boolean not null default false;
+create index if not exists ads_post_idx on ads (post_id) where post_id is not null;

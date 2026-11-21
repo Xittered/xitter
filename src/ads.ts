@@ -10,10 +10,11 @@ export type AdStatus = "pending" | "running" | "paused" | "ended" | "rejected" |
 
 const AD_TEXT_MAX = 280;
 const AD_URL_MAX = 500;
+const AD_NAME_MAX = 60;
 
 export const adCols = sql`id::text, user_id::text, text, url, budget_cents::bigint as budget_cents, spent_cents::bigint as spent_cents,
 	refunded_cents::bigint as refunded_cents, days, status, reject_reason, created_at, reviewed_at, starts_at, ends_at, extract(epoch from paused_left)::float8 as paused_left_s,
-	ad_only, post_id::text as post_id, views`;
+	ad_only, post_id::text as post_id, views, name, existing_post`;
 
 export const toAd = (r: any) => ({
 	id: r.id as string,
@@ -34,6 +35,8 @@ export const toAd = (r: any) => ({
 	adOnly: !!r.ad_only,
 	postId: (r.post_id as string | null) ?? null,
 	views: Number(r.views ?? 0),
+	name: (r.name as string | null) ?? null,
+	existingPost: !!r.existing_post,
 });
 
 export type Ad = ReturnType<typeof toAd>;
@@ -79,31 +82,75 @@ export async function refund(tx: typeof sql, userId: string, cents: number) {
 	await tx`update money_wallets set balance_cents = balance_cents + ${cents} where user_id = ${userId}::bigint`;
 }
 
-export async function createAd(userId: string, input: { text?: unknown; url?: unknown; budgetCents?: unknown; days?: unknown; adOnly?: unknown }): Promise<Ad> {
+export async function createAd(
+	userId: string,
+	input: { text?: unknown; url?: unknown; budgetCents?: unknown; days?: unknown; adOnly?: unknown; postId?: unknown; name?: unknown },
+): Promise<Ad> {
 	const rules = settings().ads;
 	if (!rules.enabled) throw new AdError("Ads aren't open on this instance.");
+	const postId = typeof input.postId === "string" && /^\d{1,19}$/.test(input.postId) ? input.postId : null;
+	const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : null;
+	if (name && [...name].length > AD_NAME_MAX) throw new AdError(`A campaign name is at most ${AD_NAME_MAX} characters.`);
 	const text = typeof input.text === "string" ? input.text.trim() : "";
-	if (!text) throw new AdError("Write what the ad says.");
-	if ([...text].length > AD_TEXT_MAX) throw new AdError(`An ad is at most ${AD_TEXT_MAX} characters.`);
-	const url = typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
-	if (url && (url.length > AD_URL_MAX || !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(url))) throw new AdError("The link must be an http or https address.");
+	const url = !postId && typeof input.url === "string" && input.url.trim() ? input.url.trim() : null;
+	if (!postId) {
+		if (!text) throw new AdError("Write what the ad says.");
+		if ([...text].length > AD_TEXT_MAX) throw new AdError(`An ad is at most ${AD_TEXT_MAX} characters.`);
+		if (url && (url.length > AD_URL_MAX || !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(url))) throw new AdError("The link must be an http or https address.");
+	}
 	const budget = Number(input.budgetCents);
 	if (!Number.isSafeInteger(budget) || budget < rules.min_spend_cents) throw new AdError(`The budget is at least ${formatCents(rules.min_spend_cents)} Equicoins.`);
 	const days = Number(input.days);
 	if (!Number.isInteger(days) || days < 1 || days > rules.max_days) throw new AdError(`An ad runs for 1 to ${rules.max_days} days.`);
 	const row = await sql.begin(async (tx) => {
-		const [user] = await tx`select status, deactivated_at, instance from users where id = ${userId}::bigint`;
+		const [user] = await tx`select status, deactivated_at, instance, protected from users where id = ${userId}::bigint for update`;
 		if (!user || user.instance || user.deactivated_at || user.status === "suspended" || user.status === "restricted") throw new AdError("Your account can't run ads right now.");
+		let body = text;
+		if (postId) {
+			if (user.protected) throw new AdError("Posts from a protected account can't be promoted, since only your followers can see them.");
+			const [post] = await tx`select text from posts where id = ${postId}::bigint and user_id = ${userId}::bigint
+				and not hidden and not ad_only and circle_owner_id is null and community_id is null`;
+			if (!post) throw new AdError("That post can't be promoted. Pick one of your own public posts.");
+			const [busy] = await tx`select 1 from ads where post_id = ${postId}::bigint and status in ('pending', 'running', 'paused')`;
+			if (busy) throw new AdError("That post is already in a campaign. Extend that one instead.");
+			body = post.text || "Post";
+		}
 		const [pending] = await tx`select count(*)::int as n from ads where user_id = ${userId}::bigint and status = 'pending'`;
 		if (Number(pending.n) >= rules.max_pending) throw new AdError(`You have ${rules.max_pending} ads waiting for review. Wait for those first.`);
 		const [wallet] = await tx`select balance_cents::bigint as cents from money_wallets where user_id = ${userId}::bigint for update`;
 		if (!wallet || Number(wallet.cents) < budget) throw new AdError("You don't have enough Equicoins for that budget.");
 		await tx`update money_wallets set balance_cents = balance_cents - ${budget} where user_id = ${userId}::bigint`;
-		const [made] = await tx`insert into ads (id, user_id, text, url, budget_cents, days, status, ad_only)
-			values (${newId()}::bigint, ${userId}::bigint, ${text}, ${url}, ${budget}, ${days}, 'pending', ${input.adOnly !== false}) returning ${adCols}`;
+		const [made] = await tx`insert into ads (id, user_id, text, url, budget_cents, days, status, ad_only, post_id, existing_post, name)
+			values (${newId()}::bigint, ${userId}::bigint, ${body}, ${url}, ${budget}, ${days}, 'pending', ${!postId && input.adOnly !== false},
+				${postId}::bigint, ${!!postId}, ${name}) returning ${adCols}`;
 		return made;
 	});
 	return toAd(row);
+}
+
+export async function renameAd(userId: string, adId: string, input: unknown): Promise<Ad> {
+	const name = typeof input === "string" && input.trim() ? input.trim() : null;
+	if (name && [...name].length > AD_NAME_MAX) throw new AdError(`A campaign name is at most ${AD_NAME_MAX} characters.`);
+	const [row] = await sql`update ads set name = ${name} where id = ${adId}::bigint and user_id = ${userId}::bigint returning ${adCols}`;
+	if (!row) throw new AdError("No such ad.");
+	return toAd(row);
+}
+
+export async function promotablePosts(userId: string) {
+	const rows = await sql`select p.id::text, p.text, p.created_at, p.reply_to_id is not null as reply,
+		exists (select 1 from media m where m.post_id = p.id) as media
+		from posts p where p.user_id = ${userId}::bigint and not p.hidden and not p.ad_only and p.circle_owner_id is null and p.community_id is null
+			and not exists (select 1 from ads a where a.post_id = p.id and a.status in ('pending', 'running', 'paused'))
+		order by p.id desc limit 40`;
+	return rows.map((r: any) => ({ id: r.id as string, text: r.text as string, createdAt: r.created_at as Date, reply: !!r.reply, media: !!r.media }));
+}
+
+export async function userAdDays(userId: string, days: number) {
+	const rows = await sql`select to_char(v.day, 'YYYY-MM-DD') as day, sum(v.n)::int as views from ad_views v join ads a on a.id = v.ad_id
+		where a.user_id = ${userId}::bigint and v.day > (now() at time zone 'utc')::date - ${days}::int group by v.day`;
+	const [reach] = await sql`select count(distinct v.viewer_id)::int as n from ad_views v join ads a on a.id = v.ad_id
+		where a.user_id = ${userId}::bigint and v.n > 0`;
+	return { byDay: new Map(rows.map((r: any) => [r.day as string, Number(r.views)])), reach: Number(reach?.n ?? 0) };
 }
 
 export async function myAds(userId: string): Promise<Ad[]> {
@@ -166,7 +213,7 @@ export type AdStats = { reach: number; days: { day: string; views: number }[] };
 export async function adStats(adIds: string[]): Promise<Map<string, AdStats>> {
 	const out = new Map<string, AdStats>();
 	if (!adIds.length) return out;
-	const reach = await sql`select ad_id::text, count(distinct viewer_id)::int as n from ad_views where ad_id in ${sql(adIds)} group by ad_id`;
+	const reach = await sql`select ad_id::text, count(distinct viewer_id) filter (where n > 0)::int as n from ad_views where ad_id in ${sql(adIds)} group by ad_id`;
 	for (const r of reach) out.set(r.ad_id, { reach: Number(r.n), days: [] });
 	const days = await sql`select ad_id::text, to_char(day, 'YYYY-MM-DD') as day, sum(n)::int as views from ad_views where ad_id in ${sql(adIds)} group by ad_id, day order by day`;
 	for (const d of days) out.get(d.ad_id)?.days.push({ day: d.day, views: Number(d.views) });

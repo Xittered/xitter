@@ -868,11 +868,11 @@ const RENDER = {
 			'<div class="bar">' + tabs.map(([s, l]) => '<button class="btn' + (s === status ? " primary" : "") + '" data-tab="' + s + '">' + l + "</button>").join("") + "</div>" +
 			(ads.length ? ads.map((ad) =>
 				'<div class="box" style="margin-bottom:12px" data-ad="' + esc(ad.id) + '">' +
-				'<p class="small"><a href="#user/' + esc(ad.userId) + '">@' + esc(ad.screenName || "unknown") + "</a>" + ' <span class="dim">· ' + usd(ad.budgetCents) + " for " + ad.days + (ad.days === 1 ? " day" : " days") + " · " + (ad.adOnly ? "only as an ad" : "also on their profile") + " · " + esc(when(ad.createdAt)) + "</span></p>" +
+				'<p class="small"><a href="#user/' + esc(ad.userId) + '">@' + esc(ad.screenName || "unknown") + "</a>" + ' <span class="dim">· ' + usd(ad.budgetCents) + " for " + ad.days + (ad.days === 1 ? " day" : " days") + " · " + (ad.existingPost ? "promotes an existing post" : ad.adOnly ? "only as an ad" : "also on their profile") + " · " + esc(when(ad.createdAt)) + "</span></p>" +
 				'<p style="white-space:pre-wrap">' + esc(ad.text) + "</p>" +
 				(ad.url ? '<p class="small"><a target="_blank" rel="noopener noreferrer" href="' + esc(ad.url) + '">' + esc(ad.url) + "</a></p>" : "") +
 				(ad.status === "pending"
-					? (can("reviewAd") ? '<div class="field"><textarea data-reason placeholder="Why it is rejected, shown to the advertiser" maxlength="500"></textarea></div><div class="row"><button class="btn primary" data-do="1">Approve</button><button class="btn danger" data-do="0">Reject</button></div>' : "")
+					? (ad.existingPost && ad.postId ? '<p class="small"><a target="_blank" href="/i/status/' + esc(ad.postId) + '">Open the post</a></p>' : "") + (can("reviewAd") ? '<div class="field"><textarea data-reason placeholder="Why it is rejected, shown to the advertiser" maxlength="500"></textarea></div><div class="row"><button class="btn primary" data-do="1">Approve</button><button class="btn danger" data-do="0">Reject</button></div>' : "")
 					: '<p class="dim small">' + usd(ad.spentCents) + " spent · " + ad.views.toLocaleString() + " views" + (ad.refundedCents ? " · " + usd(ad.refundedCents) + " refunded" : "") + (ad.endsAt ? " · ends " + esc(when(ad.endsAt)) : "") + "</p>" +
 						(ad.rejectReason ? '<p class="dim small">Rejected: ' + esc(ad.rejectReason) + "</p>" : "") +
 						(ad.postId ? '<a class="btn" target="_blank" href="/i/status/' + esc(ad.postId) + '">Open post</a>' : "")) +

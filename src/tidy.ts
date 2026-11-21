@@ -156,6 +156,7 @@ export function tidyData(links: MenuLink[] = []) {
 	return {
 		menuItems,
 		premium: feature("premium"),
+		ads: s.ads.enabled,
 		imageGen: feature("image_gen"),
 		gbee: feature("grok") && s.grok.brain === "bee",
 		announcement: announcement.text
@@ -421,6 +422,39 @@ export const TIDY_SCRIPT = `(function(){
 		});
 		a.addEventListener("mouseleave",function(){a.style.backgroundColor=""});
 	}
+	// "Promote post" in the ⋯ menu of the viewer's own posts (the menu that
+	// offers Delete), which opens the Ads Manager with that post picked
+	var caretPost=null;
+	document.addEventListener("click",function(e){
+		var c=e.target.closest&&e.target.closest('[data-testid="caret"]');
+		if(!c)return;
+		var art=c.closest("article"),a=art&&[].find.call(art.querySelectorAll('a[href*="/status/"]'),function(l){return l.querySelector("time")});
+		var m=a&&/\\/status\\/(\\d+)/.exec(a.getAttribute("href"));
+		caretPost=m?m[1]:null;
+	},true);
+	function promoteItem(){
+		if(!T.ads||!caretPost)return;
+		var menu=document.querySelector('[role="menu"]');
+		if(!menu||menu.querySelector("[data-xitter-promote]"))return;
+		var items=[].slice.call(menu.querySelectorAll('[role="menuitem"]'));
+		var del=items.find(function(m){return m.innerText.trim()==="Delete"});
+		var tpl=items.find(function(m){return m!==del&&m.innerText.trim()});
+		if(!del||!tpl)return;
+		var item=tpl.cloneNode(true),id=caretPost;
+		item.setAttribute("data-xitter-promote","");
+		item.style.display="";
+		item.removeAttribute("href");
+		var label=[].find.call(item.querySelectorAll("span"),function(n){return !n.childElementCount&&n.textContent.trim()});
+		if(label)label.textContent="Promote post";
+		var svg=item.querySelector("svg path");
+		if(svg)svg.setAttribute("d","M19.5 4.5v15l-6-3.2V18a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3H6a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h4.5l9-3.5zM10.5 15v3h1v-2.2l-1-.8zM17.5 7.4L11 10v3l6.5 3.3V7.4zM9 10H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h3v-3z");
+		item.addEventListener("click",function(e){
+			e.preventDefault();e.stopPropagation();
+			document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+			go("/i/ads/new?post="+id);
+		},true);
+		del.parentNode.insertBefore(item,del.nextSibling);
+	}
 	function menuLinks(){
 		var items=(T.links||[]).filter(function(l){return l.where==="menu"||l.where==="both"});
 		if(!items.length)return;
@@ -573,6 +607,7 @@ export const TIDY_SCRIPT = `(function(){
 		document.querySelectorAll('[role="menu"] [role="menuitem"]').forEach(function(m){
 			if(T.menuItems.indexOf(m.innerText.trim())>=0)m.style.display="none";
 		});
+		promoteItem();
 		// signed out on a phone, X's page leads with "Get the app", which opens X's
 		// own app or its store page and looks like being sent to x.com. Where
 		// sign-up is open, a "Create account" button takes its place and opens the
