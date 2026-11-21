@@ -52,4 +52,25 @@ export const adActions: Record<string, Action> = {
 			return { ad: toAd(ad) };
 		},
 	},
+	stopAd: {
+		role: "moderator",
+		run: async (a, b) => {
+			const id = idOf(b.id, "ad");
+			const reason = typeof b.reason === "string" ? b.reason.trim().slice(0, 500) : "";
+			if (!reason) throw new AdminError("Say why the ad is stopped; the advertiser sees it.");
+			const ad = await sql.begin(async (tx) => {
+				const [row] = await tx`select ${adCols} from ads where id = ${id}::bigint for update`;
+				if (!row) throw new AdminError("No such ad.", 404);
+				if (!["pending", "running", "paused"].includes(row.status)) throw new AdminError("That ad has already finished.");
+				const back = Number(row.budget_cents) - Number(row.spent_cents);
+				await refund(tx, row.user_id, back);
+				const [done] = await tx`update ads set status = 'cancelled', refunded_cents = ${back}, reject_reason = ${reason},
+					reviewed_by = coalesce(reviewed_by, ${a.id}::bigint), ends_at = least(coalesce(ends_at, now()), now())
+					where id = ${id}::bigint returning ${adCols}`;
+				return done;
+			});
+			await audit(a, "ad_stop", ad.user_id, { ad: id, refunded: Number(ad.refunded_cents), reason });
+			return { ad: toAd(ad) };
+		},
+	},
 };

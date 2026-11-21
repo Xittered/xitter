@@ -875,9 +875,16 @@ const RENDER = {
 					? (ad.existingPost && ad.postId ? '<p class="small"><a target="_blank" href="/i/status/' + esc(ad.postId) + '">Open the post</a></p>' : "") + (can("reviewAd") ? '<div class="field"><textarea data-reason placeholder="Why it is rejected, shown to the advertiser" maxlength="500"></textarea></div><div class="row"><button class="btn primary" data-do="1">Approve</button><button class="btn danger" data-do="0">Reject</button></div>' : "")
 					: '<p class="dim small">' + usd(ad.spentCents) + " spent · " + ad.views.toLocaleString() + " views" + (ad.refundedCents ? " · " + usd(ad.refundedCents) + " refunded" : "") + (ad.endsAt ? " · ends " + esc(when(ad.endsAt)) : "") + "</p>" +
 						(ad.rejectReason ? '<p class="dim small">Rejected: ' + esc(ad.rejectReason) + "</p>" : "") +
-						(ad.postId ? '<a class="btn" target="_blank" href="/i/status/' + esc(ad.postId) + '">Open post</a>' : "")) +
+						'<div class="row">' + (ad.postId ? '<a class="btn" target="_blank" href="/i/status/' + esc(ad.postId) + '">Open post</a>' : "") +
+						(can("stopAd") && (ad.status === "running" || ad.status === "paused") ? '<button class="btn danger" data-stop>Stop ad</button>' : "") + "</div>" +
+						(can("stopAd") && (ad.status === "running" || ad.status === "paused") ? '<div class="field" data-stopbox hidden><textarea data-stopreason placeholder="Why it is stopped, shown to the advertiser" maxlength="500"></textarea><div class="row"><button class="btn danger" data-stopgo>Stop and refund what is left</button></div></div>' : "")) +
 				"</div>").join("") : '<div class="empty">' + (status === "pending" ? "No ads waiting for review." : "Nothing here.") + "</div>");
 		main.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { sessionStorage.setItem("adStatus", b.dataset.tab); route(); });
+		main.querySelectorAll("[data-stop]").forEach((b) => b.onclick = () => { const box = b.closest("[data-ad]").querySelector("[data-stopbox]"); box.hidden = !box.hidden; if (!box.hidden) box.querySelector("textarea").focus(); });
+		main.querySelectorAll("[data-stopgo]").forEach((b) => b.onclick = () => {
+			const box = b.closest("[data-ad]");
+			act(() => api("stopAd", { id: box.dataset.ad, reason: box.querySelector("[data-stopreason]").value }), "Ad stopped and refunded").then(route);
+		});
 		main.querySelectorAll("[data-ad]").forEach((box) => box.querySelectorAll("[data-do]").forEach((b) => b.onclick = () => {
 			const approve = b.dataset.do === "1";
 			act(() => api("reviewAd", { id: box.dataset.ad, approve, reason: box.querySelector("[data-reason]").value }), approve ? "Ad approved and running" : "Ad rejected and partly refunded").then(route);

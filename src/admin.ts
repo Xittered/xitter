@@ -61,7 +61,7 @@ export type Action = { role: Role; run: (actor: Viewer, b: Body, req?: Request) 
 // Every action the code logs (grep audit( and audit_log inserts when adding one),
 // so the audit filter offers them all, logged yet or not.
 export const AUDIT_ACTIONS = [
-	"ad_approve", "ad_reject", "add_affiliate", "add_staff_note", "add_sticker", "archive_import", "article_visibility", "auto_suspend_name", "automod_second_chance",
+	"ad_approve", "ad_reject", "ad_stop", "add_affiliate", "add_staff_note", "add_sticker", "archive_import", "article_visibility", "auto_suspend_name", "automod_second_chance",
 	"automod_strike", "backup_schedule", "block_oauth_app", "bulk_status", "bulk_strike", "compress_stored", "create_backup", "create_badge",
 	"create_hashflag", "create_invites", "create_label", "create_org", "create_platform", "create_sticker_pack", "delete_account", "delete_backup",
 	"delete_badge", "delete_community_note", "delete_explore_card", "delete_hashflag", "delete_label", "delete_media", "delete_post", "delete_sticker",

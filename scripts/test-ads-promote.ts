@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import "../src/admin";
 import { adActions } from "../src/ads-admin";
-import { AdError, cancelAd, createAd, pickAd, promotablePosts, renameAd } from "../src/ads";
+import { AdError, createAd, pickAd, promotablePosts, renameAd } from "../src/ads";
 import { sql } from "../src/db";
 import { newId } from "../src/ids";
 import { createPost } from "../src/posts";
@@ -76,7 +76,18 @@ try {
 	await refused(renameAd(people.bob, ad.id, "mine now"), /No such ad/);
 	ok("only the owner renames a campaign");
 
-	await cancelAd(people.alice, ad.id);
+	await assert.rejects(run("stopAd", { id: ad.id, reason: "" }) as Promise<unknown>, /Say why/);
+	const wallet = async () => Number((await sql`select balance_cents from money_wallets where user_id = ${people.alice}::bigint`)[0].balance_cents);
+	const had = await wallet();
+	await sql`update ads set spent_cents = 200, spent_milli = 200000 where id = ${ad.id}::bigint`;
+	const stopped = (await run("stopAd", { id: ad.id, reason: "Misleading claim" })) as any;
+	assert.equal(stopped.ad.status, "cancelled");
+	assert.equal(stopped.ad.rejectReason, "Misleading claim");
+	assert.equal(await wallet(), had + 800);
+	const [logged] = await sql`select 1 from audit_log where action = 'ad_stop' and target = ${people.alice}`;
+	assert(logged);
+	ok("a moderator stops a running ad with a reason and a full refund of what is left");
+
 	assert((await promotablePosts(people.alice)).some((p) => p.id === mine));
 	const again = await createAd(people.alice, { postId: mine, budgetCents: 500, days: 1 });
 	ok("a stopped campaign frees the post for another");

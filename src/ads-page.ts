@@ -312,7 +312,7 @@ async function detail(req: Request, viewer: Viewer, id: string, opts: { error?: 
 		["pending", "running", "paused"].includes(ad.status) ? act("cancel", ad.status === "pending" ? "Withdraw" : "Stop and refund") : ""
 	}</div></div>
 ${notices(opts)}
-${ad.status === "rejected" && ad.rejectReason ? `<div class="card strike"><b>Why it was rejected</b><p>${esc(ad.rejectReason)}</p></div>` : ""}
+${ad.rejectReason && (ad.status === "rejected" || ad.status === "cancelled") ? `<div class="card strike"><b>${ad.status === "rejected" ? "Why it was rejected" : "Staff stopped this campaign"}</b><p>${esc(ad.rejectReason)}</p></div>` : ""}
 ${ad.startsAt ? tiles([
 	[num(ad.views), "Views"],
 	[num(stats?.reach ?? 0), "People reached"],
