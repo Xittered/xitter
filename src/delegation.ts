@@ -51,12 +51,12 @@ export async function actingViewer(member: Viewer, ownerId: string): Promise<Vie
 
 // What a member can't do as the shared account: anything about its sign-in,
 // settings or delegation, and its messages (end-to-end keys are the owner's).
-const DELEGATE_DENIED_OPS = /XChat|DirectMessage|DmInbox|SendMessage|ConversationEvent|Preference|_settings_|Settings?Mutation|Password|Email|Phone|TwoFactor|Session|Deactivat|ScreenName|UserAccountLabel|AccountParody|Delegat/;
+const DELEGATE_DENIED_OPS = /Grok|XChat|DirectMessage|DmInbox|SendMessage|ConversationEvent|Preference|_settings_|Settings?Mutation|Password|Email|Phone|TwoFactor|Session|Deactivat|ScreenName|UserAccountLabel|AccountParody|Delegat/;
 const DELEGATE_DENIED_REST = /^\/(1\.1|2)\/(dm|direct_messages)\/|^\/1\.1\/account\/(?!settings\.json$|verify_credentials)|^\/1\.1\/strato\/column\/.*\/clients\//;
-const DELEGATE_PRIVATE_REST = /^\/(i\/)?account\/|^\/1\.1\/notifications\/settings\/|^\/1\.1\/users\/email_phone_info|^\/1\.1\/account\/(personalization|user_twitter_data)|^\/xitter\/(export|moderation|money)(\/|$)/;
+const DELEGATE_PRIVATE_REST = /^\/(i\/)?account\/|^\/1\.1\/contacts\/|^\/2\/grok\/|^\/1\.1\/notifications\/settings\/|^\/1\.1\/users\/email_phone_info|^\/1\.1\/account\/(personalization|user_twitter_data)|^\/xitter\/(export|moderation|money)(\/|$)/;
 // reads whose names the refused list would catch
 const DELEGATE_READS = new Set(["UserByScreenName"]);
-const DELEGATE_PRIVATE_READS = /XChat|DirectMessage|DmInbox|Session|Email|Phone|TwoFactor|Password|LoginHistory/;
+const DELEGATE_PRIVATE_READS = /Grok|XChat|DirectMessage|DmInbox|Session|Email|Phone|TwoFactor|Password|LoginHistory/;
 // Post analytics are for Admins (as the client's role screen says).
 const ANALYTICS_OPS = /^(accountOverview|activeFollowersTile|useFetchAnalytics|contentPage|postDetailsProvider|overviewData)\w*Query$/;
 // The chat app's operations go by many names (GetPublicKeysQuery hands out the
