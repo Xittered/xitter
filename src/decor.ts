@@ -535,7 +535,7 @@ export const DECOR_SCRIPT = String.raw`(function(){
 		[].forEach.call(document.styleSheets,function(sheet){
 			var rules;try{rules=sheet.cssRules}catch(e){return}
 			[].forEach.call(rules||[],function(r){
-				if(r.selectorText&&r.style&&/rgba\(255, 255, 255/.test(r.style.boxShadow)&&/^\.[\w-]+$/.test(r.selectorText))out.push(r.selectorText);
+				if(r.selectorText&&r.style&&/rgba\(255, 255, 255/.test(r.style.boxShadow)&&!/inset/.test(r.style.boxShadow)&&/^\.[\w-]+$/.test(r.selectorText))out.push(r.selectorText);
 			});
 		});
 		return out;
