@@ -63,6 +63,21 @@ try {
 	check((await run("bulkStrike", { ids: [user.id], body: "overflow", include_alts: true })).status === 400, "alt expansion cannot exceed 50 accounts");
 	const [{ after }] = await sql`select count(*)::int as after from staff_messages where actor_id = ${mod.id}::bigint`;
 	check(before === after, "overflow produces no partial strikes");
+	const target = await make();
+	check((await run("bulkStrike", { ids: [target.id], body: "x", action: "nuke" })).status === 400, "unknown action rejected");
+	check((await run("bulkStrike", { ids: [target.id], body: "x", action: "limited", hours: 9999 })).status === 400, "hours bounded");
+	const warned = await run("bulkStrike", { ids: [target.id], body: "careful", action: "warning" });
+	check(warned.status === 200, "warning accepted");
+	const [w] = await sql`select kind from staff_messages where user_id = ${target.id}::bigint order by id desc limit 1`;
+	check(w?.kind === "warning", "warning stored as warning");
+	check((await run("bulkStrike", { ids: [target.id], body: "cool off", action: "limited", hours: 24 })).status === 200, "temporary limit accepted");
+	const [lim] = await sql`select status, status_until is not null as timed, status_restore from users where id = ${target.id}::bigint`;
+	check(lim.status === "limited" && lim.timed && lim.status_restore === "active", "temporary limit restores later");
+	check((await run("bulkStrike", { ids: [target.id], body: "gone", action: "suspended" })).status === 200, "suspension accepted");
+	const [sus] = await sql`select status, status_until from users where id = ${target.id}::bigint`;
+	check(sus.status === "suspended" && sus.status_until === null, "suspension until lifted");
+	const [{ strikes }] = await sql`select count(*)::int as strikes from staff_messages where user_id = ${target.id}::bigint and kind = 'strike'`;
+	check(strikes === 0, "sanctions don't add strikes");
 	console.log(`${checks} bulk strike checks passed`);
 } finally {
 	await sql`delete from audit_log where actor_id = any(${sql.array(created, "BIGINT")})`;

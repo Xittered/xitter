@@ -273,6 +273,11 @@ export const toolActions: Record<string, Action> = {
 		role: "moderator",
 		run: async (a, b) => {
 			const body = textOf(b.body);
+			const action = b.action ?? "strike";
+			if (!["strike", "warning", "message", "restricted", "limited", "suspended"].includes(action)) throw new AdminError("Choose what to do.");
+			const sanction = ["restricted", "limited", "suspended"].includes(action);
+			const hours = b.hours === undefined || b.hours === null || b.hours === "" ? 0 : Number(b.hours);
+			if (sanction && (!Number.isFinite(hours) || hours < 0 || hours > 8760)) throw new AdminError("Choose 1–8760 hours, or none for until lifted.");
 			if (b.include_alts === true && !allows(a.role, "ip_addresses")) throw new AdminError("IP address permission is required to include alts.", 403);
 			if ((b.ids !== undefined && !Array.isArray(b.ids)) || (b.handles !== undefined && !Array.isArray(b.handles))) throw new AdminError("Provide lists of ids or handles.");
 			if ((b.ids?.length ?? 0) + (b.handles?.length ?? 0) > 50) throw new AdminError("At most 50 handles or ids at a time.");
@@ -310,17 +315,24 @@ export const toolActions: Record<string, Action> = {
 				try {
 					const u = await guard(a, id, true);
 					screenName = u.screen_name;
-					const message = newId();
-					await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${message}::bigint, ${id}::bigint, ${a.id}::bigint, 'strike', ${body})`;
+					const kind = action === "strike" || action === "warning" ? action : "message";
+					await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${newId()}::bigint, ${id}::bigint, ${a.id}::bigint, ${kind}, ${body})`;
 					delivered = true;
-					const escalation = b.escalate !== false ? await escalate(id, a.id, `bulk strike from @${a.screen_name}`) : undefined;
-					results.push({ id, screen_name: screenName, ok: true, strikes: escalation?.strikes, outcome: escalation?.outcome, hours: escalation?.hours });
+					if (sanction) {
+						if (hours) await sql`update users set status_restore = coalesce(status_restore, status), status = ${action}, status_until = now() + ${hours} * interval '1 hour', deactivated_at = null where id = ${id}::bigint`;
+						else await sql`update users set status = ${action}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
+						if (action === "suspended") await shutOut(id);
+						results.push({ id, screen_name: screenName, ok: true, outcome: action, hours: hours || undefined });
+						continue;
+					}
+					const escalation = action === "strike" && b.escalate !== false ? await escalate(id, a.id, `bulk strike from @${a.screen_name}`) : undefined;
+					results.push({ id, screen_name: screenName, ok: true, strikes: escalation?.strikes, outcome: action === "strike" ? escalation?.outcome : `${action}_sent`, hours: escalation?.hours });
 				} catch (e) {
-					results.push({ id, screen_name: screenName, ok: false, delivered, error: !(e instanceof AdminError), why: e instanceof AdminError ? e.message : delivered ? "Strike sent, but escalation failed. Review the account before retrying." : "Could not send the strike." });
+					results.push({ id, screen_name: screenName, ok: false, delivered, error: !(e instanceof AdminError), why: e instanceof AdminError ? e.message : delivered ? "Message sent, but the sanction failed. Review the account before retrying." : "Could not send the strike." });
 				}
 			}
 			const struck = results.filter((r) => r.ok || r.delivered);
-			await audit(a, "bulk_strike", null, { count: struck.length, ids: struck.map((r) => r.id), results, missing, escalate: b.escalate !== false, alts: withAlts });
+			await audit(a, "bulk_strike", null, { count: struck.length, ids: struck.map((r) => r.id), results, missing, action, hours: sanction ? hours : undefined, escalate: action === "strike" && b.escalate !== false, alts: withAlts });
 			return { results, missing };
 		},
 	},

@@ -462,7 +462,7 @@ const PAGES = {
 	reports: { icon: "flag", title: "Reports" },
 	appeals: { icon: "gavel", title: "Appeals", needs: "appeals" },
 	ads: { icon: "campaign", title: "Ads", needs: "ads" },
-	bulkStrike: { icon: "swords", title: "Bulk strike", needs: "bulkStrike" },
+	bulkStrike: { icon: "swords", title: "Bulk action", needs: "bulkStrike" },
 	users: { icon: "group", title: "Users" },
 	orgs: { icon: "domain", title: "Organisations" },
 	posts: { icon: "chat", title: "Posts" },
@@ -895,27 +895,55 @@ const RENDER = {
 	},
 
 	async bulkStrike(main) {
-		main.innerHTML = "<h1>Bulk strike</h1>" +
-			'<p class="dim small">One strike for many accounts at once: an alt chain, a raid, a ban evader\'s new accounts. Each account gets the message below as its own strike, and strikes count toward suspension on the usual ladder (see Automod). Accounts that staff rank protects are skipped, with the reason shown. Ticking accounts on the Users page and pressing Strike there does the same thing by id.</p>' +
+		const ACTIONS = [
+			["strike", "Strike", "Sends the message as a strike. Strikes count toward suspension on the usual ladder (see Automod), so enough strikes suspend the account on their own."],
+			["warning", "Warning", "Sends the message as a warning. Nothing about the account changes and it doesn't count toward suspension."],
+			["message", "Message", "Sends a plain staff message. Use it for a heads-up, not a sanction."],
+			["limited", "Limit", "Sends the message, then only their followers see their posts. They can still post, reply and sign in."],
+			["restricted", "Restrict", "Sends the message, then they can read but can't post or interact."],
+			["suspended", "Suspend", "Sends the message, then signs them out everywhere and hides the account and its posts."],
+		];
+		const SANCTIONS = ["limited", "restricted", "suspended"];
+		main.innerHTML = "<h1>Bulk action</h1>" +
+			'<p class="dim small">One action for many accounts at once, such as an alt chain, a raid or a ban evader\'s new accounts. Every account gets the message below. Accounts that staff rank protects are skipped, with the reason shown.</p>' +
 			(can("bulkStrike") ?
 			'<div class="field"><label>Handles, one per line</label><textarea id="bsHandles" rows="6" placeholder="@handle1&#10;@handle2"></textarea></div>' +
-			'<div class="field"><label>What they\'ll read</label><textarea id="bsBody" maxlength="2000" placeholder="Why they\'re getting this strike"></textarea></div>' +
-			'<label class="row" style="margin:6px 0"><input type="checkbox" id="bsEscalate" checked> Strikes count toward suspension</label>' +
-			(can("heldIdentities") ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="bsAlts"> Also strike accounts seen from the same addresses (alts)</label>' : "") +
-			'<div class="row"><button class="btn primary" id="bsGo">Strike them all</button></div><div id="bsOut"></div>' : '<p class="dim small">Requires permission to send strikes.</p>');
+			'<div class="field"><label>What to do</label><div class="choices">' +
+			ACTIONS.map(([v, l, d], i) => '<label class="row" style="align-items:flex-start;gap:10px;margin:6px 0"><input type="radio" name="bsAction" value="' + v + '"' + (i ? "" : " checked") + '><span><b>' + l + '</b><br><span class="dim small">' + d + "</span></span></label>").join("") +
+			"</div></div>" +
+			'<div class="field" id="bsHoursBox" hidden><label>For how many hours</label><input id="bsHours" type="number" min="1" max="8760" placeholder="Leave empty for until lifted"><p class="dim small">With a number, the account goes back to its previous standing afterwards.</p></div>' +
+			'<div class="field"><label>What they\'ll read</label><textarea id="bsBody" maxlength="2000" placeholder="Why this is happening"></textarea></div>' +
+			'<label class="row" id="bsEscalateRow" style="margin:6px 0"><input type="checkbox" id="bsEscalate" checked> Strikes count toward suspension</label>' +
+			(can("heldIdentities") ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="bsAlts"> Also include accounts seen from the same addresses (alts)</label>' : "") +
+			'<div class="row"><button class="btn primary" id="bsGo">Apply to all</button></div><div id="bsOut"></div>' : '<p class="dim small">Requires permission to send strikes.</p>');
 		if (!$("#bsGo")) return;
+		const picked = () => main.querySelector('input[name="bsAction"]:checked').value;
+		const sync = () => {
+			const v = picked();
+			$("#bsHoursBox").hidden = !SANCTIONS.includes(v);
+			$("#bsEscalateRow").hidden = v !== "strike";
+			$("#bsGo").className = "btn " + (v === "suspended" || v === "restricted" ? "danger" : "primary");
+		};
+		main.querySelectorAll('input[name="bsAction"]').forEach((r) => r.onchange = sync);
+		sync();
 		$("#bsGo").onclick = async () => {
 			const handles = $("#bsHandles").value.split(/[\s,]+/).filter(Boolean);
 			if (!handles.length) return;
-			if (!(await ask("Give " + handles.length + " accounts" + ($("#bsAlts")?.checked ? " and their alts" : "") + " a strike?"))) return;
+			const action = picked();
+			const label = ACTIONS.find(([v]) => v === action)[1].toLowerCase();
+			const hours = SANCTIONS.includes(action) ? $("#bsHours").value.trim() : "";
+			if (!(await ask(label[0].toUpperCase() + label.slice(1) + " " + handles.length + " accounts" + ($("#bsAlts")?.checked ? " and their alts" : "") + (hours ? " for " + hours + " hours" : SANCTIONS.includes(action) ? " until lifted" : "") + "?"))) return;
 			$("#bsGo").disabled = true;
 			await act(async () => {
-				const { results, missing } = await api("bulkStrike", { handles, body: $("#bsBody").value, escalate: $("#bsEscalate").checked, include_alts: !!$("#bsAlts")?.checked });
+				const { results, missing } = await api("bulkStrike", { handles, action, hours, body: $("#bsBody").value, escalate: $("#bsEscalate").checked, include_alts: !!$("#bsAlts")?.checked });
 				const words = (r) => !r.ok ? (r.error ? "error: " : "skipped: ") + r.why
 					: r.outcome === undefined ? "strike sent (doesn't count toward suspension)"
+					: r.outcome === "warning_sent" ? "warning sent"
+					: r.outcome === "message_sent" ? "message sent"
+					: SANCTIONS.includes(r.outcome) ? r.outcome + (r.hours ? " for " + r.hours + " hours" : " until lifted")
 					: r.outcome === "staff" ? "staff account: message sent, no sanction"
-					: r.outcome === "warning" ? "strike " + r.strikes + ": warning"
 					: r.outcome === "second_chance" ? "strike " + r.strikes + ": second chance, not suspended"
+					: r.outcome === "warning" ? "strike " + r.strikes + ": warning"
 					: r.outcome === "permanent" ? "strike " + r.strikes + ": suspended for good"
 					: "strike " + r.strikes + ": suspended for " + r.hours + " hours";
 				$("#bsOut").innerHTML = '<div class="list" style="margin-top:14px">' +
