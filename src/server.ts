@@ -561,7 +561,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	// the built-in "All" list (lists.ts)
 	if (p === "/all") return Response.redirect("/i/lists/1", 302);
 	if ((p === "/login" && !loadBuild()?.build.stateBase) || p === "/signup" || p.startsWith("/i/flow/")) {
-		const headers = new Headers({ location: "/" });
+		const headers = new Headers({ location: "/?signin=1" });
 		const code = url.searchParams.get("code");
 		if (code) headers.append("set-cookie", `xitter_invite=${encodeURIComponent(code)}; Path=/; Max-Age=86400; SameSite=Lax; HttpOnly`);
 		return new Response(null, { status: 302, headers });
@@ -693,6 +693,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (!viewer && p !== "/" && !p.startsWith("/i/jf/onboarding") && !oldLogin && !guestReading) return Response.redirect("/", 302);
 	// maintenance: guests see the notice; ?staff=1 is the sign-in page, for staff
 	if (!viewer && p === "/" && settings().operations.maintenance && !url.searchParams.has("staff")) return maintenancePage(true);
+	if (!viewer && p === "/" && !url.search && settings().operations.guest_reading && !loadBuild()?.build.stateBase && req.headers.get("sec-fetch-mode") === "navigate") return Response.redirect("/home", 302);
 	const [communityRows, flagRows, links] = viewer
 		? await Promise.all([
 			sql`select 1 from community_members where user_id = ${viewer.id}::bigint limit 1`,

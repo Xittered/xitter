@@ -46,7 +46,7 @@ check("signed out, / is the client's home page, signed out", root.status === 200
 const home = await fetch(`${origin}/home`, { redirect: "manual" });
 check("other pages send you there", home.status === 302 && home.headers.get("location") === "/");
 const oldLogin = await fetch(`${origin}/login`, { redirect: "manual" });
-check("so does the old /login", oldLogin.status === 302 && oldLogin.headers.get("location") === "/");
+check("so does the old /login", oldLogin.status === 302 && oldLogin.headers.get("location") === "/?signin=1");
 
 // sign-in
 let s = await step("begin_login", { username_or_email: "pozo" });
@@ -122,7 +122,7 @@ check("a used-up code is refused", /used up/.test(s.errors.code ?? ""), s.errors
 const linked = await createInvite();
 const link = await fetch(`${origin}/signup?code=${linked}`, { redirect: "manual" });
 const inviteCookie = link.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c.startsWith("xitter_invite=")) ?? "";
-check("an invite link leads to the home page and keeps the code", link.status === 302 && link.headers.get("location") === "/" && !!inviteCookie);
+check("an invite link leads to the home page and keeps the code", link.status === 302 && link.headers.get("location") === "/?signin=1" && !!inviteCookie);
 s = await step("begin_login", { username_or_email: `${name}c` }, inviteCookie);
 check("then a new username goes straight to account setup", shows(s, "Set up your account"));
 check("which says signing up agrees to the terms and privacy policy", shows(s, "By signing up, you agree to our ") && shows(s, "Terms of Service") && shows(s, "Privacy Policy"));

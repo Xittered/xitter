@@ -370,7 +370,7 @@ export const TIDY_SCRIPT = `(function(){
 	// X's old sign-up flow talks to its servers; ours is in the dialog on the signed-out home page
 	function ownScreens(){
 		var p=location.pathname;
-		if(p.indexOf("/i/flow/signup")===0)location.replace("/");
+		if(p.indexOf("/i/flow/signup")===0)location.replace("/?signin=1");
 		// Settings > Email's "Update email address": our page, not X's flow
 		if(p.indexOf("/i/flow/add_email")===0)go(OWN+"email",true);
 		// Settings > Automation's "Set up account automation" (automation.ts)
