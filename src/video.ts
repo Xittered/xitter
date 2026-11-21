@@ -23,6 +23,7 @@ const PROBE_MS = 60_000;
 // to guess, ffmpeg took a text "ffconcat" playlist naming other media files and
 // copied them into the uploader's video.
 const INPUT = ["-protocol_whitelist", "file", "-format_whitelist", "mov,mp4,m4a,3gp,matroska,webm,avi,mpegts"];
+const GIF_INPUT = ["-protocol_whitelist", "file", "-f", "gif"];
 const STEP_MS = 120_000;
 
 // progress of running jobs, in percent
@@ -167,8 +168,8 @@ export function cropGif(dir: string, id: string, gif: Buffer, box: { x: number; 
 		const crop = `crop=${box.w}:${box.h}:${box.x}:${box.y}`;
 		try {
 			writeFileSync(src, gif);
-			if (!(await run(["-i", src, "-vf", `${crop},palettegen=reserve_transparent=1`, palette], id, 0))) return undefined;
-			return (await run(["-i", src, "-i", palette, "-lavfi", `[0:v]${crop}[c];[c][1:v]paletteuse`, "-f", "gif", out], id, 0)) ? readFileSync(out) : undefined;
+			if (!(await run([...GIF_INPUT, "-i", src, "-vf", `${crop},palettegen=reserve_transparent=1`, palette], id, 0))) return undefined;
+			return (await run([...GIF_INPUT, "-i", src, "-protocol_whitelist", "file", "-f", "png_pipe", "-i", palette, "-lavfi", `[0:v]${crop}[c];[c][1:v]paletteuse`, "-f", "gif", out], id, 0)) ? readFileSync(out) : undefined;
 		} finally {
 			rmSync(src, { force: true });
 			rmSync(palette, { force: true });

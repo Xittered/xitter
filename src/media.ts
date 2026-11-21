@@ -287,7 +287,7 @@ export function acceptThemePhoto(data: Buffer): ThemePhotoResult {
 async function writeThemePoster(id: string): Promise<boolean> {
 	const dest = posterFile(MEDIA_DIR, id);
 	try {
-		const proc = Bun.spawn(["ffmpeg", "-y", "-i", fileOf(id), "-frames:v", "1", "-q:v", "3", dest], { stdout: "ignore", stderr: "ignore" });
+		const proc = Bun.spawn([FFMPEG, "-y", "-protocol_whitelist", "file", "-f", "gif", "-i", fileOf(id), "-frames:v", "1", "-q:v", "3", dest], { stdout: "ignore", stderr: "ignore" });
 		const timer = setTimeout(() => proc.kill(), 8000);
 		const code = await proc.exited;
 		clearTimeout(timer);
@@ -750,6 +750,7 @@ const AVATAR_SIZES: Record<string, number> = { mini: 24, normal: 48, bigger: 73,
 const AVATAR_STEPS = [24, 48, 73, 96, 128, 200, 400];
 const AVATAR_DIR = () => join(MEDIA_DIR, ".avatars");
 const RESIZABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PIPE_FORMAT: Record<string, string> = { "image/jpeg": "jpeg_pipe", "image/png": "png_pipe", "image/webp": "webp_pipe" };
 const resizing = new Map<string, Promise<Blob | undefined>>();
 
 function avatarWidth(suffix: string | undefined): number | undefined {
@@ -772,7 +773,7 @@ async function resizedAvatar(served: Served, body: Blob, width: number): Promise
 		mkdirSync(AVATAR_DIR(), { recursive: true });
 		const input = await body.bytes();
 		const tmp = `${out}.${process.pid}.tmp`;
-		const p = spawnLimited([FFMPEG, "-v", "error", "-i", "pipe:0", "-vf", `scale='min(${width * 2},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "2"]), "-y", tmp], 20_000, "ignore", input);
+		const p = spawnLimited([FFMPEG, "-v", "error", "-protocol_whitelist", "pipe,file", "-f", PIPE_FORMAT[served.mime] ?? "png_pipe", "-i", "pipe:0", "-vf", `scale='min(${width * 2},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "2"]), "-y", tmp], 20_000, "ignore", input);
 		if ((await p.exited) !== 0 || !existsSync(tmp)) {
 			rmSync(tmp, { force: true });
 			return undefined;
