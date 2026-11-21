@@ -60,6 +60,7 @@ export function hideCss(): string {
 	const off = (Object.keys(BY_FEATURE) as Feature[]).filter((f) => !feature(f)).flatMap((f) => BY_FEATURE[f]);
 	return `${[...ALWAYS, ...off].join(",")}{display:none!important}
 html[data-xitter-full] [data-testid="primaryColumn"] > :not(#xitter-pane){display:none!important}
+[data-testid="sidebarColumn"] section div:has(> button[aria-label$=" Topic"]){border-radius:11px}
 #xitter-announcement{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;background:var(--xt-accent-fill,var(--xt-accent,#1d9bf0));color:#fff;font:15px TwitterChirp,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 #xitter-announcement .xa-body{flex:1;min-width:0;display:grid;gap:10px}
 #xitter-announcement .xa-text{white-space:pre-wrap;overflow-wrap:break-word}
