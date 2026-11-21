@@ -31,6 +31,7 @@ type Ranked = Row[];
 // a while instead of ranking every candidate again for each page.
 const RANKING_TTL = 10 * 60_000;
 const MAX_RANKINGS = 200;
+const MAX_PER_VIEWER = 3;
 const rankings = new Map<string, { rows: Promise<Ranked>; until: number }>();
 
 function ranking(viewerId: string, asOf: string): Promise<Ranked> {
@@ -39,6 +40,8 @@ function ranking(viewerId: string, asOf: string): Promise<Ranked> {
 	const hit = rankings.get(key);
 	if (hit && hit.until > now) return hit.rows;
 	for (const [k, r] of rankings) if (r.until <= now) rankings.delete(k);
+	const own = [...rankings.keys()].filter((k) => k.startsWith(`${viewerId}:`));
+	for (const k of own.slice(0, Math.max(0, own.length - (MAX_PER_VIEWER - 1)))) rankings.delete(k);
 	while (rankings.size >= MAX_RANKINGS) rankings.delete(rankings.keys().next().value!);
 	const rows = rank(viewerId, asOf);
 	rankings.set(key, { rows, until: now + RANKING_TTL });

@@ -34,7 +34,7 @@ import type { User, Viewer } from "./auth";
 import { revealSuspended, seesSuspended } from "./staff-access";
 import { notificationsTimeline, unreadCount } from "./notifications";
 import { cachedTrends, searchPosts, searchUsers } from "./search";
-import { isId, newId } from "./ids";
+import { idTime, isId, newId } from "./ids";
 import { attachMedia } from "./media";
 import { type ThreadItem, cursorEntry, feedEntry, gridAppend, gridEntry, pinnedEntry, promotedEntry, showMoreThreadsEntry, threadEntry, threadItems, tombstoneEntry, tweetEntry, tweetResult, userEntry, userResult } from "./model";
 import { MORE_PER_PAGE, type Placed, THREADS_PER_PAGE, conversationThreads } from "./threads";
@@ -179,8 +179,10 @@ async function globalPin(viewer: Viewer, entries: unknown[], first: boolean) {
 // newer posts gets what arrived since, newest first, above the ranked entries.
 const forYou: Handler = async (viewer, vars) => {
 	const cursor = typeof vars.cursor === "string" ? vars.cursor : "";
-	const ranked = /^r(\d+)\.(\d{1,19})(?:\.(\d{1,10}))?$/.exec(cursor);
-	if (cursor && !ranked) return home(false)(viewer, vars);
+	const parsed = /^r(\d{1,5})\.(\d{1,19})(?:\.(\d{1,10}))?$/.exec(cursor);
+	if (cursor && !parsed) return home(false)(viewer, vars);
+	const age = parsed && isId(parsed[2]) ? Date.now() - idTime(parsed[2]).getTime() : Number.NaN;
+	const ranked = age > -60_000 && age < 24 * 3600_000 ? parsed : null;
 	const count = Math.min(Math.max(Number(vars.count) || 20, 1), 100);
 	const asOf = ranked ? ranked[2] : await freshAsOf(viewer.id);
 	const offset = ranked ? Number(ranked[1]) : 0;
@@ -794,13 +796,13 @@ const handlers: Record<string, Handler> = {
 	UsersByRestIds: async (v, vars) => {
 		const ids: unknown[] = Array.isArray(vars.userIds) ? vars.userIds.slice(0, 100) : [];
 		const users = await Promise.all(ids.filter(isId).map((id) => userById(v.id, id)));
-		return { data: { users: users.filter((u) => u !== undefined).map((u) => ({ result: userResult(u) })) } };
+		return { data: { users: users.filter((u) => u !== undefined).map((u) => ({ result: u.status === "suspended" ? suspendedUser(v, u) : userResult(u) })) } };
 	},
 	// the account menu's badges and avatars for the other signed-in accounts
 	UsersVerifiedAvatars: async (v, vars) => {
 		const ids: unknown[] = Array.isArray(vars.userIds) ? vars.userIds.slice(0, 10) : [];
 		const users = await Promise.all(ids.filter(isId).map((id) => userById(v.id, id)));
-		return { data: { usersResults: users.filter((u) => u !== undefined).map((u) => ({ result: userResult(u) })) } };
+		return { data: { usersResults: users.filter((u) => u !== undefined).map((u) => ({ result: u.status === "suspended" ? suspendedUser(v, u) : userResult(u) })) } };
 	},
 	UserTweets: profileFeed(false, "both"),
 	UserRepostsTimeline: profileFeed(false, "reposts"),
@@ -904,7 +906,7 @@ const handlers: Record<string, Handler> = {
 	// account as null, and the About card then said it doesn't exist.
 	ProfileSpotlightsQuery: async (v, vars) => {
 		const user = typeof vars.screen_name === "string" ? await userByName(v.id, vars.screen_name) : undefined;
-		if (!user) return { data: { user_result_by_screen_name: null } };
+		if (!user || (user.status === "suspended" && !seesSuspended(v))) return { data: { user_result_by_screen_name: null } };
 		return { data: { user_result_by_screen_name: { id: globalId("UserResults", user.id), result: { ...userResult(user), profilemodules: { v1: [] } } } } };
 	},
 	UserSportsProfile: () => ({ data: {} }),
