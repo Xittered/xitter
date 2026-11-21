@@ -424,7 +424,15 @@ export const toolActions: Record<string, Action> = {
 		run: async (a, b) => {
 			const id = idOf(b.id);
 			await guard(a, id);
-			return { sessions: await sql`select id::text, created_at, last_seen_at, user_agent, ${allows(a.role, "ip_addresses") ? sql`ip` : sql`null as ip`}, token = ${a.token} as current from sessions where user_id = ${id}::bigint order by last_seen_at desc` };
+			const [target] = await sql`select role from users where id = ${id}::bigint`;
+			const staff = !!target?.role && id !== a.id;
+			const may = allows(a.role, "ip_addresses");
+			const show = may && (!staff || b.reveal === true);
+			if (show && staff) await audit(a, "reveal_staff_ips", id);
+			return {
+				sessions: await sql`select id::text, created_at, last_seen_at, user_agent, ${show ? sql`ip` : sql`null as ip`}, token = ${a.token} as current from sessions where user_id = ${id}::bigint order by last_seen_at desc`,
+				ips_hidden: may && !show,
+			};
 		},
 	},
 	revokeSession: {
@@ -698,14 +706,19 @@ export const toolActions: Record<string, Action> = {
 	// Admin > Security: who reaches the panel (staff-access.ts), and staff sessions
 	security: {
 		role: "admin",
-		run: async (a, b, req) => ({
+		run: async (a, b, req) => {
+			if (b.reveal === true) await audit(a, "reveal_staff_ips", null);
+			return {
 			security: settings().security,
 			your_ip: req ? clientIp(req) : null,
 			without_2fa: await sql`select id::text, screen_name, role from users where role is not null and not totp_enabled order by screen_name`,
-			sessions: await sql`select s.id::text, s.created_at, s.last_seen_at, s.user_agent, s.ip, s.token = ${a.token} as current,
+			ips_hidden: b.reveal !== true,
+			sessions: await sql`select s.id::text, s.created_at, s.last_seen_at, s.user_agent,
+				${b.reveal === true ? sql`s.ip` : sql`case when s.user_id = ${a.id}::bigint then s.ip end as ip`}, s.token = ${a.token} as current,
 				u.id::text as user_id, u.screen_name, u.role
 				from sessions s join users u on u.id = s.user_id where u.role is not null order by s.last_seen_at desc limit 200`,
-		}),
+			};
+		},
 	},
 	saveSecurity: {
 		role: "admin",

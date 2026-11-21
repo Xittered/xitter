@@ -388,6 +388,7 @@ const annRow = (b, dis) => '<div class="row ann-row"><input data-label maxlength
 const $ = (sel, root = document) => root.querySelector(sel);
 const RANK = { support: 1, moderator: 2, admin: 3 };
 let me = null;
+let revealIps = null;
 let flags = [];
 // a role ("moderator") or an action ("deletePost"): what an admin let this role do (Staff permissions)
 const can = (what) => !!me && (what in RANK ? RANK[me.role] >= RANK[what] : me.allowed.includes(what));
@@ -771,7 +772,8 @@ const RENDER = {
 	},
 
 	async security(main) {
-		const s = await api("security");
+		const s = await api("security", { reveal: revealIps === "security" });
+		revealIps = null;
 		const mine = (x) => x.user_id === me.id;
 		const canEnd = (x) => !x.current && (mine(x) || RANK[x.role] < RANK[me.role]);
 		main.innerHTML = "<h1>Security</h1>" + '<div class="box security-settings"><div class="grid2 security-grid">' +
@@ -785,7 +787,9 @@ const RENDER = {
 				'<article class="security-session-card"><div class="security-session-heading"><div><a href="#user/' + esc(x.user_id) + '">@' + esc(x.screen_name) + '</a> <span class="pill staff">' + esc(x.role) + '</span>' + (x.current ? ' <span class="pill staff">you, now</span>' : "") + '</div><span class="security-session-browser">' + esc(browser(x.user_agent)) + '</span></div>' +
 				'<div class="security-session-meta"><div><span>Address</span><b class="code">' + esc(x.ip ?? "—") + '</b></div><div><span>Signed in</span><b>' + esc(when(x.created_at)) + '</b></div><div><span>Last active</span><b>' + esc(when(x.last_seen_at)) + '</b></div></div>' +
 				(canEnd(x) ? '<div class="security-session-actions"><button class="btn" data-session="' + esc(x.id) + '">Sign out</button></div>' : "") + "</article>").join("") + "</div>"
-				: '<div class="empty">No staff sessions.</div>') + "</div>";
+				: '<div class="empty">No staff sessions.</div>') +
+			(s.ips_hidden ? '<p class="dim small" style="margin-top:12px">Other staff\'s IP addresses are hidden. <button class="btn" id="revealIps">Show IP addresses</button></p>' : "") + "</div>";
+		if ($("#revealIps")) $("#revealIps").onclick = () => { revealIps = "security"; route(); };
 		$("#ssave").onclick = () => act(() => api("saveSecurity", { staff_2fa: $("#s2fa").checked, admin_ips: $("#sips").value.split("\n") }), "Saved").then(route);
 		main.querySelectorAll("[data-session]").forEach((b) => b.onclick = () => act(() => api("revokeSession", { sessionId: b.dataset.session }), "Signed out").then(route));
 	},
@@ -1959,7 +1963,8 @@ const RENDER = {
 			'<label class="row" style="margin:6px 0"><input type="checkbox" id="mentionsOn"' + (s.mention_limits.enabled ? " checked" : "") + dis + "> Limit mentions</label>" +
 			'<div class="field"><label>Accounts per post</label><input type="number" min="1" max="50" id="mentionsPost" value="' + esc(s.mention_limits.per_post) + '"' + dis + "></div>" +
 			'<div class="field"><label>Mentions a day</label><input type="number" min="1" id="mentionsDay" value="' + esc(s.mention_limits.per_day) + '"' + dis + "></div>" +
-			(admin ? '<button class="btn primary" id="saveMentions">Save mention limits</button>' : "") + "</div></div><div class=\"settings-column\">" +
+			(admin ? '<button class="btn primary" id="saveMentions">Save mention limits</button>' : "") +
+			"</div></div><div class=\"settings-column\">" +
 			'<div class="box"><h2>Post length</h2><p class="dim small">The longest post each badge may write, counted like X counts (links 23, Chinese, Japanese, Korean and emoji 2). Past 280 a post shows a preview with "Show more". Changes reach the composer on its next page load.</p>' +
 			[["none", "No badge"], ["blue", "Blue check"], ["business", "Gold check (organisations)"], ["government", "Grey check (government organisations and officials)"]]
 				.map(([k, l]) => '<div class="field"><label>' + l + '</label><input type="number" min="1" data-postlen="' + k + '" value="' + esc(s.post_limits[k]) + '"' + dis + "></div>").join("") +
@@ -2333,10 +2338,11 @@ async function renderUser(main, id) {
 		api("staffNotes", { id }),
 		api("staffMessages", { id }),
 		// staff at the viewer's level or above keep their sessions to themselves
-		api("userSessions", { id }).then((r) => r.sessions, () => null),
+		api("userSessions", { id, reveal: revealIps === id }).then((r) => (r.sessions.hidden = r.ips_hidden, r.sessions), () => null),
 		api("handleHistory", { id }).then((r) => r.changes, () => []),
 	]);
 	const badgeOptions = (selected, none) => '<option value="">' + none + "</option>" + badges.map((b) => '<option value="' + esc(b.id) + '"' + (selected === b.id ? " selected" : "") + ">" + esc(b.name) + "</option>").join("");
+	revealIps = null;
 	const self = me && me.id === u.id;
 	const canHere = (what) => !u.instance && can(what);
 	main.innerHTML =
@@ -2418,7 +2424,8 @@ async function renderUser(main, id) {
 			: sessions.length ? '<div class="list">' + sessions.slice(0, 10).map((s) => "<p>" + esc(browser(s.user_agent)) + (s.current ? ' <span class="pill staff">you, now</span>' : "") +
 				'<br><span class="dim small">' + (s.ip ? esc(s.ip) + " · " : "") + "signed in " + esc(when(s.created_at)) + " · last active " + esc(when(s.last_seen_at)) + "</span>" +
 				(s.current || !can("revokeSession") ? "" : ' <button class="btn" data-session="' + esc(s.id) + '">Sign out</button>') + "</p>").join("") +
-				(sessions.length > 10 ? '<p class="dim small">and ' + (sessions.length - 10) + ' older (Access → Sign out everywhere ends them all)</p>' : "") + "</div>"
+				(sessions.length > 10 ? '<p class="dim small">and ' + (sessions.length - 10) + ' older (Access → Sign out everywhere ends them all)</p>' : "") + "</div>" +
+				(sessions.hidden ? '<p class="dim small">IP addresses of staff are hidden. <button class="btn" id="revealIps">Show IP addresses</button></p>' : "")
 			: '<p class="dim small">Not signed in anywhere.</p>') + "</div>" +
 		"</div><div class=\"user-related-grid\">" +
 		'<section class="box user-affiliates"><h2>Affiliates</h2>' + (canHere("addAffiliate") ? '<div class="bar"><input id="aff" placeholder="@handle to add"><button class="btn primary" id="addaff">Add affiliate</button></div>' : "") +
@@ -2506,6 +2513,7 @@ async function renderUser(main, id) {
 		if (!(await ask("Take off @" + u.screen_name + "'s profile decor?"))) return;
 		act(() => api("resetDecor", { id }), "Decor reset").then(again);
 	};
+	if ($("#revealIps")) $("#revealIps").onclick = () => { revealIps = id; again(); };
 	if ($("#shadow")) $("#shadow").onclick = async () => {
 		if (!u.shadow_banned && !(await ask("Shadow ban @" + u.screen_name + "?"))) return;
 		act(() => api("setShadowBan", { id, on: !u.shadow_banned, reason: $("#reason").value }), u.shadow_banned ? "Shadow ban lifted" : "Shadow banned").then(again);
