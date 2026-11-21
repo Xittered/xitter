@@ -75,7 +75,7 @@ function camelKeys(v: unknown): unknown {
 function clientContent(stored: any) {
 	if (!stored || !Array.isArray(stored.blocks)) return { blocks: [], entityMap: [] };
 	return {
-		blocks: stored.blocks.map((b: any) => ({
+		blocks: stored.blocks.filter((b: any) => b && typeof b === "object").map((b: any) => ({
 			key: b.key,
 			text: b.text ?? "",
 			type: b.type ?? "unstyled",
@@ -83,7 +83,7 @@ function clientContent(stored: any) {
 			entityRanges: b.entity_ranges ?? b.entityRanges ?? [],
 			inlineStyleRanges: b.inline_style_ranges ?? b.inlineStyleRanges ?? [],
 		})),
-		entityMap: (stored.entity_map ?? stored.entityMap ?? []).map((e: any) => ({
+		entityMap: [stored.entity_map ?? stored.entityMap ?? []].flat().filter((e: any) => e && typeof e === "object").map((e: any) => ({
 			key: String(e.key),
 			value: { type: e.value?.type, mutability: e.value?.mutability ?? "Immutable", data: camelKeys(e.value?.data ?? {}) },
 		})),
@@ -93,6 +93,9 @@ function clientContent(stored: any) {
 function checkContent(content: unknown) {
 	if (content === undefined || content === null) return;
 	if (typeof content !== "object" || !Array.isArray((content as any).blocks)) throw new ArticleError("The article body is not a document.");
+	const plain = (x: unknown) => !!x && typeof x === "object" && !Array.isArray(x);
+	const entities = (content as any).entity_map ?? (content as any).entityMap ?? [];
+	if (!(content as any).blocks.every(plain) || !Array.isArray(entities) || !entities.every(plain)) throw new ArticleError("The article body is not a document.");
 	if (JSON.stringify(content).length > MAX_CONTENT_BYTES) throw new ArticleError("The article is too long.");
 }
 
@@ -206,15 +209,27 @@ export async function createDraft(viewerId: string, title: unknown, content: unk
 	return result(viewerId, id);
 }
 
+async function refuseText(viewerId: string, title: string, text: string) {
+	if (hasBlockedPhrase(text)) throw new ArticleError("The article contains a phrase this instance doesn't allow.");
+	const hate = hateIn(title, text);
+	if (hate) {
+		await automodStrike(viewerId, hate, "article", `${title}\n${text}`);
+		throw new ArticleError("The article contains a slur or hate speech this instance doesn't allow.");
+	}
+}
+
 export async function updateTitle(viewerId: string, id: string, title: unknown) {
-	await own(viewerId, id);
-	await sql`update articles set title = ${checkTitle(title)}, modified_at = now() where id = ${id}::bigint`;
+	const row = await own(viewerId, id);
+	const next = checkTitle(title);
+	if (row.state === "Published") await refuseText(viewerId, next, row.plain_text ?? "");
+	await sql`update articles set title = ${next}, modified_at = now() where id = ${id}::bigint`;
 	return result(viewerId, id);
 }
 
 export async function updateContent(viewerId: string, id: string, content: unknown) {
-	await own(viewerId, id);
+	const row = await own(viewerId, id);
 	checkContent(content);
+	if (row.state === "Published") await refuseText(viewerId, row.title ?? "", plainText(content));
 	await sql`update articles set content_state = ${content ? JSON.stringify(content) : null}::text::jsonb, plain_text = ${plainText(content)}, modified_at = now()
 		where id = ${id}::bigint`;
 	return result(viewerId, id);
@@ -237,12 +252,7 @@ export async function publish(viewerId: string, id: string, tweetText: unknown, 
 	if (!row.title) throw new ArticleError("Give the article a title before publishing.");
 	if (!row.plain_text.trim()) throw new ArticleError("The article is empty.");
 	if (row.hidden) throw new ArticleError("Staff have hidden this article.");
-	if (hasBlockedPhrase(row.plain_text)) throw new ArticleError("The article contains a phrase this instance doesn't allow.");
-	const hate = hateIn(row.title, row.plain_text);
-	if (hate) {
-		await automodStrike(viewerId, hate, "article", `${row.title}\n${row.plain_text}`);
-		throw new ArticleError("The article contains a slur or hate speech this instance doesn't allow.");
-	}
+	await refuseText(viewerId, row.title, row.plain_text);
 	if (row.state !== "Published") {
 		await createPost(typeof tweetText === "string" ? tweetText : "", id);
 		await sql`update articles set state = 'Published', first_published_at = coalesce(first_published_at, now()) where id = ${id}::bigint`;
