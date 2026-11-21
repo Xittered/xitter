@@ -8,6 +8,7 @@ import { conversationCard } from "./conversation-cards";
 import { checkConversationCard } from "./conversation-card-moderation";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
+import { queueReview } from "./claude-mod";
 import { isId, newId } from "./ids";
 import { MediaError, attachMedia, mediaUrl, posterUrl, type MediaRow } from "./media";
 import { fetchPreview, linksIn, previewable } from "./links";
@@ -291,6 +292,7 @@ export async function runDue(lookupMention: (handle: string) => Promise<unknown>
 				// Recheck mutable account/upload state on this transaction. The exact
 				// request snapshot (and trimmed text) already passed static moderation.
 				await check(row.user_id, request, "scheduled", tx, false);
+				const posted: string[] = [];
 				await tx.savepoint(async (publication) => {
 					let replyTo = request.in_reply_to_status_id;
 					for (const part of parts(request)) {
@@ -299,10 +301,11 @@ export async function runDue(lookupMention: (handle: string) => Promise<unknown>
 						if (part.xitter_conversation_card) await publication`update posts set conversation_card = ${JSON.stringify(part.xitter_conversation_card)}::text::jsonb where id = ${id}::bigint`;
 						if (part.possibly_sensitive) await publication`update posts set sensitive = true where id = ${id}::bigint`;
 						replyTo = id;
+						posted.push(id);
 					}
 					await publication`delete from scheduled_posts where id = ${row.id}::bigint`;
 				});
-				return { previews: parts(request).filter((part) => !quoteOf(part) && !part.media_ids.length)
+				return { posted, previews: parts(request).filter((part) => !quoteOf(part) && !part.media_ids.length)
 					.map((part) => linksIn(part.status).filter((link) => previewable(link.url)).at(-1)?.url).filter((url): url is string => !!url) };
 			} catch (e) {
 				const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000);
@@ -315,12 +318,13 @@ export async function runDue(lookupMention: (handle: string) => Promise<unknown>
 					await tx`update scheduled_posts set execute_at = now() + ${`${2 ** row.attempts} minutes`}::interval,
 						attempts = attempts + 1, last_error = ${message} where id = ${row.id}::bigint`;
 				}
-				return { previews: [] as string[] };
+				return { posted: [] as string[], previews: [] as string[] };
 			}
 		});
 		if (!result) continue;
 		handled++;
 		// Preview network I/O starts only after publication commits.
+		for (const id of result.posted) queueReview("post", id);
 		for (const url of new Set(result.previews)) void fetchPreview(url).catch((e) => console.error("scheduled preview:", e));
 	}
 	return handled;

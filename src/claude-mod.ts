@@ -133,7 +133,7 @@ async function judge(kind: Job["kind"], content: string): Promise<Verdict | "ref
 			max_tokens: 2048,
 			system: systemPrompt(kind),
 			output_config: { effort: "low", format: zodOutputFormat(Verdict) },
-			messages: [{ role: "user", content: `${feedback ? `${feedback}\n\n` : ""}<item>\n${content.slice(0, 8000)}\n</item>` }],
+			messages: [{ role: "user", content: `${feedback ? `${feedback}\n\n` : ""}<item>\n${content.slice(0, 8000).replace(/<\/?\s*(item|staff_feedback)\b[^>]*>/gi, "")}\n</item>` }],
 		});
 		// a model that won't judge the item leaves it for a person
 		if (response.stop_reason === "refusal") return "refused";
@@ -230,7 +230,7 @@ async function triageReport(id: string) {
 		from reports r left join posts p on p.id = r.post_id left join users u on u.id = r.user_id where r.id = ${id}::bigint`;
 	if (!r || r.status !== "open" || r.reason?.startsWith("automod_")) return;
 	const what = r.post_id ? `Reported post by @${r.screen_name}: ${r.post_text ?? "(deleted)"}` : `Reported account @${r.screen_name}\nName: ${r.name ?? ""}\nBio: ${r.bio ?? ""}`;
-	const v = await judge("report", `Reporter's reason: ${r.reason}${r.details ? `\nReporter's words: ${String(r.details).slice(0, 1000)}` : ""}\n\n${what}`);
+	const v = await judge("report", `Reporter's reason: ${r.reason}\n\n${what}`);
 	if (!v) return;
 	if (v === "refused") {
 		await sql`update reports set note = ${"Claude declined to judge this one."} where id = ${id}::bigint and status = 'open'`;
@@ -241,12 +241,6 @@ async function triageReport(id: string) {
 		await sql`update posts set hidden = true where id = ${r.post_id}::bigint`;
 		await sql`update reports set status = 'actioned', handled_at = now(), note = ${`${note} The post was hidden.`} where id = ${id}::bigint and status = 'open'`;
 		await audit("claude_hide_post", r.post_id, { report: id, category: v.category, confidence: v.confidence, reason: v.reason });
-		return;
-	}
-	// only a confident "fine" closes a report without a person
-	if (v.verdict === "ok" && v.confidence >= 0.9) {
-		await sql`update reports set status = 'dismissed', handled_at = now(), note = ${note} where id = ${id}::bigint and status = 'open'`;
-		await audit("claude_dismiss_report", id, { confidence: v.confidence, reason: v.reason });
 		return;
 	}
 	await sql`update reports set note = ${note} where id = ${id}::bigint and status = 'open'`;

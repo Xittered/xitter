@@ -75,14 +75,14 @@ await settle();
 const [triaged] = await reportsFor(reported);
 check("a report of a clear violation is actioned", triaged?.status === "actioned" && (await hidden(reported)) === true, triaged);
 check("with Claude's note", String(triaged?.note).startsWith("Claude:"), triaged?.note);
-// a report of something fine is closed as dismissed
+// a report of something fine stays open for a person, with Claude's note
 const harmless = await post(b, `a perfectly harmless post ${Date.now()}`);
 made.push(harmless);
 await settle();
 await report(a, harmless, "spam");
 await settle();
 const [dismissed] = await reportsFor(harmless);
-check("a report of a fine post is dismissed", dismissed?.status === "dismissed" && (await hidden(harmless)) === false, dismissed);
+check("a report of a fine post stays open with a note", dismissed?.status === "open" && String(dismissed?.note).startsWith("Claude:") && (await hidden(harmless)) === false, dismissed);
 // a doubtful one stays open with a summary for staff
 const doubtful = await post(b, `CLAUDEMOD_BORDERLINE reported ${Date.now()}`);
 made.push(doubtful);

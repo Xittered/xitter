@@ -253,6 +253,7 @@ export async function editPost(userId: string, postId: string, input: string): P
 		values (${newId()}::bigint, ${postId}::bigint, ${post.edit_count}, ${post.text}, ${post.edited_at ?? post.created_at})`;
 	await sql`update posts set text = ${text}, edit_count = edit_count + 1, edited_at = now() where id = ${postId}::bigint`;
 	await saveMentions(postId, text, undefined, lookupRemoteUser);
+	queueReview("post", postId);
 }
 
 export async function getPost(viewerId: string, id: string): Promise<PostRow | undefined> {
