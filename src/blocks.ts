@@ -24,6 +24,8 @@ export const outOfView = (viewerId: string) =>
 		and id not in (select followee_id from follows where follower_id = ${viewerId}::bigint)
 		and not ${staffViewer(viewerId)}))`;
 
+export const shadowedFor = (viewerId: string) => sql`(select id from users where shadow_banned and id <> ${viewerId}::bigint)`;
+
 export const GUEST_ID = "0";
 export const hiddenFromGuests = (u = sql`users`) => sql`coalesce(${u}.preferences->>'hide_from_guests', '') = 'true'`;
 

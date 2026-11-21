@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { newId } from "./ids";
-import { blockedFor, outOfView } from "./blocks";
+import { blockedFor, outOfView, shadowedFor } from "./blocks";
 import { formatCents } from "./money";
 import { settings } from "./settings";
 
@@ -192,7 +192,7 @@ export async function pickAd(viewerId: string, onPage: string[]): Promise<{ adId
 		where a.status = 'running' and a.ends_at > now() and a.spent_milli < a.budget_cents * 1000
 			and au.status <> 'suspended' and au.deactivated_at is null
 			and not p.hidden and p.user_id <> ${viewerId}::bigint
-			and p.user_id not in ${blockedFor(viewerId)} and p.user_id not in ${outOfView(viewerId)}
+			and p.user_id not in ${blockedFor(viewerId)} and p.user_id not in ${outOfView(viewerId)} and p.user_id not in ${shadowedFor(viewerId)}
 			and not (a.post_id = any(${sql.array(onPage, "INT8")}))
 			and not exists (select 1 from users me where me.id = ${viewerId}::bigint and me.preferences->>'hide_ads' = 'true')
 			and coalesce((select v.shown from ad_views v where v.ad_id = a.id and v.viewer_id = ${viewerId}::bigint and v.day = (now() at time zone 'utc')::date), 0) < ${VIEWS_PER_DAY}

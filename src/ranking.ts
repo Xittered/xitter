@@ -131,6 +131,7 @@ export async function freshAsOf(viewerId: string): Promise<string> {
 }
 
 export const forgetRanking = (viewerId: string) => void latest.delete(viewerId);
+export const forgetAllRankings = () => latest.clear();
 
 // One page of the ranked feed. `asOf` (an item id) pins the ranking for the pages of one
 // scroll: posts newer than it wait for the next refresh, and ages are measured

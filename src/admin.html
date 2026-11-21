@@ -2386,7 +2386,9 @@ async function renderUser(main, id) {
 		[["active", "Reinstate", ""], ["restricted", "Restrict", "Can read, can't post"], ["limited", "Limit", "Only followers see their posts"], ["suspended", "Suspend", "Signed out, hidden everywhere"]]
 			.map(([s, l, t]) => '<button class="btn' + (s === "suspended" ? " danger" : "") + '" data-status="' + s + '" title="' + esc(t) + '"' + (u.status === s || !can("setStatus") || self ? " disabled" : "") + ">" + l + "</button>").join("") +
 		"</div>" + (alts?.length && can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="withAlts"> Also for the ' + alts.length + (alts.length === 1 ? " account" : " accounts") + ' seen from the same addresses: ' + alts.map((a) => "@" + esc(a.screen_name)).join(", ") + "</label>" : "") +
-		'<p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p></div>' +
+		'<p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p>' +
+		(can("setShadowBan") && !self ? '<div class="row" style="margin-top:8px"><button class="btn' + (u.shadow_banned ? "" : " danger") + '" id="shadow">' + (u.shadow_banned ? "Lift shadow ban" : "Shadow ban") + "</button>" + (u.shadow_banned ? '<span class="dim small">Shadow banned</span>' : "") + "</div>" +
+			'<p class="dim small">Shadow ban: their posts and reposts stay out of every timeline, For you, trends and topics, and they aren\'t suggested as a follow. Their profile, replies, search and notifications work as before. Nobody is told, them included.</p>' : "") + "</div>" +
 		// access
 		'<div class="box user-card-access"><h2>Access</h2><div class="row">' + (canHere("resetPassword") ? '<button class="btn" id="reset">Reset password</button>' : "") + (canHere("signOut") ? '<button class="btn" id="signout">Sign out everywhere</button>' : "") +
 			(canHere("revokeApiTokens") ? '<button class="btn danger" id="revoketokens"' + (u.api_tokens ? "" : " disabled") + ">Revoke API tokens (" + u.api_tokens + ")</button>" : "") + '</div><div id="secret"></div>' +
@@ -2497,6 +2499,10 @@ async function renderUser(main, id) {
 	if ($("#resetDecor")) $("#resetDecor").onclick = async () => {
 		if (!(await ask("Take off @" + u.screen_name + "'s profile decor?"))) return;
 		act(() => api("resetDecor", { id }), "Decor reset").then(again);
+	};
+	if ($("#shadow")) $("#shadow").onclick = async () => {
+		if (!u.shadow_banned && !(await ask("Shadow ban @" + u.screen_name + "?"))) return;
+		act(() => api("setShadowBan", { id, on: !u.shadow_banned, reason: $("#reason").value }), u.shadow_banned ? "Shadow ban lifted" : "Shadow banned").then(again);
 	};
 	main.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
 		const others = $("#withAlts")?.checked ? alts.filter((a) => a.status !== b.dataset.status) : [];

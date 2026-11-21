@@ -214,7 +214,7 @@ export async function suggestedUsers(viewerId: string, limit = 20, exclude: stri
 		where u.id <> ${viewerId}::bigint and u.status = 'active'
 			and u.id not in (select followee_id from follows where follower_id = ${viewerId}::bigint)
 			and u.id not in ${blockedFor(viewerId)} and u.id not in ${mutedFor(viewerId)} and u.id not in ${outOfView(viewerId)}
-			and u.id not in ${federatedHiddenFor(viewerId)}
+			and not u.shadow_banned and u.id not in ${federatedHiddenFor(viewerId)}
 			${exclude.length ? sql`and u.id <> all(${sql.array(exclude, "INT8")})` : sql``}
 			${similarTo ? sql`and u.id <> ${similarTo}::bigint` : sql``}
 		order by exists (select 1 from contacts c where c.user_id = ${viewerId}::bigint and lower(u.email) = any(c.emails)

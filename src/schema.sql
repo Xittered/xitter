@@ -182,6 +182,7 @@ create unique index if not exists moderation_appeals_open_user_idx on moderation
 
 alter table posts add column if not exists source text not null default 'Xitter for Web';
 alter table users add column if not exists notes_writer boolean not null default false;
+alter table users add column if not exists shadow_banned boolean not null default false;
 alter table users add column if not exists notes_alias text not null default ('Contributor-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
 create unique index if not exists users_notes_alias_key on users(notes_alias);
 create table if not exists client_platforms (

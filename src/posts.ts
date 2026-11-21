@@ -10,7 +10,7 @@ import { feature, hasBlockedPhrase, settings } from "./settings";
 import { postLimitFor, weightedLength } from "./textlen";
 import type { PostRow } from "./model";
 import { articlesByIds } from "./articles";
-import { blockedFor, federatedHiddenFor, hasMutedWord, isBlockedEitherWay, mutedFor, outOfView, protectedFor, replyLimited, suspendedFor } from "./blocks";
+import { blockedFor, federatedHiddenFor, hasMutedWord, isBlockedEitherWay, mutedFor, outOfView, protectedFor, replyLimited, shadowedFor, suspendedFor } from "./blocks";
 import { staffViewer } from "./staff-access";
 import { fetchPreview, linkCard, linksIn, previewable, previewsFor, statusLinkOf } from "./links";
 import { paymentCards, rewardLike } from "./money";
@@ -299,6 +299,8 @@ export type FeedQuery = {
 const originalAuthor = () => sql`(select x.user_id from posts x where x.id = f.post_id)`;
 export const homeHidden = (viewerId: string) => sql`f.author_id not in ${blockedFor(viewerId)} and ${originalAuthor()} not in ${blockedFor(viewerId)}
 	and f.author_id not in ${outOfView(viewerId)} and ${originalAuthor()} not in ${outOfView(viewerId)}
+	and f.author_id not in ${shadowedFor(viewerId)} and ${originalAuthor()} not in ${shadowedFor(viewerId)}
+	and (f.reposter_id is null or f.reposter_id not in ${shadowedFor(viewerId)})
 	and f.author_id not in ${protectedFor(viewerId)} and ${originalAuthor()} not in ${protectedFor(viewerId)}
 	and f.author_id not in ${mutedFor(viewerId)} and ${originalAuthor()} not in ${mutedFor(viewerId)}
 	and f.author_id not in ${federatedHiddenFor(viewerId)} and ${originalAuthor()} not in ${federatedHiddenFor(viewerId)}
