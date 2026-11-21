@@ -67,7 +67,7 @@ import {
 } from "./posts";
 import { lookupRemoteUser } from "./federation-sync";
 import { TopicError, setTopicState, suggestedTopics, topicById, topicContext, topicFeedbackActions, topicFeedbackKeys, topicResult, topicsForPosts } from "./topics";
-import { affiliatesOf, followList, localName, suggestedUsers, userById, userByName, usersByIds } from "./users";
+import { affiliatesOf, followList, localName, setFollow, suggestedUsers, userById, userByName, usersByIds } from "./users";
 
 type Vars = Record<string, any>;
 type Handler = (viewer: Viewer, vars: Vars) => Promise<unknown> | unknown;
@@ -814,6 +814,11 @@ const handlers: Record<string, Handler> = {
 	TopicUnfollow: topicState("unfollow"),
 	TopicNotInterested: topicState("not_interested"),
 	TopicUndoNotInterested: topicState("undo_not_interested"),
+	RemoveFollower: async (v: Viewer, vars: Vars) => {
+		const id = String(vars.target_user_id ?? "");
+		if (/^\d{1,19}$/.test(id)) await setFollow(id, v.id, false);
+		return { data: { remove_follower: { unfollow_success_reason: "Unfollowed" } } };
+	},
 	TopicToFollowSidebar: async (v) => {
 		const topics = await suggestedTopics(v.id);
 		const entries = topics.length
