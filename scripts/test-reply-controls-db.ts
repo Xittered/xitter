@@ -113,6 +113,16 @@ try {
 	assert.equal(row.n, 1);
 	await sql`delete from users where id = ${custom}::bigint`;
 	assert.equal((await sql`select value from reply_country_catalog where value = ${customCountry}`).length, 0);
+	const root = await createPost(author, "root with open replies", { skipPreview: true });
+	const reply = await createPost(author, "a reply that limits its own replies", { replyToId: root, skipPreview: true });
+	const changed: any = await callOperation("ConversationControlChange", viewer, { tweet_id: reply, mode: "Community" });
+	assert.equal(changed.data.conversation_control_change.tweet_results.result.conversation_control?.policy, "Community", "a reply reports its own reply setting after a change");
+	assert.equal((await getPost(author, root))?.conversation_policy ?? null, null, "the post above keeps its own setting");
+	await expectReply(outsider, reply, false);
+	await expectReply(outsider, root, true);
+	const cleared: any = await callOperation("ConversationControlDelete", viewer, { tweet_id: reply });
+	assert.equal(cleared.data.conversation_control_delete.tweet_results.result.conversation_control, undefined, "clearing it on a reply shows everyone again");
+	await expectReply(outsider, reply, true);
 	console.log("Reply audiences, nested enforcement, country overrides, catalog lifecycle and idempotent migration passed.");
 } finally {
 	await sql`delete from users where id = any(${sql.array(accounts, "INT8")})`;

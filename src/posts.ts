@@ -35,9 +35,9 @@ const SUSPENDED = sql`(select id from users where status = 'suspended' or instan
 const select = (viewerId: string) => sql`
 	select p.id, p.text, p.conversation_card, p.conversation_card_post_id::text, p.reply_to_id, p.conversation_id, p.quote_id, p.article_id, p.created_at, p.source, p.sensitive and not u.never_sensitive as sensitive, u.never_sensitive, p.community_id::text as community_id, p.poll_id::text as poll_id, p.place_id, p.edit_count, p.edited_at, p.reply_policy,
 		${replyRestricted(viewerId)} as reply_limited,
-		(select cr.reply_policy from posts cr where cr.id = p.conversation_id) as conversation_policy,
-		(select cr.reply_selections from posts cr where cr.id = p.conversation_id) as conversation_selections,
-		(select cu.screen_name from posts cr join users cu on cu.id = cr.user_id where cr.id = p.conversation_id) as conversation_owner,
+		coalesce(p.reply_policy, (select cr.reply_policy from posts cr where cr.id = p.conversation_id)) as conversation_policy,
+		case when p.reply_policy is not null then p.reply_selections else (select cr.reply_selections from posts cr where cr.id = p.conversation_id) end as conversation_selections,
+		case when p.reply_policy is not null then u.screen_name else (select cu.screen_name from posts cr join users cu on cu.id = cr.user_id where cr.id = p.conversation_id) end as conversation_owner,
 		ru.id as reply_user_id, ru.screen_name as reply_screen_name,
 		${userCols(viewerId)},
 		-- staff can set the shown counts (admin panel); the lists behind them stay real

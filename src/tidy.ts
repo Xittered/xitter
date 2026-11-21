@@ -422,7 +422,7 @@ export const TIDY_SCRIPT = `(function(){
 		});
 		a.addEventListener("mouseleave",function(){a.style.backgroundColor=""});
 	}
-	// "Promote post" in the ⋯ menu of the viewer's own posts (the menu that
+	// "Advertise" in the ⋯ menu of the viewer's own posts (the menu that
 	// offers Delete), which opens the Ads Manager with that post picked
 	var caretPost=null;
 	document.addEventListener("click",function(e){
@@ -445,7 +445,7 @@ export const TIDY_SCRIPT = `(function(){
 		item.style.display="";
 		item.removeAttribute("href");
 		var label=[].find.call(item.querySelectorAll("span"),function(n){return !n.childElementCount&&n.textContent.trim()});
-		if(label)label.textContent="Promote post";
+		if(label)label.textContent="Advertise";
 		var svg=item.querySelector("svg path");
 		if(svg)svg.setAttribute("d","M19.5 4.5v15l-6-3.2V18a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3H6a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h4.5l9-3.5zM10.5 15v3h1v-2.2l-1-.8zM17.5 7.4L11 10v3l6.5 3.3V7.4zM9 10H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h3v-3z");
 		item.addEventListener("click",function(e){
