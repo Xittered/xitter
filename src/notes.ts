@@ -28,7 +28,7 @@ async function membership(v: Viewer) {
 
 async function profile(v: Viewer, alias?: string) {
 	const [user] = await sql`select id::text, notes_alias, notes_writer from users where ${alias === undefined ? sql`id = ${v.id}::bigint` : sql`notes_alias = ${alias}`}`;
-	if (!user || await isBlockedEitherWay(v.id, user.id)) return null;
+	if (!user) return null;
 	const scores = await sql`select n.id, count(voter.id) as ratings, count(voter.id) filter(where r.rating = 'Helpful') as helpful, count(voter.id) filter(where r.rating = 'NotHelpful') as not_helpful
 		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active'
 		where n.author_id = ${user.id}::bigint group by n.id`;
@@ -57,7 +57,7 @@ async function notesMany(v: Viewer, postIds: string[], noteIds?: string[]) {
 		(jsonb_agg(r.data_v2) filter(where r.user_id = ${v.id}::bigint))->0 as viewer_data
 		from community_notes n left join (select x.* from community_note_ratings x join users voter on voter.id = x.user_id and voter.status = 'active') r on r.note_id = n.id
 		join users u on u.id = n.author_id and u.status <> 'suspended' left join community_note_appeals a on a.note_id = n.id
-		where n.post_id = any(${sql.array(postIds, "INT8")}) and ${noteIds ? sql`n.id = any(${sql.array(noteIds, "INT8")})` : sql`true`} and n.author_id not in ${blockedFor(v.id)} group by n.id, u.notes_alias, a.status order by n.id desc`;
+		where n.post_id = any(${sql.array(postIds, "INT8")}) and ${noteIds ? sql`n.id = any(${sql.array(noteIds, "INT8")})` : sql`true`} group by n.id, u.notes_alias, a.status order by n.id desc`;
 	const result = new Map<string, any[]>();
 	for (const n of rows) {
 		const list = result.get(n.post_id) ?? [];
@@ -199,7 +199,7 @@ export const noteHandlers = {
 		const alias = typeof vars.alias === "string" ? vars.alias.slice(0, 80) : "";
 		const before = isId(vars.cursor) ? vars.cursor : "9223372036854775807";
 		const rows = await sql`select n.id::text, n.post_id::text from community_notes n join users u on u.id = n.author_id join posts p on p.id = n.post_id
-			where u.notes_alias = ${alias} and n.id < ${before}::bigint and n.author_id not in ${blockedFor(v.id)} and p.user_id not in ${blockedFor(v.id)} and p.user_id not in ${outOfView(v.id)} order by n.id desc limit 11`;
+			where u.notes_alias = ${alias} and n.id < ${before}::bigint and p.user_id not in ${blockedFor(v.id)} and p.user_id not in ${outOfView(v.id)} order by n.id desc limit 11`;
 		const page = rows.slice(0, 10), ids = page.map((r: any) => r.post_id);
 		const values = await notesMany(v, ids, page.map((r: any) => r.id)), posts = await postsByIds(v.id, ids);
 		const notes = page.flatMap((r: any) => { const note = values.get(r.post_id)?.find((n: any) => n.id === r.id), post = posts.get(r.post_id); return note && post ? [entity(note, post)] : []; });
