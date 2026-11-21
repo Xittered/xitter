@@ -229,8 +229,10 @@ export async function checkLength(userId: string, text: string, db: typeof sql =
 async function checkMentions(userId: string, text: string, role: string | null, db: typeof sql, editing?: string) {
 	const limits = settings().mention_limits;
 	if (!limits.enabled || role) return;
+	const keys = [...new Set(mentionsIn(text).map((m) => m.key))];
+	if (!keys.length) return;
 	const [me] = await db`select lower(screen_name) as n from users where id = ${userId}::bigint`;
-	const named = [...new Set(mentionsIn(text).map((m) => m.key))].filter((k) => k !== me?.n);
+	const named = keys.filter((k) => k !== me?.n);
 	if (!named.length) return;
 	if (named.length > limits.per_post) throw new PostError(`A post can mention up to ${limits.per_post} ${limits.per_post === 1 ? "account" : "accounts"}.`, 186);
 	const [sent] = await db`select count(*)::int as n from post_mentions m join posts p on p.id = m.post_id

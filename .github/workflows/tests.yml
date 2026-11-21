@@ -78,11 +78,6 @@ jobs:
           bun scripts/test-email-issuance.ts
           bun scripts/test-password-reset-issuance.ts
           bun scripts/test-admin-password-reset.ts
-          bun scripts/test-admin-post-note.ts
-          bun scripts/test-suspended-appeal.ts
-          bun scripts/test-shadow-ban.ts
-          bun scripts/test-staff-ips.ts
-          FEDERATION_ALLOW_HTTP=1 XITTER_TEST_SUPERADMINS=imboss@localhost:3000 bun scripts/test-impersonate.ts
           bun scripts/test-api-token-security.ts
           bun scripts/test-oauth.ts
           bun scripts/test-money-api.ts
@@ -144,6 +139,16 @@ jobs:
           bun scripts/test-money.ts
           bun scripts/test-push.ts ci_api_a ci_api_b testpass123
           bun scripts/test-circles.ts
+          bun scripts/test-admin-post-note.ts
+          bun scripts/test-suspended-appeal.ts
+          bun scripts/test-shadow-ban.ts
+          bun scripts/test-staff-ips.ts
+          kill "$server_pid"
+          wait "$server_pid" 2>/dev/null || true
+          FEDERATION_ALLOW_HTTP=1 XITTER_TEST_SUPERADMINS=imboss@localhost:3137 bun src/server.ts >> server.log 2>&1 &
+          server_pid=$!
+          for attempt in {1..30}; do curl --fail --silent "$TEST_ORIGIN/account/forgot" > /dev/null && break; sleep 1; done
+          FEDERATION_ALLOW_HTTP=1 XITTER_TEST_SUPERADMINS=imboss@localhost:3137 bun scripts/test-impersonate.ts
       - name: Server log on failure
         if: failure()
         run: cat server.log 2>/dev/null || true
