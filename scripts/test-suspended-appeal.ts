@@ -43,7 +43,8 @@ try {
 	const after = await (await get("/account/suspended")).text();
 	check(after.includes("Waiting for staff") && !after.includes("Send appeal"), "the screen shows it's waiting and hides the form");
 	await sql`update users set status = 'active' where id = ${id}::bigint`;
-	check((await get("/home")).status === 200, "lifting the suspension lets the same session in");
+	const lifted = await get("/account/suspended");
+	check(lifted.status === 302 && lifted.headers.get("location")?.endsWith("/home"), "lifting the suspension lets the same session in");
 	await sql`update users set status = 'suspended' where id = ${id}::bigint`;
 	const out = await post({ csrf: s!.csrf, action: "signout" });
 	check(out.status === 303 && (await get("/account/suspended")).status === 302, "sign out ends the session");
