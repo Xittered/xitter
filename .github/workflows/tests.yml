@@ -82,6 +82,7 @@ jobs:
           bun scripts/test-suspended-appeal.ts
           bun scripts/test-shadow-ban.ts
           bun scripts/test-staff-ips.ts
+          FEDERATION_ALLOW_HTTP=1 XITTER_TEST_SUPERADMINS=imboss@localhost:3000 bun scripts/test-impersonate.ts
           bun scripts/test-api-token-security.ts
           bun scripts/test-oauth.ts
           bun scripts/test-money-api.ts

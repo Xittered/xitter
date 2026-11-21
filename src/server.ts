@@ -35,6 +35,7 @@ import { bootScript, shell } from "./shell";
 import { platformSource } from "./platforms";
 import { badgeImage, expireSanctions } from "./moderation";
 import { appealRoute, noticesApi, noticesPage, suspendedPage } from "./staff-notices";
+import { impersonateRoute, impersonationRefuses } from "./impersonate";
 import { forgotRoute, resetRoute } from "./password-reset";
 import { twoFactorRoute } from "./two-factor";
 import { passkeySignInRoute, passkeysRoute } from "./passkeys";
@@ -572,6 +573,11 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/manifest.json") return manifest();
 
 	const viewer = await getViewer(req);
+	if (p.startsWith("/account/impersonate/")) {
+		const done = await impersonateRoute(req, p, viewer);
+		if (done) return done;
+	}
+	if (impersonationRefuses(viewer, p)) return API_PREFIX.test(p) || req.method !== "GET" ? apiError(403, 64, "Not while you're signed in as someone else.") : new Response("Not while you're signed in as someone else.", { status: 403 });
 	const suspended = viewer ? undefined : await suspendedViewer(req);
 	if (suspended) {
 		if (p === "/account/suspended") return suspendedPage(req, suspended);

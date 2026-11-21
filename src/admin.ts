@@ -40,6 +40,7 @@ import { hashflagActions } from "./hashflags";
 import { switchActions } from "./feature-switches";
 import { moneyActions } from "./money-admin";
 import { adActions } from "./ads-admin";
+import { impersonateActions } from "./impersonate";
 import { AFFILIATION_LIMIT } from "./org-manage";
 import { staffGate } from "./staff-access";
 import { countryCode, countryDisplayName } from "./countries";
@@ -72,7 +73,7 @@ export const AUDIT_ACTIONS = [
 	"resolve_errors", "review_community_note_appeal", "revoke_api_tokens", "revoke_invite", "revoke_platform", "revoke_session", "revoke_strike",
 	"rollback_client", "save_automod", "save_operations", "save_security", "save_settings", "self_update", "self_update_rollback", "send_staff_message",
 	"send_test_mail", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
-	"set_post_note", "remove_post_note", "reveal_staff_ips", "shadow_ban", "lift_shadow_ban", "set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
+	"set_post_note", "remove_post_note", "impersonate", "reveal_staff_ips", "shadow_ban", "lift_shadow_ban", "set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
 	"set_status", "set_translator", "set_user_client", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",
 ];
@@ -1077,6 +1078,7 @@ Object.assign(ACTIONS, hashflagActions);
 Object.assign(ACTIONS, switchActions);
 Object.assign(ACTIONS, moneyActions);
 Object.assign(ACTIONS, adActions);
+Object.assign(ACTIONS, impersonateActions);
 
 // every permission names real actions, and its default is the role written on them
 for (const [key, p] of Object.entries(PERMISSIONS))

@@ -1310,6 +1310,7 @@ alter table media add column if not exists remote_instance text;
 alter table media add column if not exists remote_id bigint;
 alter table sessions add column if not exists expires_at timestamptz;
 alter table sessions add column if not exists superadmin boolean not null default false;
+alter table sessions add column if not exists impersonator_id bigint references users(id) on delete cascade;
 create table if not exists federated_objects (
 	instance text not null,
 	kind text not null check (kind in ('user', 'post', 'media')),

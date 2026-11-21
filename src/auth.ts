@@ -88,6 +88,9 @@ export type Viewer = User & {
 	postSource?: string;
 	instance?: string | null;
 	superadmin?: boolean;
+	// a superadmin signed in as this account (impersonate.ts)
+	impersonator?: string | null;
+	impersonator_name?: string | null;
 	// set while a delegate acts as this account (delegation.ts): who they are
 	actor?: { id: string; screen_name: string; role: "Admin" | "Contributor" };
 };
@@ -215,7 +218,8 @@ async function loadViewer(req: Request): Promise<Viewer | undefined> {
 	const cookieToken = parseCookies(req)[SESSION_COOKIE];
 	if (!cookieToken) return undefined;
 	const token = sessionKey(cookieToken);
-	const [row] = await sql`select ${viewerCols()}, s.csrf, s.token, s.superadmin
+	const [row] = await sql`select ${viewerCols()}, s.csrf, s.token, s.superadmin, s.impersonator_id::text as impersonator,
+			(select i.screen_name from users i where i.id = s.impersonator_id) as impersonator_name
 		from sessions s join users u on u.id = s.user_id
 		where s.token = ${token} and u.status <> 'suspended' and (s.expires_at is null or s.expires_at > now())
 			and s.last_seen_at > now() - make_interval(days => ${SESSION_IDLE_DAYS})

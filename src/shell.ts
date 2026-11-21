@@ -4,7 +4,7 @@
 import { GUEST_CSS } from "./guest-home";
 import { BEE } from "./bee-icon";
 import { grokName } from "./grok";
-import type { User } from "./auth";
+import type { User, Viewer } from "./auth";
 import { loadBuild } from "./build";
 import { NAME_MAX, feature, settings } from "./settings";
 import { postLimitFor } from "./textlen";
@@ -394,6 +394,9 @@ return window.__xitterTabsC=Tabs};`;
 // With no user the client boots signed out, for the sign-in dialog.
 // `multi`: other accounts are signed in too (auth_multi), so the account menu
 // asks for them.
+const impersonating = (user: User | null) => ((user as Viewer | null)?.impersonator ? "<style>#xitter-impersonating{position:fixed;z-index:2147483647;left:50%;bottom:16px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:10px 16px;border-radius:9999px;background:#f4212e;color:#fff;font:700 14px/18px TwitterChirp,-apple-system,\"Segoe UI\",sans-serif;text-decoration:none;box-shadow:0 1px 2px rgba(0,0,0,.2),0 6px 16px rgba(0,0,0,.25)}@media (hover:hover){#xitter-impersonating:hover{background:#dc1e29}}</style>" : "");
+const impersonatingBanner = (user: User | null) => ((user as Viewer | null)?.impersonator ? `<a id="xitter-impersonating" href="/account/impersonate/exit">You're signed in as @${esc(user!.screen_name)} by @${esc((user as Viewer).impersonator_name ?? "")}. Go back to your account</a>` : "");
+
 export function shell(user: User | null, multi = false, inCommunity = false, educationFlags: Record<string, number> = {}, links: MenuLink[] = [], look: Look | null = null, accent: Accent = DEFAULT_ACCENT, paint?: BackgroundPaint, csrf?: string, flash?: string): string | undefined {
 	const theme = look?.kind === "painted" ? look.theme : null;
 	const clientTheme = theme ? themeForClient(theme) : null;
@@ -420,7 +423,7 @@ export function shell(user: User | null, multi = false, inCommunity = false, edu
 <meta name="theme-color" content="#ffffff" /><title>${esc(settings().instance_name)}</title>
 <link rel="icon" type="image/png" href="/public/favicon.png" />
 <style>html,body{height:100%}body{margin:0}${OLD_SQUARE}${user ? OLD_FOOTER : ""}</style>
-</head><body><div id="react-root" style="height:100%;display:flex;"></div>
+${impersonating(user)}</head><body>${impersonatingBanner(user)}<div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(withFlash(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)), flash))};window.__META_DATA__=${inline(meta)};</script>
 ${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};window.__XITTER_GBEE__=${inline(feature("grok") ? grokName() : null)};${OLD_BEE}${OLD_PAGES}${OLD_TABS}</script>` : ""}
 <script id="nonce-csp"></script>
@@ -443,7 +446,7 @@ ${COMPOSER_BUTTON_CSS}
 ${user ? MONEY_UI_CSS : ""}
 ${user?.classic_post_details ? CLASSIC_DETAIL_CSS : ""}
 [data-testid="sidebarColumn"] div:has(> [data-testid="emptyState"]),[data-testid="sidebarColumn"] div:has(> div > aside) ~ div:empty{display:none}</style>
-</head><body><div id="react-root" style="height:100%;display:flex;"></div>
+${impersonating(user)}</head><body>${impersonatingBanner(user)}<div id="react-root" style="height:100%;display:flex;"></div>
 <script>window.__INITIAL_STATE__=${inline(onBase(build.stateBase, initialState(user, build.featureSwitch, inCommunity, educationFlags, accent)))};window.__META_DATA__=${inline(meta)};${!user && settings().operations.guest_reading ? "window.__XITTER_GUEST_HOME__=true;" : ""}</script>${!user && settings().operations.guest_reading ? `<style>${GUEST_CSS}</style>` : ""}
 <script>window.__XITTER__=${inline({ ...flagPickerData(user?.flag ?? null), ...pronounsData(user), classicDetail: !!user?.classic_post_details, cap: settings().signup_mode !== "closed", circles: !!user && feature("circles"), tidy: tidyData(links), theme: clientTheme, look: clientLook(look, accent), accent: clientLook(look, accent).accent, themeColor: themeColorOf(accent), themePresets: swatches(), pageChrome: pageChromeCss(paint), steamMotion: steamMotion(paint), ...(user && csrf ? { csrf } : {}) })};</script>
 <script src="${bootFor(!!user).path}"></script>
