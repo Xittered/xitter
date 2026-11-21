@@ -104,7 +104,7 @@ export async function passkeySignInRoute(req: Request, path: string): Promise<Re
 			where id = ${id} and (${count} = 0 or sign_count < ${count}) returning id`;
 		if (!p) return { error: "This passkey looks like a copy, so it was refused. Sign in with your password." };
 		if (u.returning) await tx`update users set status = 'active', deactivated_at = null where id = ${key.user_id}::bigint`;
-		else if (u.status === "suspended" || u.deactivated_at) return { error: "This account is suspended." };
+		else if (u.deactivated_at) return { error: "This account was deactivated." };
 		return { session: await startSession(key.user_id, tx) };
 	});
 	if (!result.session) return fail(result.error!, result.status ?? 403);

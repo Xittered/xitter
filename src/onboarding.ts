@@ -296,7 +296,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 	if (path === "/onboarding/web/actions/begin_login") {
 		const f = await form(req);
 		const name = String(f.username_or_email ?? "").trim().replace(/^@/, "");
-		const [user] = name ? await sql`select screen_name from users where lower(screen_name) = lower(${name}) and instance is null and status <> 'suspended'` : [];
+		const [user] = name ? await sql`select screen_name from users where lower(screen_name) = lower(${name}) and instance is null and (status <> 'suspended' or deactivated_at is null)` : [];
 		if (user) return respond(signInScreen(user.screen_name));
 		// the password screen keeps the address: its field may not hold the handle
 		if ((await byEmail(name)) !== undefined) return respond(signInScreen(name));

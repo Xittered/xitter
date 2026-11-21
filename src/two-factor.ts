@@ -51,7 +51,7 @@ export async function codeAccepted(userId: string, input: string): Promise<boole
 export async function startChallenge(screenName: string, password: string): Promise<string | undefined> {
 	if (password.length > 1024 || screenName.length > 64) return undefined;
 	const [u] = await sql`select id::text, password_hash, totp_enabled from users where lower(screen_name) = lower(${screenName}) and instance is null
-		and (status <> 'suspended' or deactivated_at > now() - interval '30 days')`;
+		and (deactivated_at is null or deactivated_at > now() - interval '30 days')`;
 	if (!u?.totp_enabled) return undefined;
 	if (!(await Bun.password.verify(password, u.password_hash).catch(() => false))) return undefined;
 	const token = crypto.randomUUID();
@@ -61,7 +61,7 @@ export async function startChallenge(screenName: string, password: string): Prom
 		// credential changes, then verify that the checked hash is still current.
 		const [current] = await tx`select id from users where id = ${u.id}::bigint
 			and password_hash = ${u.password_hash} and totp_enabled and instance is null
-			and (status <> 'suspended' or deactivated_at > now() - interval '30 days') for update`;
+			and (deactivated_at is null or deactivated_at > now() - interval '30 days') for update`;
 		if (!current) return false;
 		await tx`insert into login_challenges (token, user_id) values (${token}::uuid, ${u.id}::bigint)`;
 		return true;
@@ -95,7 +95,7 @@ export async function answerChallenge(token: string, code: string): Promise<{ us
 			and created_at > clock_timestamp() - interval '15 minutes' returning token`;
 		if (!used.length || !u?.totp_enabled) return { unknown: true };
 		if (u.returning) await tx`update users set status = 'active', deactivated_at = null where id = ${c.user_id}::bigint`;
-		else if (u.status === "suspended" || u.deactivated_at) return { error: "This account is suspended." };
+		else if (u.deactivated_at) return { error: "This account was deactivated." };
 		const session = await startSession(c.user_id, tx);
 		return { userId: c.user_id, session };
 	});

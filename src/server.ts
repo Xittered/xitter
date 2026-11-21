@@ -1,4 +1,4 @@
-import { MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie } from "./auth";
+import { MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie, suspendedViewer } from "./auth";
 import { multiViewer } from "./accounts";
 import { gbeePage } from "./gbee-page";
 import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
@@ -34,7 +34,7 @@ import { adaptiveRoute, legacyOperation } from "./adaptive";
 import { bootScript, shell } from "./shell";
 import { platformSource } from "./platforms";
 import { badgeImage, expireSanctions } from "./moderation";
-import { appealRoute, noticesApi, noticesPage } from "./staff-notices";
+import { appealRoute, noticesApi, noticesPage, suspendedPage } from "./staff-notices";
 import { forgotRoute, resetRoute } from "./password-reset";
 import { twoFactorRoute } from "./two-factor";
 import { passkeySignInRoute, passkeysRoute } from "./passkeys";
@@ -572,6 +572,13 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/manifest.json") return manifest();
 
 	const viewer = await getViewer(req);
+	const suspended = viewer ? undefined : await suspendedViewer(req);
+	if (suspended) {
+		if (p === "/account/suspended") return suspendedPage(req, suspended);
+		if (API_PREFIX.test(p) || req.method !== "GET") return apiError(403, 64, "Your account is suspended.");
+		return Response.redirect("/account/suspended", 302);
+	}
+	if (p === "/account/suspended" && req.method === "GET") return Response.redirect("/home", 302);
 	setRequestLanguage(viewer?.language ?? undefined);
 	if (!p.startsWith("/api/")) setHidden({ parody: !!viewer?.hide_parody_labels, checks: !!viewer?.hide_checkmarks });
 	if (req.method === "GET" && url.searchParams.has("client") && !API_PREFIX.test(p)) {

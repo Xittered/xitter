@@ -80,7 +80,9 @@ const orgHome = postIds((await o.get("HomeTimeline", { count: 50 })).data.home.h
 check("limited: gone from a non-follower's home feed", !orgHome.includes(post));
 check("limited: still on their own profile", postIds((await o.get("UserTweets", { userId: target.id, count: 20 })).data.user.result.timeline.timeline).includes(post));
 await a.admin("setStatus", { id: target.id, status: "suspended" });
-check("suspended: can't sign in", (await session(targetName)) === undefined);
+const banned = await session(targetName);
+check("suspended: signs in", !!banned);
+check("suspended: can't use the admin api", (await banned!.admin("me")).status === 403);
 check("suspended: the old session is gone", (await t.admin("me")).status === 403);
 const unavailable = (await o.get("UserByScreenName", { screen_name: targetName })).data.user?.result;
 check("suspended: the profile says so", unavailable?.__typename === "UserUnavailable");

@@ -60,7 +60,7 @@ try {
 	check("sign-ins are in the access history", n >= 3, n);
 
 	await sql`update users set status = 'suspended' where id = ${id}::bigint`;
-	check("a suspended account can't", (await signIn(20)).status === 403);
+	check("a suspended account signs in to its appeal page", (await signIn(20)).ok);
 	await sql`update users set status = 'active' where id = ${id}::bigint`;
 
 	const csrf = /(?:^|; )ct0=([^;]+)/.exec(cookies)![1]!;

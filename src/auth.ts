@@ -120,7 +120,7 @@ export async function login(screenName: string, password: string): Promise<{ tok
 	await expireSanctions();
 	// accounts with a second factor sign in through the dialog's code step (startSession)
 	const [u] = await sql`select id, password_hash from users where lower(screen_name) = lower(${screenName}) and not totp_enabled and instance is null
-		and (status <> 'suspended' or deactivated_at > now() - interval '30 days')`;
+		and (deactivated_at is null or deactivated_at > now() - interval '30 days')`;
 	// verify against a dummy hash when the user is unknown so timing does not reveal it
 	const ok = await Bun.password.verify(password, u?.password_hash ?? DUMMY_HASH).catch(() => false);
 	if (!u || !ok) return undefined;
@@ -137,7 +137,7 @@ export async function login(screenName: string, password: string): Promise<{ tok
 			const back = await tx`update users set status = 'active', deactivated_at = null
 				where id = ${u.id}::bigint and deactivated_at > now() - interval '30 days' returning id`;
 			if (!back.length) return false;
-		} else if (current.status === "suspended") return false;
+		}
 		await tx`insert into sessions (token, user_id, csrf) values (${sessionKey(token)}, ${u.id}::bigint, ${csrf})`;
 		await tx`update users set last_seen_at = now() where id = ${u.id}::bigint`;
 		return true;
@@ -152,8 +152,8 @@ export type Session = { token: string; csrf: string; userId: string };
 export async function startSession(userId: string, executor: typeof sql = sql): Promise<Session> {
 	const token = randomHex(20);
 	const csrf = randomHex(32);
-	const made = await executor`insert into sessions (token, user_id, csrf) select ${sessionKey(token)}, id, ${csrf} from users where id = ${userId}::bigint and status <> 'suspended' returning token`;
-	if (!made.length) throw new Error("account suspended");
+	const made = await executor`insert into sessions (token, user_id, csrf) select ${sessionKey(token)}, id, ${csrf} from users where id = ${userId}::bigint and deactivated_at is null returning token`;
+	if (!made.length) throw new Error("account deactivated");
 	await executor`update users set last_seen_at = now() where id = ${userId}::bigint`;
 	return { token, csrf, userId };
 }
@@ -196,6 +196,15 @@ const viewerCols = () => sql`u.id, u.screen_name, u.name, u.bio, u.location, u.w
 export async function viewerById(id: string): Promise<Omit<Viewer, "csrf" | "token"> | undefined> {
 	const [row] = await sql`select ${viewerCols()} from users u where u.id = ${id}::bigint and u.status <> 'suspended'`;
 	return row as Viewer | undefined;
+}
+
+export async function suspendedViewer(req: Request): Promise<{ id: string; screen_name: string; csrf: string } | undefined> {
+	const cookieToken = parseCookies(req)[SESSION_COOKIE];
+	if (!cookieToken) return undefined;
+	const [row] = await sql`select u.id::text, u.screen_name, s.csrf from sessions s join users u on u.id = s.user_id
+		where s.token = ${sessionKey(cookieToken)} and u.status = 'suspended' and u.deactivated_at is null and u.instance is null
+			and (s.expires_at is null or s.expires_at > now()) and s.last_seen_at > now() - make_interval(days => ${SESSION_IDLE_DAYS})`;
+	return row as { id: string; screen_name: string; csrf: string } | undefined;
 }
 
 const TOUCH_MS = 60_000;
