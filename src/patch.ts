@@ -169,9 +169,12 @@ const WORDS = /\S\s+\S+\s+\S/;
 // a whole word, not "X.com", "SpaceX", "@X", "X-Large" or "Mac OS X"
 const BRAND = /(?<![\w.@/$-]|OS )X(?![\w$-]|\.com)/g;
 
+const ANY_STRING = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+
 export function brandText(text: string, name: string, code = false): string {
 	const literal = JSON.stringify(name).slice(1, -1);
-	return text.replace(STRING, (s) => (!code || (PROSE.test(s) && WORDS.test(s)) ? s.replace(BRAND, () => literal) : s));
+	if (!code) return text.replace(ANY_STRING, (s) => s.replace(BRAND, () => (s[0] === "'" ? literal.replace(/'/g, "\\'") : literal)));
+	return text.replace(STRING, (s) => (PROSE.test(s) && WORDS.test(s) ? s.replace(BRAND, () => literal) : s));
 }
 
 // only the 2020 client's files (client-web-legacy)
