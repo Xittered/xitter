@@ -87,12 +87,12 @@ function verificationInfo(u: User) {
 	const parts: (string | { text: string; url: string })[] = u.org && affiliateChecked(u)
 		? ["This account is Premium because it’s an affiliate of ", { text: `@${u.org.screen_name}`, url: `${PUBLIC_ORIGIN}/${u.org.screen_name}` }, ` on ${instance}. `]
 		: type === "business"
-			? [`This account is verified because it’s an organisation on ${instance}. `]
+			? [`This is a Gold badge account on ${instance}. `]
 			: type === "government"
 				? [`This account is verified because it is a government or multilateral organization account on ${instance}. `]
 				: type === "government_individual"
 					? [`This account is verified because it belongs to a government or multilateral organization official on ${instance}. `]
-				: [`This account is Premium because the ${instance} team verified it. `];
+				: [`This is a Blue badge account on ${instance}. `];
 	parts.push({ text: "Learn more", url: `${PUBLIC_ORIGIN}/rules` });
 	let text = "";
 	const entities = [];
@@ -498,7 +498,7 @@ export function hashtags(text: string) {
 // where the client reads limitedActionResults from
 export function tweetResult(p: PostRow, withTypename = true): Record<string, unknown> {
 	const tweet = plainTweet(p, withTypename);
-	const audience = p.conversation_policy === "Community" ? `Accounts @${p.conversation_owner} follows can reply` : p.conversation_policy === "MyNetwork" ? `Accounts @${p.conversation_owner} follows and accounts they follow can reply` : p.conversation_policy === "Followers" ? `Accounts following @${p.conversation_owner} can reply` : ["Verified", "Premium"].includes(p.conversation_policy ?? "") ? "Verified accounts can reply" : ["Country", "CountryOfOrigin"].includes(p.conversation_policy ?? "") ? `Accounts based in ${(p.conversation_selections ?? []).join(", ")} can reply` : `Accounts @${p.conversation_owner} mentioned can reply`;
+	const audience = p.conversation_policy === "Community" ? `Accounts @${p.conversation_owner} follows can reply` : p.conversation_policy === "MyNetwork" ? `Accounts @${p.conversation_owner} follows and accounts they follow can reply` : p.conversation_policy === "Followers" ? `Accounts following @${p.conversation_owner} can reply` : ["Verified", "Premium"].includes(p.conversation_policy ?? "") ? "Blue badge accounts can reply" : ["Country", "CountryOfOrigin"].includes(p.conversation_policy ?? "") ? `Accounts based in ${(p.conversation_selections ?? []).join(", ")} can reply` : `Accounts @${p.conversation_owner} mentioned can reply`;
 	if ((!p.reply_limited && !p.notice) || !withTypename) return tweet;
 	return {
 		__typename: "TweetWithVisibilityResults",

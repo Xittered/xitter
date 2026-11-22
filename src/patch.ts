@@ -169,6 +169,14 @@ const WORDS = /\S\s+\S+\s+\S/;
 // a whole word, not "X.com", "SpaceX", "@X", "X-Large" or "Mac OS X"
 const BRAND = /(?<![\w.@/$-]|OS )X(?![\w$-]|\.com)/g;
 
+// checkmarks are named by colour here: gold for organisations, blue for the rest
+const BADGE_WORDS: [RegExp, string][] = [
+	[/\b[Vv]erified [Oo]rgani[sz]ations\b/g, "Gold badge accounts"],
+	[/\b[Vv]erified [Oo]rgani[sz]ation\b/g, "Gold badge account"],
+	[/\b[Vv]erified accounts\b/g, "Blue badge accounts"],
+	[/\b[Vv]erified account\b/g, "Blue badge account"],
+];
+
 const ANY_STRING = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
 
 export function brandText(text: string, name: string, code = false): string {
@@ -269,6 +277,7 @@ export function patchFile(key: string, raw: Buffer, build = ""): Buffer {
 			text = legacyMenu(text);
 		}
 		if (js) text = brandText(text, name, !I18N.test(key));
+		if (I18N.test(key)) for (const [re, to] of BADGE_WORDS) text = text.replace(re, to);
 		hit = Buffer.from(text);
 		if (hit.byteLength <= MAX_PATCH_CACHE_BYTES) {
 			while (cacheBytes + hit.byteLength > MAX_PATCH_CACHE_BYTES) {

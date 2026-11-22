@@ -373,7 +373,7 @@ export async function parties(ids: string[]): Promise<Map<string, Party>> {
 // X's verified badge, in the account's colour, and an affiliate's organisation after it
 const BADGE_PATH = "M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z";
 const BADGE_COLOR: Record<string, string> = { blue: "#1d9bf0", business: "#e2b719", government: "#829aab", government_individual: "#829aab" };
-const BADGE_LABEL: Record<string, string> = { blue: "Verified account", business: "Verified organisation", government: "Government organisation", government_individual: "Government official" };
+const BADGE_LABEL: Record<string, string> = { blue: "Blue badge account", business: "Gold badge account", government: "Government organisation", government_individual: "Government official" };
 export const badges = (p: Pick<Party, "badge" | "org">) =>
 	(p.badge && BADGE_COLOR[p.badge] ? `<svg class="xm-badge" viewBox="0 0 22 22" role="img" aria-label="${BADGE_LABEL[p.badge]}"><path fill="${BADGE_COLOR[p.badge]}" d="${BADGE_PATH}"/></svg>` : "") +
 	(p.org ? `<img class="xm-org" src="${esc(p.org.avatar)}" alt="${esc(p.org.name)}" title="${esc(p.org.name)}">` : "");
