@@ -464,7 +464,7 @@ async function applyAffiliation(instance: string, e: any) {
 	if (!actor || !other || actor === other) return;
 	const [org, member] = fromOrg ? [actor, other] : [other, actor];
 	const on = fromOrg ? e.state === "on" : e.on === true;
-	const [o] = await sql`select instance, verified_type in ('business', 'government') as is_org from users where id = ${org}::bigint`;
+	const [o] = await sql`select instance, verified_type in ('business', 'government') as is_org, allow_affiliates from users where id = ${org}::bigint`;
 	const [m] = await sql`select instance from users where id = ${member}::bigint`;
 	if (!o || !m) return;
 	const pair = sql`org_id = ${org}::bigint and user_id = ${member}::bigint`;
@@ -477,7 +477,7 @@ async function applyAffiliation(instance: string, e: any) {
 			return;
 		}
 		const asked = await sql`delete from affiliation_requests where ${pair} returning 1`;
-		if (asked.length) await join();
+		if (asked.length && o.allow_affiliates) await join();
 		return;
 	}
 	if (!m.instance) {

@@ -1941,3 +1941,4 @@ alter table ads add column if not exists paused_at timestamptz;
 alter table ads add column if not exists name text;
 alter table ads add column if not exists existing_post boolean not null default false;
 create index if not exists ads_post_idx on ads (post_id) where post_id is not null;
+alter table users add column if not exists allow_affiliates boolean not null default true;
