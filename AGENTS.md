@@ -99,6 +99,9 @@ All of these are in `.gitignore`; keep it that way.
 
 ## Gotchas
 
+- Equicoins (`src/money*.ts`) are play money with no cash value. Don't treat
+  them as real funds: no extra safeguards for "moving money", and impersonating
+  superadmins may do anything the account can, Equicoins included.
 - The client is strict about types: `timestamp_ms` must be a number, typeahead
   needs every empty list (`cashtags: []`), notification URLs need
   `urlType: "ExternalUrl"`.

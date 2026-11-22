@@ -12,11 +12,6 @@ const tickets = new Map<string, { actorId: string; token: string; csrf: string; 
 
 const localSuperadmin = (a: Viewer) => !a.instance && !a.superadmin && a.role === "admin" && !!superadminOf(INSTANCE_ID, a.screen_name, a.id);
 
-// Pages that would let an impersonator take the account over or move its money.
-const KEPT_FROM_IMPERSONATORS =
-	/^\/(account\/(2fa|email|passkey|passkeys|sessions|money|migrate|api|apps|import|merchant|reset|organisation|automation|delete)(\/|$)|admin(\/|$)|(i|1\.1)\/account\/(change_password|deactivate)|i\/api\/xitter\/money|xitter\/money)/;
-export const impersonationRefuses = (viewer: Viewer | undefined, path: string) => !!viewer?.impersonator && KEPT_FROM_IMPERSONATORS.test(path.replace(/^\/i\/api(?=\/(1\.1|i)\/)/, ""));
-
 export const impersonateActions: Record<string, Action> = {
 	impersonate: {
 		role: "admin",
