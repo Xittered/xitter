@@ -7,6 +7,7 @@ import { mediaUrl } from "./media";
 import { forbiddenText } from "./names";
 import { blockedFor, protectedFor, suspendedFor } from "./blocks";
 import { staffViewer } from "./staff-access";
+import { circleSeen } from "./circles";
 
 const MAX_LABEL = 25;
 const MIN_DURATION = 5;
@@ -86,6 +87,7 @@ export async function pollsByIds(viewerId: string, ids: string[]): Promise<Map<s
 		from polls p where p.id = any(${sql.array(ids, "INT8")})
 			and exists (select 1 from posts post where post.poll_id = p.id
 				and (not post.hidden or ${staffViewer(viewerId)})
+				and ${circleSeen(viewerId, sql`post`)}
 				and post.user_id not in ${protectedFor(viewerId)}
 				and post.user_id not in ${suspendedFor(viewerId)}
 				and post.user_id not in ${blockedFor(viewerId)})`;

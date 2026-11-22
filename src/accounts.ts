@@ -11,7 +11,7 @@
 //                                            one, if any, takes its place
 
 import { recordSignIn } from "./login-history";
-import { MULTI_COOKIE, SECURE, SESSION_COOKIE, type Viewer, clearedCookies, logout, parseCookies, sessionCookies, sessionKey, viewerById } from "./auth";
+import { MULTI_COOKIE, SECURE, SESSION_COOKIE, SESSION_IDLE_DAYS, type Viewer, clearedCookies, logout, parseCookies, sessionCookies, sessionKey, viewerById } from "./auth";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { sql } from "./db";
 import { avatarUrl } from "./model";
@@ -34,7 +34,9 @@ const multiTokens = (req: Request) => (parseCookies(req)[MULTI_COOKIE] ?? "").sp
 async function live(tokens: string[], except?: string): Promise<Session[]> {
 	if (!tokens.length) return [];
 	const rows = await sql`select s.token, s.csrf, s.user_id::text as "userId" from sessions s join users u on u.id = s.user_id
-		where s.token = any(${sql.array(tokens.map(sessionKey), "TEXT")}) and u.status <> 'suspended'`;
+		where s.token = any(${sql.array(tokens.map(sessionKey), "TEXT")}) and u.status <> 'suspended'
+			and (u.instance is null or (s.superadmin and s.expires_at is not null))
+			and (s.expires_at is null or s.expires_at > now()) and s.last_seen_at > now() - make_interval(days => ${SESSION_IDLE_DAYS})`;
 	const seen = new Set(except ? [except] : []);
 	const out: Session[] = [];
 	for (const t of tokens) {
@@ -49,7 +51,7 @@ async function live(tokens: string[], except?: string): Promise<Session[]> {
 export async function multiViewer(req: Request, viewer: Viewer, userId: string): Promise<Viewer | undefined> {
 	const session = (await live(multiTokens(req), viewer.id)).find((s) => s.userId === userId);
 	const user = session && (await viewerById(session.userId));
-	return user && { ...viewer, ...user, token: sessionKey(session.token), csrf: session.csrf };
+	return user && { ...viewer, superadmin: false, impersonator: null, impersonator_name: null, actor: undefined, ...user, token: sessionKey(session.token), csrf: session.csrf };
 }
 
 // Cookies for a new sign-in from this browser: the session it was using, and

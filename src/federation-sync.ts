@@ -191,7 +191,7 @@ async function eventsAfter(after: string, limit: number) {
 
 async function mediaAllowed(id: string): Promise<boolean> {
 	const [m] = await sql`select m.post_id::text, m.user_id::text from media m join users u on u.id = m.user_id
-		where m.id = ${id}::bigint and m.remote_instance is null and u.instance is null and u.status <> 'suspended' and u.deactivated_at is null`;
+		where m.id = ${id}::bigint and m.remote_instance is null and m.scan_blocked_at is null and u.instance is null and u.status <> 'suspended' and u.deactivated_at is null`;
 	if (!m) return false;
 	if (m.post_id) return (await publicPost(m.post_id)).length > 0;
 	const [profile] = await sql`select 1 from users where id = ${m.user_id}::bigint and (avatar_url = ${`/media/${id}`} or banner_url = ${`/media/banner/${id}`})`;
@@ -760,7 +760,8 @@ export async function dropRemoteMedia(instance?: string): Promise<{ files: numbe
 			files++;
 		}
 	}
-	await sql`update media set size = 0 where remote_instance is not null and size <> 0`;
+	await sql`update media set size = 0 where remote_instance is not null and size <> 0
+		and (${instance ?? null}::text is null or remote_instance = ${instance ?? null})`;
 	memory.clear();
 	memoryBytes = 0;
 	return { files, bytes };

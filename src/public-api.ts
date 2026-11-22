@@ -350,7 +350,7 @@ async function requestsJson(v: Viewer, list: MoneyRequest[]) {
 const onePayment = async (v: Viewer, id: string) => {
 	const t = (await payments([id], v.id)).get(id);
 	if (!t) throw new ApiError(404, "No payment with that id, or you can't see it.");
-	return (await paymentsJson(v, [t]))[0];
+	return (await paymentsJson(v, [t.shared ? t : { ...t, note: "" }]))[0];
 };
 const oneRequest = async (v: Viewer, id: string) => {
 	const q = (await requests([id], v.id)).get(id);

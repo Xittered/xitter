@@ -393,9 +393,10 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 		const target = f.user_id ?? (f.screen_name ? (await userByName(viewer.id, f.screen_name))?.id : undefined);
 		if (!isId(target) || target === viewer.id) return Response.json({ errors: [{ code: 50, message: "User not found." }] }, { status: 404 });
 		const on = relation[2] === "create";
-		if (relation[1] === "blocks" && !(await setBlock(viewer.id, target, on)))
-			return Response.json({ errors: [{ code: 160, message: "You can't block an admin of this instance." }] }, { status: 403 });
-		else await setMute(viewer.id, target, on);
+		if (relation[1] === "blocks") {
+			if (!(await setBlock(viewer.id, target, on)))
+				return Response.json({ errors: [{ code: 160, message: "You can't block an admin of this instance." }] }, { status: 403 });
+		} else await setMute(viewer.id, target, on);
 		const user = await userById(viewer.id, target);
 		if (!user) return Response.json({ errors: [{ code: 50, message: "User not found." }] }, { status: 404 });
 		return Response.json(legacyUser(user));

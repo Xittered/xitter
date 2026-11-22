@@ -27,7 +27,7 @@ export function mutedCategories(decisions: Decision[]): Set<string> {
 }
 
 const clip = (s: string, n: number) => {
-	const one = s.replace(/\s+/g, " ").trim();
+	const one = s.replace(/<\/?\s*(item|staff_feedback)\b[^>]*>/gi, "").replace(/\s+/g, " ").trim();
 	return one.length > n ? `${one.slice(0, n - 1)}…` : one;
 };
 

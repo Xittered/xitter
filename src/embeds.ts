@@ -62,7 +62,7 @@ async function publicPost(id: string, withQuote = true): Promise<Post | undefine
 		p.sensitive
 			? []
 			: await sql`select id::text, kind, mime, width, height, remote_instance is not null as remote from media
-			where post_id = ${id}::bigint and state = 'ready' and (coalesce(cardinality(sensitive_warning), 0) = 0 or ${p.never_sensitive}) order by position nulls last limit 4`
+			where post_id = ${id}::bigint and state = 'ready' and scan_blocked_at is null and (coalesce(cardinality(sensitive_warning), 0) = 0 or ${p.never_sensitive}) order by position nulls last limit 4`
 	) as Media[];
 	const quoted = withQuote && p.quote_id ? await publicPost(p.quote_id, false) : undefined;
 	return {
@@ -233,7 +233,7 @@ export async function embedImage(pathname: string): Promise<Response> {
 		const a = await publicAuthor(sql`id = ${avatar[1]}::bigint`);
 		const id = a && avatarId(a);
 		if (!id || !isId(id)) return none;
-		const [m] = await sql`select mime from media where id = ${id}::bigint`;
+		const [m] = await sql`select mime from media where id = ${id}::bigint and scan_blocked_at is null`;
 		return m ? fileResponse(await remoteMediaFile(id), m.mime) : none;
 	}
 	return none;

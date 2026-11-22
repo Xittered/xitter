@@ -384,7 +384,7 @@ export const MONEY_WORDMARK = `<span class="xm-mark"><svg viewBox="0 0 24 24" ar
 // ---- payments
 
 // reversed: staff sent the money back (Admin > Money)
-export type Payment = { id: string; amount: number; note: string; at: Date; sender: Party; recipient: Party; reversed?: boolean; status: string };
+export type Payment = { id: string; amount: number; note: string; at: Date; sender: Party; recipient: Party; reversed?: boolean; status: string; shared?: boolean };
 
 // a post (p) that names a payment or request shows it only to those who can see that post
 const postSeenBy = (viewerId: string) =>
@@ -395,7 +395,12 @@ const postSeenBy = (viewerId: string) =>
 export async function payments(ids: string[], visibleTo?: string): Promise<Map<string, Payment>> {
 	if (!ids.length) return new Map();
 	const feed = visibleTo ? ((await feedAccount())?.id ?? null) : null;
-	const rows = await sql`select t.id::text, t.amount_cents, t.note, t.created_at, t.sender_id::text, t.recipient_id::text, t.reversed_at is not null as reversed, t.federation_status from money_transfers t
+	const shared = visibleTo
+		? sql`(${visibleTo}::bigint in (t.sender_id, t.recipient_id) or exists (select 1 from posts p
+			where p.user_id in (t.sender_id, t.recipient_id) and ${postSeenBy(visibleTo)} and p.text ~ ('/i/xmoney/p/' || t.id::text || '([^0-9]|$)')))`
+		: sql`true`;
+	const rows = await sql`select t.id::text, t.amount_cents, t.note, t.created_at, t.sender_id::text, t.recipient_id::text, t.reversed_at is not null as reversed, t.federation_status,
+			${shared} as shared from money_transfers t
 		where t.id = any(${sql.array(ids, "INT8")})
 		${
 			visibleTo
@@ -407,7 +412,7 @@ export async function payments(ids: string[], visibleTo?: string): Promise<Map<s
 	return new Map(
 		rows
 			.filter((r: any) => who.has(r.sender_id) && who.has(r.recipient_id))
-			.map((r: any) => [r.id, { id: r.id, amount: Number(r.amount_cents), note: r.note, at: new Date(r.created_at), sender: who.get(r.sender_id)!, recipient: who.get(r.recipient_id)!, reversed: r.reversed, status: r.federation_status }]),
+			.map((r: any) => [r.id, { id: r.id, amount: Number(r.amount_cents), note: r.note, at: new Date(r.created_at), sender: who.get(r.sender_id)!, recipient: who.get(r.recipient_id)!, reversed: r.reversed, status: r.federation_status, shared: r.shared }]),
 	);
 }
 
@@ -587,7 +592,7 @@ export async function cardsApi(viewer: Viewer, url: URL): Promise<Response> {
 	]);
 	const out: Record<string, string> = {};
 	const feed = settings().money.feed.toLowerCase().replace(/^@/, "");
-	for (const [id, t] of paid) out[`p${id}`] = paymentCard(t, by, !!feed && by === feed);
+	for (const [id, t] of paid) out[`p${id}`] = paymentCard(t, by, (!!feed && by === feed) || !t.shared);
 	const preview = url.searchParams.has("preview");
 	for (const [id, q] of asked) out[`r${id}`] = requestCard(q, preview ? "" : viewer.id);
 	return Response.json(out, { headers: { "cache-control": "private, no-store" } });

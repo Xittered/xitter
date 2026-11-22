@@ -183,6 +183,9 @@ try {
 	check("anyone sees its card", typeof fedCard === "string");
 	check("naming both sides", fedCard?.includes("Money A") && fedCard?.includes("Money B") && fedCard?.includes("sent to"));
 	check("without the note", !fedCard?.includes("secret stuff"));
+	const spoofed = (await sc.json(`money/cards?ids=p${fedId}&by=${a}`))[`p${fedId}`] as string;
+	check("a stranger naming someone else as the poster still gets no note", typeof spoofed === "string" && !spoofed.includes("secret stuff"));
+	check("nor on the payment's page", !(await (await fetch(`${origin}/account/money/p/${fedId}`, { headers: sc.headers })).text()).includes("secret stuff"));
 	await admin(sa, "reverseTransfer", { id: fedId });
 	check("reversing a payment takes its feed post down", !(await sql`select 1 from posts where user_id = ${feedId}::bigint`).length);
 	await admin(sa, "saveMoney", { starting: String(was.starting_cents / 100), max_transfer: String(was.max_transfer_cents / 100), like: String(was.like_cents / 100), feed: "" });

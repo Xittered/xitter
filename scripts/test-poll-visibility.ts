@@ -58,6 +58,12 @@ try {
 	await sql`update users set status = 'suspended' where id = ${owner}::bigint`;
 	await refused(stranger, "a suspended author's poll stays private");
 	await sql`update users set status = 'active' where id = ${owner}::bigint`;
+	await sql`update posts set circle_owner_id = ${owner}::bigint where id = ${post}::bigint`;
+	await sql`insert into circle_members (owner_id, member_id) values (${owner}::bigint, ${follower}::bigint)`;
+	await refused(stranger, "a Circle post's poll stays inside the Circle");
+	assert.equal((await pollsByIds(follower, [pollId])).size, 1, "a Circle member still sees the poll");
+	await sql`delete from circle_members where owner_id = ${owner}::bigint`;
+	await sql`update posts set circle_owner_id = null where id = ${post}::bigint`;
 	await sql`delete from posts where id = ${post}::bigint`;
 	await refused(stranger, "a deleted post's poll is no longer accessible");
 	console.log("ok: owner and follower access, one vote per person, and authorized staff review are preserved");

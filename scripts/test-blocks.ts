@@ -88,8 +88,14 @@ check("blocked: B can't reply to A", !reply.id && !!reply.errors);
 await b.rest("friendships/create.json", { user_id: userA.rest_id });
 check("blocked: B can't follow A", (await b.get("UserByScreenName", { screen_name: nameA })).data.user.result.relationship_perspectives.following === false);
 check("blocked accounts list holds B", userIds((await a.get("BlockedAccountsAll", { count: 20 })).data.viewer.timeline.timeline).includes(userB.rest_id));
+check("blocking doesn't mute", seenByA.muting !== true, seenByA);
 await a.rest("blocks/destroy.json", { user_id: userB.rest_id });
 check("unblocked: B's post is back", (await home()).includes(byB.id));
+await a.rest("mutes/users/create.json", { user_id: userB.rest_id });
+await a.rest("blocks/create.json", { user_id: userB.rest_id });
+await a.rest("blocks/destroy.json", { user_id: userB.rest_id });
+check("unblocking keeps a mute made on its own", (await a.get("UserByScreenName", { screen_name: nameB })).data.user.result.relationship_perspectives.muting === true);
+await a.rest("mutes/users/destroy.json", { user_id: userB.rest_id });
 
 if (!before.following) await a.rest("friendships/destroy.json", { user_id: userB.rest_id });
 if (before.following) await a.rest("friendships/create.json", { user_id: userB.rest_id });

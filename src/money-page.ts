@@ -438,7 +438,7 @@ async function paymentPage(req: Request, viewer: Viewer, id: string) {
 		req,
 		viewer,
 		"Payment",
-		`<section class="receipt">${paymentCard(t, (mine ? viewer.screen_name : t.sender.screen_name).toLowerCase())}
+		`<section class="receipt">${paymentCard(t, (mine ? viewer.screen_name : t.sender.screen_name).toLowerCase(), !t.shared)}
 ${mine ? `<div class="row">${postButton(paymentUrl(t.id), "Post", post)}<a class="pill" href="/account/money/send?to=${encodeURIComponent(other.screen_name)}">${viewer.id === t.sender.id ? "Pay again" : "Pay back"}</a></div>` : ""}</section>
 <dl>
 <dt>From</dt><dd>${link(t.sender)}</dd>
