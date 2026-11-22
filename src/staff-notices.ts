@@ -3,6 +3,7 @@
 // here. A suspended account signs in to /account/suspended and nothing
 // else; /appeal also takes the handle and password, for a link from outside.
 
+import { newerReason } from "./restricted-page";
 import { passwordTry } from "./ratelimit";
 import { randomBytes } from "node:crypto";
 import { accountPage, esc } from "./account-page";
@@ -184,13 +185,13 @@ export async function suspendedPage(req: Request, who: { id: string; screen_name
 	} else if (req.method !== "GET") return new Response(null, { status: 405 });
 	const [appeals, [message], [sanction]] = await Promise.all([
 		appealsOf(who.id),
-		sql`select body from staff_messages where user_id = ${who.id}::bigint and revoked_at is null order by id desc limit 1`,
-		sql`select detail->>'reason' as reason from audit_log where target = ${who.id} and action in ('set_status', 'temporary_status', 'escalate', 'bulk_status')
+		sql`select body, created_at from staff_messages where user_id = ${who.id}::bigint and revoked_at is null order by id desc limit 1`,
+		sql`select detail->>'reason' as reason, created_at from audit_log where target = ${who.id} and action in ('set_status', 'temporary_status', 'escalate', 'bulk_status')
 			and detail->>'reason' is not null order by id desc limit 1`,
 	]);
 	const [until] = await sql`select status_until from users where id = ${who.id}::bigint`;
 	const open = appeals.some((a: any) => a.status === "open");
-	const reason = message?.body || sanction?.reason || "The instance team suspended this account.";
+	const reason = newerReason(message, sanction) || "The instance team suspended this account.";
 	const appealList = appeals.map((a: any) => `<div class="card">
 		<div class="meta">${esc(OUTCOME[a.status] ?? a.status)} · ${esc(date(a.created_at))}</div>
 		<p>${esc(a.body)}</p>

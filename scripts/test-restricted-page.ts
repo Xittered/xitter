@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ERROR_SCRIPT } from "../src/errors";
-import { restrictedBody, restrictedReason, restrictedRefuses } from "../src/restricted-page";
+import { newerReason, restrictedBody, restrictedReason, restrictedRefuses } from "../src/restricted-page";
 
 test("restriction reason prefers the active staff notice", () => {
 	expect(restrictedReason("Your posts broke the rules.", "older audit reason")).toBe("Your posts broke the rules.");
@@ -10,6 +10,16 @@ test("restriction reason prefers the active staff notice", () => {
 test("restriction reason falls back to the sanction audit and default", () => {
 	expect(restrictedReason(null, "Repeated rule violations.")).toBe("Repeated rule violations.");
 	expect(restrictedReason(null, null)).toBe("The instance team has restricted this account.");
+});
+
+test("the newer of the staff message and the sanction reason wins", () => {
+	const old = { body: "Your profile picture was reset", created_at: "2026-11-22T05:24:50Z" };
+	const ban = { reason: "Changing profile picture back. 24 hour ban", created_at: "2026-11-22T19:05:34Z" };
+	expect(newerReason(old, ban)).toBe(ban.reason);
+	expect(newerReason({ ...old, created_at: "2026-11-22T19:06:00Z" }, ban)).toBe(old.body);
+	expect(newerReason(undefined, ban)).toBe(ban.reason);
+	expect(newerReason(old, undefined)).toBe(old.body);
+	expect(newerReason(undefined, undefined)).toBeUndefined();
 });
 
 test("restricted page content includes the reason and appeal link safely", () => {
