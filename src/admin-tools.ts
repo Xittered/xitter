@@ -742,7 +742,7 @@ export const toolActions: Record<string, Action> = {
 	updateStatus: { role: "admin", run: async () => ({ status: updateStatus() ?? (process.env.UPDATE_CHECK === "off" ? null : await checkForUpdate()), self_update: selfUpdateEnabled() }) },
 	checkUpdate: { role: "admin", run: async () => ({ status: await checkForUpdate(), self_update: selfUpdateEnabled() }) },
 	// self-update.ts: an update goes on after the answer; the panel follows it with selfUpdate
-	selfUpdate: { role: "admin", run: async () => selfUpdateStatus() },
+	selfUpdate: { role: "admin", run: async () => ({ ...selfUpdateStatus(), auto_update: settings().auto_update }) },
 	startSelfUpdate: {
 		role: "admin",
 		run: async (a, b) => {

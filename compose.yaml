@@ -1,7 +1,8 @@
 # Xitter with Postgres. First run:
 #   docker/env.sh                      writes .env with fresh secrets
 #   docker compose up -d --build       (add --profile keybackup for chat key backup,
-#                                       --profile bee for the buzzing Grok brain)
+#                                       --profile bee for the buzzing Grok brain,
+#                                       --profile updater for "Update automatically")
 services:
   app:
     build: .
@@ -98,6 +99,17 @@ services:
     command: ["--hf-repo", "schizophyllume/BeeLLM", "--hf-file", "${BEE_FILE:-mood/BeeLLM-Scintilla-50M.gguf}", "-c", "4096", "--host", "0.0.0.0", "--port", "8080", "-t", "2", "--parallel", "2"]
     volumes:
       - bee:/root/.cache
+
+  # pulls and rebuilds the app when the admin panel's "Update automatically" asks
+  updater:
+    profiles: ["updater"]
+    image: docker:28-cli
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/repo/docker/updater.sh"]
+    volumes:
+      - .:/repo
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   db:

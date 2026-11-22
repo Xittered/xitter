@@ -944,6 +944,10 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("source_url", url);
 				changed.push("source_url");
 			}
+			if (typeof b.auto_update === "boolean") {
+				await setSetting("auto_update", b.auto_update);
+				changed.push("auto_update");
+			}
 			if (typeof b.rules === "string") {
 				await setSetting("rules", b.rules.slice(0, 20000));
 				changed.push("rules");

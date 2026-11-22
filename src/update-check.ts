@@ -10,9 +10,10 @@
 // hashes: any that differ, or that the branch added or removed, mean an update.
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { settings } from "./settings";
+import { selfUpdateEnabled, startSelfUpdate } from "./self-update";
 import { COMMIT } from "./version";
 
 const root = join(import.meta.dir, "..");
@@ -134,11 +135,34 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 			changed = differingFiles(tree.tree);
 		}
 		status = { ...base, latest, behind, changed_files: changed, outdated: (behind ?? 0) > 0 || (changed ?? 0) > 0, error: null };
+		autoUpdate(status);
 	} catch (e) {
 		// keep what the last good check found
 		status = { ...(status ?? { latest: null, behind: null, changed_files: null, outdated: false }), ...base, error: e instanceof Error ? e.message : String(e) };
 	}
 	return status;
+}
+
+// Admin > Server update > "Update automatically". A git checkout with
+// SELF_UPDATE=on updates itself; anything else (the Docker image) leaves a
+// request in data/ for the updater container (compose profile "updater",
+// docker/updater.sh) to pull and rebuild. Each new commit is tried once.
+const REQUEST_FILE = process.env.UPDATE_REQUEST_FILE ?? "data/update-request.json";
+let tried = "";
+
+function autoUpdate(s: UpdateStatus) {
+	if (!s.outdated || !s.latest || !settings().auto_update || tried === s.latest.sha) return;
+	tried = s.latest.sha;
+	if (selfUpdateEnabled() && existsSync(join(root, ".git"))) {
+		try {
+			startSelfUpdate("auto-update", s.repo, s.branch);
+		} catch (e) {
+			console.error("auto-update:", e instanceof Error ? e.message : e);
+		}
+		return;
+	}
+	mkdirSync(join(REQUEST_FILE, ".."), { recursive: true });
+	writeFileSync(REQUEST_FILE, JSON.stringify({ sha: s.latest.sha, repo: s.repo, branch: s.branch, at: new Date().toISOString() }));
 }
 
 export function startUpdateChecks() {

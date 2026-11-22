@@ -572,7 +572,7 @@ async function showUpdate(fresh) {
 	bar.innerHTML = '<span class="icon">system_update</span><div class="ub-body"><div><b>This instance is out of date.</b> ' + how +
 		" Latest: " + esc(s.latest.message || s.latest.sha.slice(0, 12)) + (s.latest.date ? " (" + esc(when(s.latest.date)) + ")" : "") + ".</div>" +
 		(self_update ? "" : "<div>To update, on the server: <code>git pull</code>, then <code>docker compose up -d --build</code>.</div>") +
-		'<div class="ub-buttons">' + (self_update ? '<a href="#update">Update now</a>' : "") + '<a href="https://github.com/' + esc(s.repo) + "/commits/" + esc(s.branch) + '" target="_blank" rel="noopener">What changed</a><button type="button" id="ub-check">Check again</button></div></div>' +
+		'<div class="ub-buttons">' + '<a href="#update">' + (self_update ? "Update now" : "Update automatically") + "</a>" + '<a href="https://github.com/' + esc(s.repo) + "/commits/" + esc(s.branch) + '" target="_blank" rel="noopener">What changed</a><button type="button" id="ub-check">Check again</button></div></div>' +
 		'<button type="button" class="ub-close" aria-label="Close until the next update">×</button>';
 	bar.hidden = false;
 	$("#ub-check").onclick = () => showUpdate(true);
@@ -686,6 +686,9 @@ const RENDER = {
 		main.innerHTML = "<h1>Server update</h1>" +
 			'<p class="dim">Updates this server\'s code from a GitHub repository: it backs up the database (see Backups), fetches the branch, checks it out, runs <span class="code">bun install</span>, makes sure the new code loads, and restarts. If the code doesn\'t load, the server stays on the commit it runs now. The new code runs as this server, with its database and keys, so update only from repositories you trust. Going back to the previous commit leaves the database as the update left it; the backup restores it.</p>' +
 			off +
+			'<div class="box" style="margin-bottom:16px"><label class="row"><input type="checkbox" id="uauto"' + (u.auto_update ? " checked" : "") + '> Update automatically</label>' +
+			'<p class="dim small">When the update check finds a newer commit, the server updates itself the same way. ' +
+			(u.enabled && u.checkout ? "" : 'In Docker, start the updater too: <span class="code">docker compose --profile updater up -d</span>.') + "</p></div>" +
 			'<div class="cards"><div class="card"><span>Running</span><b class="code">' + esc(short(u.commit)) + "</b></div>" +
 			'<div class="card"><span>Previous</span><b class="code">' + esc(short(u.previous?.sha)) + "</b>" + (u.previous ? '<span class="small dim">on ' + esc(u.previous.branch) + "</span>" : "") + "</div></div>" +
 			(u.enabled && u.checkout ? '<div class="box" style="margin:16px 0"><h2>Update from</h2><div class="row">' +
@@ -705,6 +708,7 @@ const RENDER = {
 				(last.backup ? ", backup " + esc(last.backup) : "") + "</p>" +
 				(last.error ? '<p style="color:var(--red)">' + esc(last.error) + "</p>" : "") +
 				'<pre class="code" style="max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px">' + esc(last.log.join("\n")) + "</pre></div>" : "");
+		$("#uauto").onchange = (e) => act(() => api("saveSettings", { auto_update: e.target.checked }), e.target.checked ? "Updates run automatically" : "Automatic updates are off");
 		if ($("#ugo")) $("#ugo").onclick = async () => {
 			const repo = $("#urepo").value.trim() || firstRepo;
 			const branch = $("#ubranch").value.trim();
