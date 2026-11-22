@@ -32,6 +32,9 @@ const NO_LIMIT = "9223372036854775807";
 const SUSPENDED = sql`(select id from users where status = 'suspended' or instance_blocked)`;
 
 // every post query starts from this; callers append where/order/limit
+const protectedThreadSeen = (viewerId: string) => sql`(p.user_id = ${viewerId}::bigint
+	or (coalesce(p.reply_to_user_id, 0) not in ${protectedFor(viewerId)}
+		and coalesce((select r.user_id from posts r where r.id = p.conversation_id), 0) not in ${protectedFor(viewerId)}))`;
 const select = (viewerId: string) => sql`
 	select p.id, p.text, p.conversation_card, p.conversation_card_post_id::text, p.reply_to_id, p.conversation_id, p.quote_id, p.article_id, p.created_at, p.source, p.sensitive and not u.never_sensitive as sensitive, u.never_sensitive, p.community_id::text as community_id, p.poll_id::text as poll_id, p.place_id, p.edit_count, p.edited_at, p.reply_policy,
 		${replyRestricted(viewerId)} as reply_limited,
@@ -55,6 +58,7 @@ const select = (viewerId: string) => sql`
 	join users u on u.id = p.user_id and (not p.hidden or ${staffViewer(viewerId)}) and ${circleSeen(viewerId)}
 		and u.id not in ${protectedFor(viewerId)} and u.id not in ${suspendedFor(viewerId)}
 		and u.id not in (select blocker_id from blocks where blocked_id = ${viewerId}::bigint)
+		and ${protectedThreadSeen(viewerId)}
 	left join posts rp on rp.id = p.reply_to_id
 	left join users ru on ru.id = coalesce(rp.user_id, p.reply_to_user_id)`;
 

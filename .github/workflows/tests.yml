@@ -89,6 +89,7 @@ jobs:
           bun scripts/test-scheduled-threads.ts
           bun scripts/test-scheduled-quota.ts
           bun scripts/test-scheduled-mentions.ts
+          bun scripts/test-protected-thread-replies.ts
           bun scripts/test-scheduled-post-cost.ts
           bun scripts/test-scheduled-single-connection.ts
           bun scripts/test-scheduled-media.ts
