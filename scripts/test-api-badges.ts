@@ -67,6 +67,13 @@ try {
 	const hasMenu = async (id: string) => (await menuLinks(id)).some((l) => l.href === "/account/organisation");
 	assert.deepEqual([await hasMenu(ids.unverifiedOrg), await hasMenu(ids.member), await hasMenu(ids.plain)], [true, true, false], "Organisation menu for organisations and their people");
 
+	// a gold organisation with self-service affiliate adding turned off keeps its badge and org flag,
+	// without showing the Organisation menu until it has affiliates
+	await sql`update users set allow_affiliates = false where id = ${ids.lonelyOrg}::bigint`;
+	const solo = await get(token, `/users/${name("lonelyOrg")}`);
+	assert.deepEqual([solo.verified_type, solo.verified, solo.organization, solo.affiliates_count], ["business", true, true, 0]);
+	assert.equal(await hasMenu(ids.lonelyOrg), false, "no Organisation menu while allow_affiliates is off and it has no affiliates");
+
 	// an affiliate: the checkmark the app shows, dated from joining the organisation
 	const a = await get(token, `/users/${name("person")}`);
 	assert.deepEqual([a.verified_type, a.verified, a.verified_since, a.organization], [null, true, joinedAt, false]);
@@ -81,6 +88,7 @@ try {
 
 	// an organisation without a picture: its badge falls back to the default picture, as in the app
 	await sql`insert into affiliations(org_id, user_id) values(${ids.lonelyOrg}::bigint, ${ids.labelled}::bigint)`;
+	assert.equal(await hasMenu(ids.lonelyOrg), true, "Organisation menu returns when it has existing affiliates");
 	const l = await get(token, `/users/${name("labelled")}`);
 	assert.match(l.affiliations[0].badge_url, /^https?:\/\/.+\/default_profile_images\//, "no broken badge image");
 	// a label staff gave: shown, while parody_label stays empty

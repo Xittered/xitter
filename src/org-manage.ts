@@ -12,15 +12,15 @@ import { isOrganizationSql, localName } from "./users";
 
 export const AFFILIATION_LIMIT = 4;
 
-type Org = { id: string; screen_name: string; name: string; self: boolean };
+type Org = { id: string; screen_name: string; name: string; self: boolean; allow_affiliates: boolean };
 
 
 // the organisation this account runs: itself, or the one it manages
 async function managedOrg(viewer: Viewer): Promise<Org | undefined> {
-	const [org] = await sql`select u.id::text, u.screen_name, u.name, u.id = ${viewer.id}::bigint as self from users u
+	const [org] = await sql`select u.id::text, u.screen_name, u.name, u.id = ${viewer.id}::bigint as self, u.allow_affiliates from users u
 		where ${isOrganizationSql(sql`u`)} and (u.id = ${viewer.id}::bigint
 			or u.id in (select org_id from affiliations where user_id = ${viewer.id}::bigint and manager))
-		order by u.id = ${viewer.id}::bigint desc, u.id limit 1`;
+		order by u.allow_affiliates desc, u.id = ${viewer.id}::bigint desc, u.id limit 1`;
 	return org as Org | undefined;
 }
 
@@ -34,7 +34,7 @@ async function view(req: Request, viewer: Viewer, error = "", notice = "") {
 	const mine = await sql`select o.id::text, o.screen_name, o.name from affiliations a join users o on o.id = a.org_id where a.user_id = ${viewer.id}::bigint order by a.created_at, a.org_id`;
 	const full = mine.length >= AFFILIATION_LIMIT;
 	const asked = await sql`select o.id::text, o.screen_name, o.name from affiliation_requests r join users o on o.id = r.org_id
-		where r.user_id = ${viewer.id}::bigint and ${isOrganizationSql(sql`o`)} order by r.created_at`;
+		where r.user_id = ${viewer.id}::bigint and ${isOrganizationSql(sql`o`)} and o.allow_affiliates order by r.created_at`;
 	let body = `<h1>Organisation</h1>${notice ? `<p>${esc(notice)}</p>` : ""}${error ? `<p class="error">${esc(error)}</p>` : ""}`;
 
 	if (asked.length)
@@ -55,24 +55,27 @@ async function view(req: Request, viewer: Viewer, error = "", notice = "") {
 			where a.org_id = ${org.id}::bigint order by a.manager desc, a.created_at`;
 		const pending = await sql`select u.id::text, u.screen_name, u.name from affiliation_requests r join users u on u.id = r.user_id
 			where r.org_id = ${org.id}::bigint order by r.created_at`;
-		body += `<p>${org.self ? "You" : `As a manager of <a href="/${esc(org.screen_name)}">@${esc(org.screen_name)}</a>, you`} can add people to the organisation; they accept first. ${org.self ? "Managers can do the same." : ""}</p>
-<form method="post" class="row"><input type="hidden" name="do" value="add"><input name="handle" placeholder="@handle" required><button>Ask to add</button></form>
-<h2>Affiliates</h2>${
-			people.length
-				? people
-						.map(
-							(p: any) => `<div class="card split"><span><b>${esc(p.name)}</b> <a href="/${esc(p.screen_name)}">@${esc(p.screen_name)}</a>${p.manager ? ' <span class="dim">· manager</span>' : ""}</span>
+		if (org.allow_affiliates) {
+			body += `<p>${org.self ? "You" : `As a manager of <a href="/${esc(org.screen_name)}">@${esc(org.screen_name)}</a>, you`} can add people to the organisation; they accept first. ${org.self ? "Managers can do the same." : ""}</p>
+<form method="post" class="row"><input type="hidden" name="do" value="add"><input name="handle" placeholder="@handle" required><button>Ask to add</button></form>`;
+		} else {
+			body += `<p class="dim">${org.self ? "Adding affiliates is turned off for this organisation." : `Adding affiliates is turned off for <a href="/${esc(org.screen_name)}">@${esc(org.screen_name)}</a>.`}</p>`;
+		}
+		if (org.allow_affiliates || people.length)
+			body += `<h2>Affiliates</h2>${
+				people.length
+					? people
+							.map(
+								(p: any) => `<div class="card split"><span><b>${esc(p.name)}</b> <a href="/${esc(p.screen_name)}">@${esc(p.screen_name)}</a>${p.manager ? ' <span class="dim">· manager</span>' : ""}</span>
 <span class="row">${org.self ? form("manager", { user: p.id, on: p.manager ? "" : "1" }, p.manager ? "Not a manager" : "Make manager") : ""}${p.id !== viewer.id ? form("remove", { user: p.id }, "Remove", "danger") : ""}</span></div>`,
-						)
-						.join("")
-				: '<p class="dim">No affiliates yet.</p>'
-		}${
-			pending.length
-				? `<h2>Waiting to accept</h2>${pending
-						.map((p: any) => `<div class="card split"><span><b>${esc(p.name)}</b> <a href="/${esc(p.screen_name)}">@${esc(p.screen_name)}</a></span>${form("cancel", { user: p.id }, "Withdraw")}</div>`)
-						.join("")}`
-				: ""
-		}`;
+							)
+							.join("")
+					: '<p class="dim">No affiliates yet.</p>'
+			}`;
+		if (pending.length)
+			body += `<h2>Waiting to accept</h2>${pending
+				.map((p: any) => `<div class="card split"><span><b>${esc(p.name)}</b> <a href="/${esc(p.screen_name)}">@${esc(p.screen_name)}</a></span>${form("cancel", { user: p.id }, "Withdraw")}</div>`)
+				.join("")}`;
 	}
 
 	if (!org && !mine.length && !asked.length) body += '<p class="dim">This page is for organisations (accounts with the gold or grey government badge) and the people they add.</p>';
@@ -94,7 +97,7 @@ export async function orgRoute(req: Request, viewer: Viewer): Promise<Response> 
 			return view(req, viewer, `You're already an affiliate of ${AFFILIATION_LIMIT} organisations. Leave one first.`);
 		const r = await sql.begin(async (tx) => {
 			const [found] = await tx`delete from affiliation_requests r using users o
-				where r.org_id = ${orgId}::bigint and r.user_id = ${viewer.id}::bigint and o.id = r.org_id and ${isOrganizationSql(sql`o`)} returning o.screen_name`;
+				where r.org_id = ${orgId}::bigint and r.user_id = ${viewer.id}::bigint and o.id = r.org_id and ${isOrganizationSql(sql`o`)}${action === "accept" ? sql` and o.allow_affiliates` : sql``} returning o.screen_name`;
 			if (found && action === "accept") await tx`insert into affiliations (org_id, user_id) values (${orgId}::bigint, ${viewer.id}::bigint) on conflict do nothing`;
 			return found;
 		});
@@ -113,6 +116,7 @@ export async function orgRoute(req: Request, viewer: Viewer): Promise<Response> 
 	if (!org) return view(req, viewer, "Only an organisation and its managers can do that.");
 	const userId = field("user");
 	if (action === "add") {
+		if (!org.allow_affiliates) return view(req, viewer, "Adding affiliates is turned off for this organisation.");
 		const handle = localName(field("handle").replace(/^@/, ""));
 		const find = () => sql`select id::text, screen_name, verified_type, status from users where lower(screen_name) = lower(${handle}) and not instance_blocked`;
 		let [u] = await find();

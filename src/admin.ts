@@ -72,7 +72,7 @@ export const AUDIT_ACTIONS = [
 	"release_identity", "remove_affiliate", "rename_sticker_pack", "reset_branding", "reset_decor", "reset_password", "resolve_appeal",
 	"resolve_errors", "review_community_note_appeal", "revoke_api_tokens", "revoke_invite", "revoke_platform", "revoke_session", "revoke_strike",
 	"rollback_client", "save_automod", "save_operations", "save_security", "save_settings", "self_update", "self_update_rollback", "send_staff_message",
-	"send_test_mail", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
+	"send_test_mail", "set_allow_affiliates", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
 	"set_post_note", "remove_post_note", "impersonate", "reveal_staff_ips", "shadow_ban", "lift_shadow_ban", "set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
 	"set_status", "set_translator", "set_user_client", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",
@@ -129,7 +129,7 @@ const homeFilter = (home: unknown) => (home === "local" ? sql`and u.instance is 
 
 const like = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-const userListCols = sql`u.id::text as id, u.screen_name, u.name, u.avatar_url, u.verified_type, u.translator, u.flag, u.status, u.role,
+const userListCols = sql`u.id::text as id, u.screen_name, u.name, u.avatar_url, u.verified_type, u.allow_affiliates, u.translator, u.flag, u.status, u.role,
 	u.created_at, u.last_seen_at,
 	(select count(*)::int from posts p where p.user_id = u.id) as posts,
 	(select count(*)::int from follows f where f.followee_id = u.id) as followers,
@@ -642,17 +642,33 @@ const ACTIONS: Record<string, Action> = {
 		run: async (a, b) => {
 			const screenName = String(b.screen_name ?? "").trim().replace(/^@/, "");
 			const name = String(b.name ?? "").trim() || screenName;
+			const allowAffiliates = b.allow_affiliates !== false;
 			if (!/^[A-Za-z0-9_]{4,15}$/.test(screenName)) throw new AdminError("Handles are 4 to 15 letters, digits or underscores.");
 			if (superadminNameHere(screenName)) throw new AdminError("That handle is reserved.");
 			const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${screenName})`;
 			if (taken) throw new AdminError("That handle is taken.");
 			const password = randomPassword();
 			const id = newId();
-			await sql`insert into users (id, screen_name, name, password_hash, verified_type)
-				values (${id}::bigint, ${screenName}, ${name}, ${await Bun.password.hash(password)}, 'business')`;
+			await sql`insert into users (id, screen_name, name, password_hash, verified_type, allow_affiliates)
+				values (${id}::bigint, ${screenName}, ${name}, ${await Bun.password.hash(password)}, 'business', ${allowAffiliates})`;
 			forgetHeld();
-			await audit(a, "create_org", id, { screen_name: screenName });
+			await audit(a, "create_org", id, { screen_name: screenName, ...(allowAffiliates ? {} : { allow_affiliates: false }) });
 			return { id, password };
+		},
+	},
+
+	setAllowAffiliates: {
+		role: "admin",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			await guard(a, id, true);
+			if (typeof b.enabled !== "boolean") throw new AdminError("Provide a boolean setting.");
+			await sql.begin(async (tx) => {
+				await tx`update users set allow_affiliates = ${b.enabled} where id = ${id}::bigint`;
+				if (!b.enabled) await tx`delete from affiliation_requests where org_id = ${id}::bigint`;
+			});
+			await audit(a, "set_allow_affiliates", id, { enabled: b.enabled });
+			return {};
 		},
 	},
 

@@ -54,7 +54,7 @@ copy during setup, and it stays on that machine.
 - Community Notes
 - Invite-only sign-up with a required email (proven with a mailed 6-digit code
   when mail is set up; Settings > Email changes it by a confirmation link), pride flag badges, organisations
-  with affiliates, several signed-in accounts
+  with affiliates (or with the gold badge only, without affiliates; similar to the Basic plan), several signed-in accounts
 - Account settings: password change, username change, language, deactivation
   (reactivates on sign-in within 30 days), downloadable JSON and offline HTML
   data archives (including drafts,

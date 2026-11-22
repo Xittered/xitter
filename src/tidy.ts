@@ -119,8 +119,10 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	if (s.invite_quota.enabled && s.signup_mode === "invite")
 		links.push({ href: "/account/invites", text: "Invites", description: `Invite people you know to ${s.instance_name}.`, icon: TICKET, where: "both" });
 	// the menu is for organisations, and for the people in or invited to one
-	const [u] = await sql`select ${isOrganizationSql(sql`u`)}
-			or exists (select 1 from affiliations where user_id = u.id) or exists (select 1 from affiliation_requests where user_id = u.id) as org,
+	const [u] = await sql`select (${isOrganizationSql(sql`u`)} and u.allow_affiliates)
+			or exists (select 1 from affiliations where org_id = u.id)
+			or exists (select 1 from affiliations where user_id = u.id)
+			or exists (select 1 from affiliation_requests r join users o on o.id = r.org_id where r.user_id = u.id and ${isOrganizationSql(sql`o`)} and o.allow_affiliates) as org,
 		exists (select 1 from staff_messages where user_id = u.id and revoked_at is null) or exists (select 1 from moderation_appeals where user_id = u.id) as notices,
 		coalesce(u.verified_type in ('business', 'government', 'government_individual'), false) as gold, u.role
 		from users u where u.id = ${userId}::bigint`;

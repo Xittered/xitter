@@ -144,6 +144,7 @@ jobs:
           bun scripts/test-suspended-appeal.ts
           bun scripts/test-shadow-ban.ts
           bun scripts/test-staff-ips.ts
+          bun scripts/test-org-affiliates.ts
           kill "$server_pid"
           wait "$server_pid" 2>/dev/null || true
           FEDERATION_ALLOW_HTTP=1 XITTER_TEST_SUPERADMINS=imboss@localhost:3137 bun src/server.ts >> server.log 2>&1 &

@@ -41,7 +41,7 @@ export const PERMISSIONS: Record<string, Permission> = {
 	staff_community_notes: { group: "Accounts", label: "Put community notes on posts, shown without ratings", role: "admin", actions: ["setPostNote"] },
 	notes_access: { group: "Accounts", label: "Give Community Notes writing access", role: "admin", actions: ["setNotesAccess"] },
 	delete_accounts: { group: "Accounts", label: "Delete accounts", role: "admin", actions: ["deleteUser"] },
-	orgs: { group: "Accounts", label: "Create organisations and manage their affiliates", role: "admin", actions: ["createOrg", "addAffiliate", "removeAffiliate"] },
+	orgs: { group: "Accounts", label: "Create organisations and manage their affiliates", role: "admin", actions: ["createOrg", "addAffiliate", "removeAffiliate", "setAllowAffiliates"] },
 	// without it the invite list shows no codes: an open one is a way in while sign-up is by invite
 	invites: { group: "Accounts", label: "See, make and revoke invite codes", role: "admin", actions: ["createInvite", "revokeInvite"] },
 

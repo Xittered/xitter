@@ -113,7 +113,7 @@ async function items(viewerId: string, opts: { before?: number; after?: number; 
 				out.push({ kind: "money", key: `declined-${r.id}`, at: ms(r.at), users: [String(r.payer_id)], path: `/i/xmoney/r/${r.id}`, text: `declined your request for ${formatCents(Number(r.amount_cents))}` });
 		}
 		const asked = await sql`select o.id, o.screen_name, r.created_at as at from affiliation_requests r join users o on o.id = r.org_id
-			where r.user_id = ${viewerId}::bigint and r.created_at >= ${lo} and r.created_at < ${hi} order by r.created_at desc limit ${opts.limit}`;
+			where r.user_id = ${viewerId}::bigint and o.allow_affiliates and r.created_at >= ${lo} and r.created_at < ${hi} order by r.created_at desc limit ${opts.limit}`;
 		for (const r of asked)
 			out.push({ kind: "staff", key: `affiliation-${r.id}`, at: ms(r.at), text: `@${r.screen_name} asked to add you as an affiliate.`, url: "/account/organisation" });
 	}
