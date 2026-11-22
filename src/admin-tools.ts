@@ -364,6 +364,10 @@ export const toolActions: Record<string, Action> = {
 			if (!["accepted", "rejected"].includes(b.status)) throw new AdminError("Choose an outcome.");
 			await sql`update moderation_appeals set status = ${b.status}, staff_reply = ${textOf(b.reply)}, reviewer_id = ${a.id}::bigint, resolved_at = now() where id = ${id}::bigint`;
 			await audit(a, "resolve_appeal", ap.user_id, { appeal: id, status: b.status });
+			if (b.status === "accepted" && !ap.message_id) {
+				const lifted = await sql`update users set status = 'active', status_until = null, status_restore = null where id = ${ap.user_id}::bigint and status in ('suspended', 'restricted', 'limited') returning id`;
+				if (lifted.length) await audit(a, "set_status", ap.user_id, { status: "active", appeal: id });
+			}
 			if (b.status === "accepted" && ap.message_id) {
 				const revoked = await sql`update staff_messages set revoked_at = now() where id = ${ap.message_id}::bigint and kind = 'strike' and revoked_at is null returning id`;
 				if (revoked.length) await audit(a, "revoke_strike", ap.user_id, { message: ap.message_id, appeal: id });

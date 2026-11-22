@@ -143,6 +143,7 @@ jobs:
           bun scripts/test-circles.ts
           bun scripts/test-admin-post-note.ts
           bun scripts/test-suspended-appeal.ts
+          bun scripts/test-appeal-lifts-suspension.ts
           bun scripts/test-shadow-ban.ts
           bun scripts/test-staff-ips.ts
           bun scripts/test-org-affiliates.ts
