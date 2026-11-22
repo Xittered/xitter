@@ -49,6 +49,7 @@ function defaultTerms(): Section[] {
 		]],
 		["5. Rules and moderation", [
 			"Everyone must follow the rules published at /rules. We may hide or remove content, give strikes, and restrict, limit or suspend accounts that break them. You can appeal a decision from your account's notices page.",
+	"A Gold badge or Blue badge on an account does not mean we endorse it or have verified who is behind it.",
 		]],
 		...(s.features.money
 			? ([["6. Virtual currency", ["Equicoins and anything obtained with them are virtual items with no monetary value. They cannot be sold, exchanged for money or paid out, and we may adjust or reverse them at any time."]]] as Section[])
