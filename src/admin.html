@@ -2210,7 +2210,7 @@ const RENDER = {
 	async automod(main) {
 		main.innerHTML = '<h1>Automod</h1><p class="dim">New posts and profiles are checked as they\'re written. This looks through what was there before: visible posts, newest first, and every profile. Nothing happens to what it finds until you act. Settings &gt; Automod holds the strike ladder.</p>' +
 			'<div class="bar"><button class="btn primary" id="scan">Scan</button><span class="dim small" id="scanState"></span></div><div id="hits"></div>' +
-			(can("heldIdentities") ? '<h2>Held after deletion</h2><p class="dim small">When a suspended account is deleted, its handles, email and recent addresses stay here, so nobody can take the handle or a look-alike of it, and sign-ups from that email or those addresses are refused. Handles of suspended accounts that still exist are held without being listed.</p><div id="held"></div>' : "");
+			(can("heldIdentities") ? '<h2>Held identities</h2><p class="dim small">When a suspended account is deleted, or staff tick the email or address boxes when suspending it, its handles, email and recent addresses stay here, so nobody can take the handle or a look-alike of it, and sign-ups from that email or those addresses are refused. Handles of suspended accounts that still exist are held without being listed.</p><div id="held"></div>' : "");
 		const drawHeld = async () => {
 			const { held } = await api("heldIdentities");
 			$("#held").innerHTML = held.length
@@ -2417,7 +2417,10 @@ async function renderUser(main, id) {
 		'<div class="field"><label>For</label><select id="for"' + (!can("setTemporaryStatus") || self ? " disabled" : "") + '><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select></div><div class="row">' +
 		[["active", "Reinstate", ""], ["restricted", "Restrict", "Can read, can't post"], ["limited", "Limit", "Only followers see their posts"], ["suspended", "Suspend", "Signed out, hidden everywhere"]]
 			.map(([s, l, t]) => '<button class="btn' + (s === "suspended" ? " danger" : "") + '" data-status="' + s + '" title="' + esc(t) + '"' + (u.status === s || !can("setStatus") || self ? " disabled" : "") + ">" + l + "</button>").join("") +
-		"</div>" + (alts?.length && can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="withAlts"> Also for the ' + alts.length + (alts.length === 1 ? " account" : " accounts") + ' seen from the same addresses: ' + alts.map((a) => "@" + esc(a.screen_name)).join(", ") + "</label>" : "") +
+		"</div>" + (can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="holdEmail"> On suspend, refuse new sign-ups from their email, +tags and dots included</label>' +
+			'<label class="row" style="margin:6px 0"><input type="checkbox" id="holdIps"> On suspend, refuse new sign-ups from the addresses they used in the last 30 days, for 30 days</label>' +
+			'<p class="dim small" style="margin:0 0 6px">Only for Suspend until lifted. Held entries are listed under Automod and can be released there.</p>' : "") +
+		(alts?.length && can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="withAlts"> Also for the ' + alts.length + (alts.length === 1 ? " account" : " accounts") + ' seen from the same addresses: ' + alts.map((a) => "@" + esc(a.screen_name)).join(", ") + "</label>" : "") +
 		'<p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p>' +
 		(can("setShadowBan") && !self ? '<div class="row" style="margin-top:8px"><button class="btn' + (u.shadow_banned ? "" : " danger") + '" id="shadow">' + (u.shadow_banned ? "Lift shadow ban" : "Shadow ban") + "</button>" + (u.shadow_banned ? '<span class="dim small">Shadow banned</span>' : "") + "</div>" +
 			'<p class="dim small">Shadow ban: their posts and reposts stay out of every timeline, For you, trends and topics, and they aren\'t suggested as a follow. Their profile, replies, search and notifications work as before. Nobody is told, them included.</p>' : "") + "</div>" +
@@ -2551,7 +2554,7 @@ async function renderUser(main, id) {
 		const hours = $("#for").value, reason = $("#reason").value;
 		const apply = (target) => hours && b.dataset.status !== "active"
 			? api("setTemporaryStatus", { id: target, status: b.dataset.status, hours, reason })
-			: api("setStatus", { id: target, status: b.dataset.status, reason: reason || (target === id ? "" : "alt of @" + u.screen_name) });
+			: api("setStatus", { id: target, status: b.dataset.status, reason: reason || (target === id ? "" : "alt of @" + u.screen_name), holdEmail: !!$("#holdEmail")?.checked, holdIps: !!$("#holdIps")?.checked });
 		const changed = await act(() => apply(id).then(() => true));
 		if (!changed) return;
 		const skipped = [];

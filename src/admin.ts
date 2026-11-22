@@ -20,7 +20,7 @@ import { isOrganizationSql } from "./users";
 import { flagValue, unknownFlag } from "./flags";
 import { isId, newId } from "./ids";
 import { createInvite, staffHandleProblem } from "./invites";
-import { forgetHeld, retireAccount } from "./held";
+import { forgetHeld, holdIdentities, retireAccount } from "./held";
 import { forgetAllRankings } from "./ranking";
 import { activeStrikes, shutOut } from "./moderation";
 import { REASONS } from "./reports";
@@ -526,7 +526,18 @@ const ACTIONS: Record<string, Action> = {
 			await guard(a, id);
 			await sql`update users set status = ${status}, status_until = null, status_restore = null, deactivated_at = null where id = ${id}::bigint`;
 			if (status === "suspended") await shutOut(id);
-			await audit(a, "set_status", id, { status, reason: String(b.reason ?? "").slice(0, 500) || undefined });
+			const reason = String(b.reason ?? "").slice(0, 500) || undefined;
+			const held =
+				status === "suspended" && (b.holdEmail || b.holdIps)
+					? await holdIdentities(id, { email: !!b.holdEmail, ips: !!b.holdIps }, reason ?? `suspended by @${a.screen_name}`)
+					: undefined;
+			await audit(a, "set_status", id, {
+				status,
+				reason,
+				held_email: held?.email ? true : undefined,
+				held_ips: held?.ips.length || undefined,
+			});
+			if (held) return { held: { email: !!held.email, ips: held.ips.length } };
 			return {};
 		},
 	},

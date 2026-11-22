@@ -58,6 +58,23 @@ export async function handleHeld(
 	);
 }
 
+export async function holdIdentities(userId: string, what: { email: boolean; ips: boolean }, reason: string) {
+	const [u] = await sql`select email from users where id = ${userId}::bigint`;
+	if (!u) return { email: null as string | null, ips: [] as string[] };
+	const email = what.email && u.email ? String(u.email).toLowerCase() : null;
+	const ips: string[] = what.ips
+		? (
+				await sql`select distinct ip from login_events where user_id = ${userId}::bigint and ip is not null and created_at > now() - interval '30 days'`
+			).map((r: any) => r.ip)
+		: [];
+	const rows = [...(email ? [{ kind: "email", value: email }] : []), ...ips.map((ip) => ({ kind: "ip", value: ip }))];
+	for (const r of rows)
+		await sql`insert into retired_identities (kind, value, user_id, reason) values (${r.kind}, ${r.value}, ${userId}::bigint, ${reason})
+			on conflict (kind, value) do update set created_at = now(), user_id = excluded.user_id, reason = excluded.reason`;
+	if (rows.length) forgetHeld();
+	return { email, ips };
+}
+
 export async function retireAccount(userId: string, reason: string) {
 	const [u] =
 		await sql`select screen_name, email from users where id = ${userId}::bigint`;
