@@ -980,6 +980,7 @@ const ACTIONS: Record<string, Action> = {
 			if (b.legal && typeof b.legal === "object") {
 				if (typeof b.legal.operator === "string") legal.operator = b.legal.operator.trim().slice(0, 200);
 				if (typeof b.legal.contact === "string") legal.contact = b.legal.contact.trim().slice(0, 200);
+				if (typeof b.legal.jurisdiction === "string") legal.jurisdiction = b.legal.jurisdiction.trim().slice(0, 100);
 				if (b.legal.backup_days !== undefined) {
 					const days = Number(b.legal.backup_days);
 					if (!Number.isInteger(days) || days < 0 || days > 3650) throw new AdminError("Backup days must be a whole number from 0 to 3650.");

@@ -7,7 +7,7 @@ import { settings } from "./settings";
 
 type Section = [string, string[]];
 
-const BUILT_IN_UPDATED = "2026-11-20";
+const BUILT_IN_UPDATED = "2026-11-22";
 
 const anthropicKey = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
@@ -31,36 +31,72 @@ function defaultTerms(): Section[] {
 	const s = settings();
 	const name = s.instance_name;
 	const { who, reach } = operator();
-	return [
-		["1. Who we are", [
-			`${name} is operated by ${who}. It is an independent service and is not affiliated with, endorsed by or connected to X Corp. It runs Xitter, open source software, and serves X's web app pointed at our own server.`,
+	const law = (s.legal.jurisdiction ?? "").trim();
+	const sections: [string, string[]][] = [
+		["Who we are", [
+			`${name} is operated by ${who} ("we", "us"). It is an independent service and is not affiliated with, endorsed by or connected to X Corp. It runs Xitter, open source software, and serves X's web app pointed at our own server.`,
+			`These terms are an agreement between you and us. By creating an account, signing in or using ${name} in any way, including reading it without an account, you accept them. If you don't accept them, don't use the service.`,
 			`For questions about these terms, ${reach}.`,
 		]],
-		["2. Eligibility", [
+		["Eligibility", [
 			"You must be at least 13 years old to use this service, or older if the law of your country requires it. By creating an account you confirm that you meet this requirement.",
+			"You may not use the service if we have suspended or banned you before, or if the law that applies to you forbids it.",
 		]],
-		["3. Your account", [
-			"You are responsible for keeping your password safe and for everything done through your account.",
+		["Your account", [
+			"You are responsible for keeping your password safe and for everything done through your account. Tell us at once if you think someone else has used it.",
 			"You may have more than one account, but you may not use additional accounts to evade a suspension, impersonate others or harass anyone.",
+			"Usernames, badges and other account features belong to the service, not to you. We may change, reclaim or remove them at any time.",
 		]],
-		["4. Your content", [
-			"You keep ownership of everything you post. By posting, you give us a non-exclusive, royalty-free permission to store, display and transmit your content as needed to run the service" + (FEDERATION_ON ? ", including sending it to other Xitter instances" : "") + ". This permission ends when the content is deleted, except for copies kept in backups for the period stated in our Privacy Policy.",
-			"You may only post content you have the right to share, and nothing that is illegal.",
+		["Your content", [
+			"You keep ownership of everything you post. By posting, you give us a worldwide, non-exclusive, royalty-free licence to store, copy, display, adapt for display, and transmit your content as needed to run, improve and promote the service" + (FEDERATION_ON ? ", including sending it to other Xitter instances" : "") + ". This licence ends when the content is deleted, except for copies kept in backups for the period stated in our Privacy Policy, copies other people have already shared, and copies we must keep by law.",
+			"You may only post content you have the right to share, and nothing that is illegal. You are solely responsible for what you post and for the consequences of posting it.",
+			"Content is posted by users, not by us. We don't review it before it appears, we don't endorse it, and we are not responsible for it. You may find content offensive, wrong or harmful, and you use the service at your own risk.",
+			...(FEDERATION_ON ? ["Content from other Xitter instances is run by other people under their own terms. We don't control it and are not responsible for it, or for what other instances do with content we send them."] : []),
 		]],
-		["5. Rules and moderation", [
-			"Everyone must follow the rules published at /rules. We may hide or remove content, give strikes, and restrict, limit or suspend accounts that break them. You can appeal a decision from your account's notices page.",
+		["Things you may not do", [
+			"Break the law, or help anyone else break it, through the service.",
+			"Break the rules published at /rules.",
+			"Attack, overload, probe or get around the security of the service, or access it through any means other than the interfaces we provide, except as our public API allows.",
+			"Scrape or collect data from the service in bulk, or use it to train machine learning models, without our written permission.",
+			"Sell, rent or transfer your account, or anything obtained through the service.",
+		]],
+		["Rules and moderation", [
+			"We may hide or remove content, give strikes, and restrict, limit, suspend or delete accounts, at any time and for any reason, including reasons not listed in the rules, with or without notice. You can appeal a decision from your account's notices page, but we decide appeals at our discretion.",
 			"A Gold badge or Blue badge on an account does not mean we endorse it or have verified who is behind it.",
 		]],
 		...(s.features.money
-			? ([["6. Virtual currency", ["Equicoins and anything obtained with them are virtual items with no monetary value. They cannot be sold, exchanged for money or paid out, and we may adjust or reverse them at any time."]]] as Section[])
+			? ([["Virtual currency", ["Equicoins and anything obtained with them are virtual items with no monetary value. They are a limited licence, not property, and they cannot be sold, exchanged for money or paid out. We may adjust, reverse, expire or remove them at any time, including when an account is suspended or deleted, and we owe you nothing for them."]]] as Section[])
 			: []),
-		[`${s.features.money ? 7 : 6}. Disclaimer`, [
-			"The service is provided free of charge and \"as is\", without warranties of any kind. It may be unavailable, lose data, change or shut down at any time. To the extent permitted by law, we are not liable for any loss arising from your use of the service.",
+		["Ending your use", [
+			"You may stop using the service and delete your account at any time.",
+			"We may suspend or end your access, or shut the service down, at any time and for any reason. The sections on your content's licence for already shared copies, disclaimers, limits on liability, indemnity and disputes stay in force after your access ends.",
 		]],
-		[`${s.features.money ? 8 : 7}. Changes to these terms`, [
+		["Disclaimer", [
+			"The service is provided free of charge, \"as is\" and \"as available\", without warranties of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose, title and non-infringement. We don't promise that it will be available, secure, free of errors or that data will be kept. It may change, lose data or shut down at any time.",
+		]],
+		["Limits on liability", [
+			"To the fullest extent permitted by law, we, our staff and volunteers are not liable for any indirect, incidental, special, consequential or punitive damages, or for any loss of data, profits, reputation or goodwill, arising from your use of, or inability to use, the service, or from any content or conduct of other users, even if we were told such damage was possible.",
+			"To the fullest extent permitted by law, our total liability for any claim relating to the service is limited to the greater of the amount you paid us in the 12 months before the claim and 50 euros.",
+			"Nothing in these terms limits liability that cannot be limited by law, such as liability for death or personal injury caused by negligence, or for fraud.",
+		]],
+		["Indemnity", [
+			"To the extent permitted by law, you agree to defend and compensate us, our staff and volunteers for any claims, damages, losses and costs, including reasonable legal fees, arising from your content, your use of the service or your breach of these terms or of the law.",
+		]],
+		["Disputes", [
+			law
+				? `These terms are governed by the law of ${law}, and the courts of ${law} have exclusive jurisdiction over any dispute about them, except where the law of your country gives you the right to bring a claim where you live.`
+				: "These terms are governed by the law of the country where the operator is established, and its courts have exclusive jurisdiction over any dispute about them, except where the law of your country gives you the right to bring a claim where you live.",
+			"To the extent permitted by law, any claim must be brought within one year of the events it is about, and only on your own behalf, not as part of a class or representative action.",
+		]],
+		["General", [
+			"If any part of these terms can't be enforced, the rest stays in force. If we don't enforce a part, we haven't waived it.",
+			"These terms, the rules and the Privacy Policy are the whole agreement between you and us about the service. You may not transfer your rights under them; we may transfer ours to whoever takes over the service.",
+		]],
+		["Changes to these terms", [
 			"We may update these terms at any time. Changes take effect when they are posted on this page, and the date at the top shows the latest version. Continuing to use the service after a change means you accept the updated terms.",
 		]],
 	];
+	return sections.map(([title, body], i) => [`${i + 1}. ${title}`, body]);
 }
 
 function defaultPrivacy(): Section[] {
