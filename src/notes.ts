@@ -22,12 +22,12 @@ async function visible(v: Viewer, postId: string, write = false) {
 }
 
 async function membership(v: Viewer) {
-	const [user] = await sql`select notes_writer from users where id = ${v.id}::bigint`;
+	const [user] = await sql`select (notes_writer or (role is not null and instance is null)) as notes_writer from users where id = ${v.id}::bigint`;
 	return (!!user?.notes_writer || feature("notes_everyone")) && v.status === "active";
 }
 
 async function profile(v: Viewer, alias?: string) {
-	const [user] = await sql`select id::text, notes_alias, notes_writer from users where ${alias === undefined ? sql`id = ${v.id}::bigint` : sql`notes_alias = ${alias}`}`;
+	const [user] = await sql`select id::text, notes_alias, (notes_writer or (role is not null and instance is null)) as notes_writer from users where ${alias === undefined ? sql`id = ${v.id}::bigint` : sql`notes_alias = ${alias}`}`;
 	if (!user) return null;
 	const scores = await sql`select n.id, count(voter.id) as ratings, count(voter.id) filter(where r.rating = 'Helpful') as helpful, count(voter.id) filter(where r.rating = 'NotHelpful') as not_helpful
 		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active'
