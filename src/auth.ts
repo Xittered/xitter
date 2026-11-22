@@ -34,6 +34,7 @@ export type User = {
 	hide_parody_labels?: boolean;
 	hide_checkmarks?: boolean;
 	hide_ads?: boolean;
+	font_pref?: unknown;
 	// the translator globe: blue, gold (moderator) or yellow (approver)
 	translator?: "translator" | "moderator" | "approver" | null;
 	// when the badge was given ("Verified since")
@@ -191,6 +192,7 @@ const viewerCols = () => sql`u.id, u.screen_name, u.name, u.bio, u.location, u.w
 	u.preferences->>'hide_parody_labels' = 'true' as hide_parody_labels,
 	u.preferences->>'hide_checkmarks' = 'true' as hide_checkmarks,
 	u.preferences->>'hide_ads' = 'true' as hide_ads,
+	u.preferences->'font' as font_pref,
 	u.preferences->>'allow_media_tagging' as allow_media_tagging,
 	(select coalesce(json_agg(json_build_object('id', b.id::text, 'name', b.name) order by ub.position, b.name), '[]')
 		from user_badges ub join custom_badges b on b.id = ub.badge_id where ub.user_id = u.id) as badges`;

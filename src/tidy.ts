@@ -95,6 +95,7 @@ const VISIBILITY_OFF = "m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.
 const MASK = "M2 7c3-1.5 6.5-1.5 10 0 3.5-1.5 7-1.5 10 0v3c0 4-2.5 7-5.5 7-2 0-3.2-1.2-4.5-3-1.3 1.8-2.5 3-4.5 3C4.5 17 2 14 2 10V7zm2 1.3V10c0 3 1.7 5 3.5 5 1.2 0 2-.8 3.3-2.8l1.2-1.7 1.2 1.7c1.3 2 2.1 2.8 3.3 2.8 1.8 0 3.5-2 3.5-5V8.3c-2.4-.9-5-.8-7.6.3L12 9l-.4-.4C9 7.2 6.4 7.4 4 8.3zM6 10h4v2H6v-2zm8 0h4v2h-4v-2z";
 const CIRCLE = "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm-3 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3 5c-2.2 0-4 1.1-4 2.5V17h8v-.5c0-1.4-1.8-2.5-4-2.5z";
 const TONE = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 1.8v14.4a7.2 7.2 0 0 0 0-14.4z";
+const TEXT_FIELDS = "M280-160v-520H80v-120h520v120H400v520H280Zm360 0v-320H520v-120h360v120H760v320H640Z";
 const HISTORY = "M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z";
 const GIF = "M120-120v-720h720v720H120Zm80-80h560v-560H200v560Zm80-80h400L560-520 440-360l-80-100-80 180Zm40-280q25 0 42.5-17.5T380-700q0-25-17.5-42.5T320-760q-25 0-42.5 17.5T260-700q0 25 17.5 42.5T320-660Z";
 const CAT = "M5 3.5 9.2 7.6A9 9 0 0 1 12 7.2a9 9 0 0 1 2.8.4L19 3.5V12a7 7 0 0 1-14 0V3.5Zm4.5 8.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm5 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z";
@@ -134,6 +135,7 @@ export async function menuLinks(userId: string): Promise<MenuLink[]> {
 	if (feature("circles")) links.push({ href: "/account/circle", text: "Circle", description: "Choose who sees the posts you send to your Circle.", icon: CIRCLE, where: "settings" });
 	if (choiceAllowed()) links.push({ href: "/account/client", text: "Twitter client", description: "Use the current client or an older Twitter one.", icon: HISTORY, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/theme", text: "Theme", description: "Dim, a preset, or your own colours for the client.", icon: TONE, where: "settings" });
+	links.push({ href: "/account/font", text: "Font", description: "Change the font the app uses, from Google Fonts or Geist.", icon: TEXT_FIELDS, viewBox: "0 -960 960 960", where: "settings" });
 	if (feature("gifs") && gifProviders().length > 1) links.push({ href: "/account/gifs", text: "GIF provider", description: "Choose which provider supplies your GIF search results.", icon: GIF, viewBox: "0 -960 960 960", where: "settings" });
 	links.push({ href: "/account/decoration", text: "Avatar decoration", description: "Put cat ears or a decoration around your avatar.", icon: CAT, where: "both" });
 	links.push({ href: "/account/automation", text: "Automation", description: "Name the account that runs this one.", icon: ROBOT, where: "tabs" });

@@ -22,6 +22,7 @@ import { DECOR_SCRIPT } from "./decor";
 import { DECORATIONS_SCRIPT } from "./decorations";
 import { THEME_SCRIPT } from "./themes/client";
 import { bootAccentCss, bootCss, fontLinks, pageChromeCss, steamMotion, type BackgroundPaint } from "./themes/css";
+import { fontPrefHead } from "./font-settings";
 import { DEFAULT_ACCENT, swatches, themeColorOf, type Accent } from "./themes/presets";
 import { clientLook, themeForClient, type Look } from "./themes/validate";
 import { NOTICE_SCRIPT } from "./automod-notice";
@@ -433,7 +434,7 @@ ${user ? `<script>window.__XITTER_MENU__=${inline(oldMenu(links))};window.__XITT
 	return `<!DOCTYPE html><html dir="ltr" lang="en"${theme ? ` data-xitter-theme="${esc(theme.id)}"` : ""} data-xitter-accent="${esc(accent.kind === "named" ? accent.id : "custom")}"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover" />
 <meta name="theme-color" content="${theme ? esc(theme.bg.stops[0] ?? "#000000") : "#000000"}" /><title>${esc(settings().instance_name)}</title>
-<link rel="icon" type="image/png" href="/public/favicon.png" />${pwaHead()}${fontLinks(theme)}
+<link rel="icon" type="image/png" href="/public/favicon.png" />${pwaHead()}${fontLinks(theme)}${fontPrefHead((user as Viewer | null)?.font_pref, theme)}
 <style>html,body{height:100%}body{margin:0;background-color:#000}
 html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 @media (display-mode:standalone){body{overscroll-behavior-y:none}}${LOGO_CSS}
