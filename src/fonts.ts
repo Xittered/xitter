@@ -148,6 +148,27 @@ function familiesKept(): number {
 	}
 }
 
+const PACKAGED: Record<string, { family: string; url: string }> = {
+	"geist-serif": { family: "Geist Serif", url: "https://cdn.jsdelivr.net/npm/geist@1.9.2/dist/fonts/geist-serif/GeistSerifVF.woff2" },
+};
+
+async function downloadPackaged(slug: string, pkg: { family: string; url: string }): Promise<FontResult> {
+	const dir = fontsDir(slug);
+	try {
+		if (familiesKept() >= MAX_FAMILIES) throw new Error("full");
+		const buf = await fetchBuf(pkg.url, 20_000, MAX_FILE);
+		if (!isWoff2(buf)) throw new Error("not woff2");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "400-latin.woff2"), buf);
+		writeFileSync(join(dir, "fonts.css"), `@font-face{font-family:"${pkg.family}";font-style:normal;font-weight:100 900;font-display:swap;src:url(/i/xitter/fonts/${slug}/400-latin.woff2) format("woff2")}`, "utf8");
+	} catch {
+		failed.set(slug, Date.now());
+		return { ok: false, error: `couldn't load ${pkg.family}` };
+	}
+	failed.delete(slug);
+	return { ok: true, family: pkg.family, slug };
+}
+
 async function downloadFamily(family: string): Promise<FontResult> {
 	const slug = fontSlug(family);
 	const dir = fontsDir(slug);
@@ -155,6 +176,8 @@ async function downloadFamily(family: string): Promise<FontResult> {
 	if (existsSync(cssPath)) return { ok: true, family, slug };
 	const died = failed.get(slug);
 	if (died && Date.now() - died < FAIL_MS) return { ok: false, error: `couldn't load ${family}` };
+	const pkg = PACKAGED[slug];
+	if (pkg) return downloadPackaged(slug, pkg);
 	const cssUrl = `${cssOrigin()}/css2?family=${encodeURIComponent(family)}:wght@400;500;700;800&display=swap`;
 	let css: string;
 	try {
