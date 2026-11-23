@@ -250,7 +250,7 @@ function badgeLabel(u: User) {
 		label: {
 			badge: { url: first.url },
 			description: first.description,
-			...(first.org ? { url: { url: `twitter://user?screen_name=${first.org}`, urlType: "DeepLink" } } : {}),
+			...(first.org ? { url: { url: `${PUBLIC_ORIGIN}/${first.org}`, urlType: "DeepLink" } } : {}),
 			userLabelType: "BusinessLabel",
 			userLabelDisplayType: "Badge",
 		},
