@@ -16,6 +16,9 @@ test("affiliates get a checkmark by default", () => {
 	const u = person({ org } as Partial<User>);
 	expect(isVerified(u)).toBe(true);
 	expect(verifiedSince(u)?.toISOString()).toBe("2026-01-02T00:00:00.000Z");
+	const res = userResult(u) as any;
+	expect(res.affiliates_highlighted_label?.label?.url).toEqual({ url: "https://x.com/acme", urlType: "DeepLink" });
+	expect(res.verification_info?.reason?.description?.entities?.[0]?.ref?.url).toBe("https://x.com/acme");
 });
 
 test("with affiliate checkmarks off, an affiliate has none", () => {
