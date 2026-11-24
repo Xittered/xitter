@@ -1,6 +1,6 @@
 # Instances
 
-Generated from [instances.json](instances.json), sequence 27. Edit that file, then run
+Generated from [instances.json](instances.json), sequence 28. Edit that file, then run
 `bun scripts/check-instances.ts --write-md` to update this one.
 
 | Instance | Name | State | Key | Source |
@@ -15,7 +15,7 @@ Generated from [instances.json](instances.json), sequence 27. Edit that file, th
 | [x.transfur.org](https://x.transfur.org) | Xitter | federating | `swH4RzAMdz0qh_yPtNxYG4yJnWAPTgvXyeGjZ8rVGdI` | [code](https://github.com/Xittered/xitter) |
 | [x12.area12.lol](https://x12.area12.lol) | X12 | federating | `BxDn6ty57Wbfp6R8fEk8cGxO8ucUDNfGDiDanyIvUs8` |  |
 | [xit.pixelatedaria.space](https://xit.pixelatedaria.space) | xit | federating | `Y0cHJS-cafemUL2VtqitM9IaETXLYAzy54c1drovxPk` | [code](https://github.com/xittered/xitter) |
-| [xitt.flex.pm](https://xitt.flex.pm) | Xittor | federating | `954Dw1wqqWqe4XIXEaMx9wmUUBRiChbbl_vPzahgxfY` | [code](https://github.com/FlexKleks/xitter) |
+| [xitt.flex.pm](https://xitt.flex.pm) | Xittor | blocked, defederated everywhere | `954Dw1wqqWqe4XIXEaMx9wmUUBRiChbbl_vPzahgxfY` | [code](https://github.com/FlexKleks/xitter) |
 | [xitter.charl1e39.win](https://xitter.charl1e39.win) | Xitter | federating | `bDH0kpDYJBQSgiQtPnUfOgOgDyBKR9PtCCare8XB0n8` | [code](https://github.com/Xittered/xitter) |
 | [xitter.plunkinator.org](https://xitter.plunkinator.org) | Xitter | federating | `ovmWzg0FxZlqKk8oaBL6hjK-XGAhUFuh_JnAsW9M8ng` | [code](https://github.com/Xittered/xitter) |
 | [xitter.space](https://xitter.space) | Xit | federating | `C_9Cz5GkJjtSvWngLyVhfSTscLdcYo6Omx_EpSzQU5w` | [code](https://github.com/Xittered/xitter) |
