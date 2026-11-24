@@ -18,7 +18,7 @@ import { COMMIT } from "./version";
 
 const root = join(import.meta.dir, "..");
 const branch = () => process.env.UPDATE_BRANCH || settings().update_source.branch || "main";
-const EVERY = 6 * 3600_000;
+const EVERY = Math.max(1, Number(process.env.UPDATE_CHECK_MINUTES) || 360) * 60_000;
 // what the Docker image is built from (Dockerfile COPY), minus the instance list, which is data
 const TRACKED = (path: string) => /^(src|public)\//.test(path) || path === "package.json" || path === "bun.lock";
 
