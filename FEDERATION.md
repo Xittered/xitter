@@ -114,6 +114,13 @@ own admins had made. A superadmin's own instance can't be blocked this way.
 The list's maintainers stop it by marking it `blocked` in `instances.json`,
 which also ends its superadmins' access.
 
+A superadmin can make an API token on `/federation/superadmin`, after the
+password and a two-factor code, for scripts that defederate or open another
+instance. It lasts up to 30 days, shows once, is revoked from the same page,
+and sends `Authorization: Bearer xsa_...` to `POST
+/federation/superadmin/api/emergency` (`instance`, `action`, `reason`) or
+`/federation/superadmin/api/ticket` (`instance`). Every use is in the audit log.
+
 ## Leaving
 
 Set `FEDERATION=off` to stop federating, and open a pull request that removes

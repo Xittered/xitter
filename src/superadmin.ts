@@ -1,9 +1,10 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { accountPage, esc } from "./account-page";
 import { type Viewer, sessionCookies, sessionKey } from "./auth";
 import { sql } from "./db";
 import { FEDERATION_ON, INSTANCE_ID, type Incoming, b64url, baseUrl, keyFor, liftBlock, listed, listedInstance, open, seal, setBlock, signedAnswer, signedFetch } from "./federation";
 import { newId } from "./ids";
+import { requestIp } from "./login-history";
 import { hit, limitedResponse } from "./ratelimit";
 import { SUPERADMINS, isSuperadminHome, superadminOf } from "./superadmins";
 import { codeAccepted } from "./two-factor";
@@ -40,6 +41,65 @@ export async function reauthenticate(u: { id: string; password_hash: string; tot
 	return undefined;
 }
 
+const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+
+type Actor = { id: string; screen_name: string; name: string };
+
+function issueTicket(actor: Actor, instance: string) {
+	const now = Math.floor(Date.now() / 1000);
+	return seal({ typ: "xitter-superadmin-v1", iss: INSTANCE_ID, aud: instance, sub: actor.screen_name, sub_id: actor.id, name: actor.name, iat: now, exp: now + TICKET_SECONDS, nonce: b64url(randomBytes(18)) });
+}
+
+async function broadcastEmergency(actor: Actor, instance: string, action: "block" | "lift", rawReason: string, via = ""): Promise<{ ok: boolean; message: string }> {
+	const reason = rawReason.trim().slice(0, 500);
+	if (!reason) return { ok: false, message: "Give a reason." };
+	if (isSuperadminHome(instance)) return { ok: false, message: "A superadmin's home can't be defederated in an emergency. Mark it blocked in instances.json instead." };
+	const seq = Date.now();
+	const envelope = seal({ typ: "xitter-emergency-v1", iss: INSTANCE_ID, seq, instance, action, reason, by: actor.screen_name, at: new Date(seq).toISOString() });
+	await sql`insert into federation_emergencies (seq, instance, action, reason, by_name, issuer, envelope)
+		values (${seq}, ${instance}, ${action}, ${reason}, ${actor.screen_name}, ${INSTANCE_ID}, ${JSON.stringify(envelope)}::text::jsonb)`;
+	await auditHome(actor.id, `superadmin_emergency_${action}`, instance, { reason, ...(via ? { via } : {}) });
+	if (action === "block") await setBlock(instance, "emergency", reason, { id: actor.id, name: actor.screen_name });
+	else await liftBlock(instance, "emergency");
+	const results = await Promise.all(
+		listed()
+			.filter((i) => i.id !== INSTANCE_ID && i.id !== instance && i.state === "active")
+			.map(async (i) => `${i.id}: ${(await signedFetch(i.id, "POST", "/federation/v1/emergency", envelope, undefined, { anyListed: true }).catch(() => undefined))?.status ?? "unreachable"}`),
+	);
+	return { ok: true, message: `Sent. ${results.join(", ") || "No other instance to tell."} Instances that missed it pick it up within a minute.` };
+}
+
+export async function superadminApi(req: Request, url: URL): Promise<Response> {
+	const answer = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+	const bearer = /^Bearer (xsa_[A-Za-z0-9_-]{43})$/.exec(req.headers.get("authorization") ?? "")?.[1];
+	if (!bearer) return answer({ error: "Send a superadmin token as a bearer token." }, 401);
+	if (!hit("auth", requestIp(req) ?? "unknown").ok) return answer({ error: "Too many tries. Wait a few minutes." }, 429);
+	const [t] = await sql`select t.id::text, t.scopes, t.user_id::text, u.screen_name, u.name, u.role, u.status from superadmin_tokens t join users u on u.id = t.user_id
+		where t.token_hash = ${tokenHash(bearer)} and t.revoked_at is null and t.expires_at > now() and u.instance is null`;
+	if (!t || t.role !== "admin" || t.status === "suspended" || !superadminOf(INSTANCE_ID, t.screen_name, t.user_id)) return answer({ error: "That token isn't valid." }, 401);
+	if (!hit("write", `superadmin-token:${t.id}`).ok) return answer({ error: "Slow down." }, 429);
+	await sql`update superadmin_tokens set last_used_at = now() where id = ${t.id}::bigint`;
+	const actor: Actor = { id: t.user_id, screen_name: t.screen_name, name: t.name };
+	const path = url.pathname.slice("/federation/superadmin/api/".length);
+	if (path === "instances" && req.method === "GET") return answer({ instances: targets().map((i) => ({ id: i.id, name: i.name, state: i.state })) });
+	if (req.method !== "POST") return answer({ error: "Use POST." }, 405);
+	const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+	const instance = String(body.instance ?? "");
+	if (!targets().some((i) => i.id === instance)) return answer({ error: "That isn't a listed instance." }, 400);
+	if (path === "emergency") {
+		if (!(t.scopes as string[]).includes("emergency")) return answer({ error: "This token can't send emergencies." }, 403);
+		const sent = await broadcastEmergency(actor, instance, body.action === "lift" ? "lift" : "block", String(body.reason ?? ""), `token:${t.id}`);
+		return answer(sent, sent.ok ? 200 : 400);
+	}
+	if (path === "ticket") {
+		if (!(t.scopes as string[]).includes("ticket")) return answer({ error: "This token can't open other instances." }, 403);
+		if (isSuperadminHome(instance)) return answer({ error: "Use the web form for another superadmin's home." }, 400);
+		await auditHome(actor.id, "superadmin_ticket_api", instance, { via: `token:${t.id}` });
+		return answer({ ticket: issueTicket(actor, instance), accept_url: `${baseUrl(instance)}/federation/superadmin/accept`, expires_in: TICKET_SECONDS });
+	}
+	return answer({ error: "Not found." }, 404);
+}
+
 async function auditHome(actorId: string, action: string, target: string, detail: unknown) {
 	await sql`insert into audit_log (id, actor_id, action, target, detail) values (${newId()}::bigint, ${actorId}::bigint, ${action}, ${target}, ${JSON.stringify(detail)}::text::jsonb)`;
 }
@@ -48,7 +108,9 @@ const targets = () => listed().filter((i) => i.id !== INSTANCE_ID);
 
 const activeHome = (instance: string) => isSuperadminHome(instance) && listedInstance(instance)?.state !== "blocked";
 
-function homePage(req: Request, viewer: Viewer, message = "") {
+async function homePage(req: Request, viewer: Viewer, message = "") {
+	const tokens = await sql`select id::text, label, scopes, expires_at, last_used_at from superadmin_tokens
+		where user_id = ${viewer.id}::bigint and revoked_at is null and expires_at > now() order by created_at desc`;
 	const options = targets()
 		.map((i) => `<option value="${esc(i.id)}">${esc(i.name)} (${esc(i.id)})</option>`)
 		.join("");
@@ -76,6 +138,20 @@ function homePage(req: Request, viewer: Viewer, message = "") {
 <label>Two-factor code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
 <button>Send to every instance</button>
 </form>
+<h1>API tokens</h1>
+<p>A token lets a script defederate or open another instance with no password or code each time. Making one asks for both here, once. It stops working after the days you choose, and you can revoke it. The token is shown one time.</p>
+${tokens.length ? `<ul>${tokens.map((t: { id: string; label: string; scopes: string[]; expires_at: Date; last_used_at: Date | null }) => `<li>${esc(t.label)} (${esc(t.scopes.join(", "))}), until ${esc(new Date(t.expires_at).toISOString().slice(0, 16))}${t.last_used_at ? `, last used ${esc(new Date(t.last_used_at).toISOString().slice(0, 16))}` : ""}
+<form method="post" action="/federation/superadmin/token/revoke" style="display:inline"><input type="hidden" name="csrf" value="${esc(viewer.csrf)}"><input type="hidden" name="id" value="${esc(t.id)}"><button>Revoke</button></form></li>`).join("")}</ul>` : ""}
+<form method="post" action="/federation/superadmin/token">
+<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">
+<label>Label <input name="label" maxlength="60" required></label>
+<label>Days <input name="days" type="number" min="1" max="30" value="7" required></label>
+<label><input type="checkbox" name="scope_emergency" checked> Emergency defederation</label>
+<label><input type="checkbox" name="scope_ticket" checked> Open another instance's admin panel</label>
+<label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+<label>Two-factor code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+<button>Make token</button>
+</form>
 <p><a href="/admin#federation">Back to the admin panel</a></p>`,
 	});
 }
@@ -86,6 +162,35 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 	if (req.method !== "POST") return homePage(req, viewer);
 	if (req.headers.get("sec-fetch-site") && req.headers.get("sec-fetch-site") !== "same-origin") return new Response("This request came from another site.", { status: 403 });
 	const form = await req.formData().catch(() => new FormData());
+	if (url.pathname === "/federation/superadmin/token" || url.pathname === "/federation/superadmin/token/revoke") {
+		if (String(form.get("csrf") ?? "") !== viewer.csrf) return homePage(req, viewer, "That form is out of date. Try again.");
+		if (url.pathname === "/federation/superadmin/token/revoke") {
+			const id = String(form.get("id") ?? "");
+			if (!/^\d{1,19}$/.test(id)) return homePage(req, viewer, "No such token.");
+			await sql`update superadmin_tokens set revoked_at = now() where id = ${id}::bigint and user_id = ${viewer.id}::bigint and revoked_at is null`;
+			await auditHome(viewer.id, "superadmin_token_revoke", id, {});
+			return homePage(req, viewer, "Token revoked.");
+		}
+		const refused = await reauthenticate(u, form.get("password"), form.get("code"));
+		if (refused) return homePage(req, viewer, refused);
+		const label = String(form.get("label") ?? "").trim().slice(0, 60);
+		const days = Math.min(30, Math.max(1, Math.floor(Number(form.get("days")) || 7)));
+		const scopes = [form.get("scope_emergency") ? "emergency" : "", form.get("scope_ticket") ? "ticket" : ""].filter(Boolean);
+		if (!label || !scopes.length) return homePage(req, viewer, "Give the token a label and at least one permission.");
+		const [count] = await sql`select count(*)::int as n from superadmin_tokens where user_id = ${viewer.id}::bigint and revoked_at is null and expires_at > now()`;
+		if (count.n >= 10) return homePage(req, viewer, "Ten tokens are active already. Revoke one first.");
+		const token = `xsa_${b64url(randomBytes(32))}`;
+		const id = newId();
+		await sql`insert into superadmin_tokens (id, user_id, label, token_hash, scopes, expires_at)
+			values (${id}::bigint, ${viewer.id}::bigint, ${label}, ${tokenHash(token)}, ${sql.array(scopes, "TEXT")}, now() + make_interval(days => ${days}))`;
+		await auditHome(viewer.id, "superadmin_token_create", id, { label, scopes, days });
+		return accountPage({
+			req,
+			viewer,
+			title: "Superadmin",
+			body: `<h1>Your token</h1><p>Copy it now. It is not shown again. It works for ${days} day${days === 1 ? "" : "s"} (${esc(scopes.join(", "))}).</p><p><code>${esc(token)}</code></p><p><a href="/federation/superadmin">Back</a></p>`,
+		});
+	}
 	const instance = String(form.get("instance") ?? "");
 	if (!targets().some((i) => i.id === instance)) return homePage(req, viewer, "Pick an instance from the list.");
 
@@ -97,8 +202,7 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 		// took here must not be enough to sign one
 		const refused = await reauthenticate(u, form.get("password"), form.get("code"));
 		if (refused) return homePage(req, viewer, refused);
-		const now = Math.floor(Date.now() / 1000);
-		const ticket = seal({ typ: "xitter-superadmin-v1", iss: INSTANCE_ID, aud: instance, sub: viewer.screen_name, sub_id: viewer.id, name: viewer.name, iat: now, exp: now + TICKET_SECONDS, nonce: b64url(randomBytes(18)) });
+		const ticket = issueTicket(viewer, instance);
 		return accountPage({
 			req,
 			viewer,
@@ -111,23 +215,8 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 	const refused = await reauthenticate(u, form.get("password"), form.get("code"));
 	if (refused) return homePage(req, viewer, refused);
 	if (url.pathname === "/federation/superadmin/emergency") {
-		const action = form.get("action") === "lift" ? "lift" : "block";
-		const reason = String(form.get("reason") ?? "").trim().slice(0, 500);
-		if (!reason) return homePage(req, viewer, "Give a reason.");
-		if (isSuperadminHome(instance)) return homePage(req, viewer, "A superadmin's home can't be defederated in an emergency. Mark it blocked in instances.json instead.");
-		const seq = Date.now();
-		const envelope = seal({ typ: "xitter-emergency-v1", iss: INSTANCE_ID, seq, instance, action, reason, by: viewer.screen_name, at: new Date(seq).toISOString() });
-		await sql`insert into federation_emergencies (seq, instance, action, reason, by_name, issuer, envelope)
-			values (${seq}, ${instance}, ${action}, ${reason}, ${viewer.screen_name}, ${INSTANCE_ID}, ${JSON.stringify(envelope)}::text::jsonb)`;
-		await auditHome(viewer.id, `superadmin_emergency_${action}`, instance, { reason });
-		if (action === "block") await setBlock(instance, "emergency", reason, { id: viewer.id, name: viewer.screen_name });
-		else await liftBlock(instance, "emergency");
-		const results = await Promise.all(
-			listed()
-				.filter((i) => i.id !== INSTANCE_ID && i.id !== instance && i.state === "active")
-				.map(async (i) => `${i.id}: ${(await signedFetch(i.id, "POST", "/federation/v1/emergency", envelope, undefined, { anyListed: true }).catch(() => undefined))?.status ?? "unreachable"}`),
-		);
-		return homePage(req, viewer, `Sent. ${results.join(", ") || "No other instance to tell."} Instances that missed it pick it up within a minute.`);
+		const sent = await broadcastEmergency(viewer, instance, form.get("action") === "lift" ? "lift" : "block", String(form.get("reason") ?? ""));
+		return homePage(req, viewer, sent.message);
 	}
 	return new Response("not found", { status: 404 });
 }

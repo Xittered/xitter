@@ -45,7 +45,7 @@ import { pronounsFor } from "./pronouns";
 import { decorationRoute } from "./decoration-settings";
 import { startScheduler } from "./scheduled";
 import { federationRoute, startFederation } from "./federation-routes";
-import { acceptTicket, superadminHomeRoute } from "./superadmin";
+import { acceptTicket, superadminApi, superadminHomeRoute } from "./superadmin";
 import { gifProxy } from "./gifs";
 import { accountIndexRoute } from "./account-page";
 import { gifSettingsRoute } from "./gif-settings";
@@ -447,6 +447,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		return new Response(db ? "ok" : "database unreachable", { status: db ? 200 : 503, headers: { "cache-control": "no-store" } });
 	}
 	if (p === "/federation/superadmin/accept") return acceptTicket(req, requestIp(req) ?? "unknown");
+	if (p.startsWith("/federation/superadmin/api/")) return superadminApi(req, url);
 	// /i/xitter/* holds Xitter's own static files, served before sign-in and
 	// rate limits: avatar decoration images, the locally cached Google Fonts and
 	// the page's own scripts (shell.ts bootScript).

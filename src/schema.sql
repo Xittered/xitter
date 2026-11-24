@@ -1362,6 +1362,17 @@ create table if not exists federation_emergencies (
 	created_at timestamptz not null default now()
 );
 create table if not exists superadmin_tickets (nonce text primary key, used_at timestamptz not null default now());
+create table if not exists superadmin_tokens (
+	id bigint primary key,
+	user_id bigint not null references users(id) on delete cascade,
+	label text not null,
+	token_hash text not null unique,
+	scopes text[] not null,
+	created_at timestamptz not null default now(),
+	expires_at timestamptz not null,
+	last_used_at timestamp with time zone,
+	revoked_at timestamp with time zone
+);
 
 create or replace function federation_local(uid bigint) returns boolean language sql stable as $$
 	select exists (select 1 from users where id = uid and instance is null)
