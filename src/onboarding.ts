@@ -410,6 +410,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 	if (path === "/onboarding/web/actions/begin_password_recovery") {
 		const f = await form(req);
 		if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("username_or_email", "Too many emails from here. Wait an hour."));
+		if (!capPassed(req, true)) return respond(fieldError("username_or_email", "Verify you're human to reset a password: go to /account/forgot."));
 		await requestReset(String(f.username_or_email ?? f.username ?? ""));
 		return respond(fieldError("username_or_email", "If that account has an email, we've sent a reset link to it."));
 	}

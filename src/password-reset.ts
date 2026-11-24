@@ -5,6 +5,7 @@ import { accountPage, esc } from "./account-page";
 import { sql } from "./db";
 import { PUBLIC_ORIGIN } from "./config";
 import { mailEnabled, sendMail } from "./mail";
+import { capPassed } from "./cap";
 import { settings } from "./settings";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -103,9 +104,13 @@ export async function forgotRoute(req: Request, url: URL): Promise<Response> {
 			req,
 			`<h1>Reset your password</h1><p>Enter your username or the email you signed up with. We'll mail you a link.</p>
 <form method="post" action="/account/forgot"><input name="who" value="${esc(value)}" placeholder="Username or email" autocomplete="username" required>
-<button type="submit">Send reset link</button></form>`,
+<cap-widget data-cap-api-endpoint="/i/xitter/cap/" required></cap-widget>
+<button type="submit">Send reset link</button></form>
+<script>window.CAP_CUSTOM_HASHWX_URL="/i/xitter/cap/hashwx.wasm";window.CAP_CUSTOM_WASM_URL="/i/xitter/cap/cap_wasm_bg.wasm"</script>
+<script src="/i/xitter/cap/widget.js"></script>`,
 		);
 	if (req.method === "GET") return ask(url.searchParams.get("u") ?? "");
+	if (!capPassed(req, true)) return ask(url.searchParams.get("u") ?? "");
 	const f = await req.formData().catch(() => undefined);
 	await requestReset(String(f?.get("who") ?? ""));
 	return page(req, `<h1>Check your email</h1><p>If that account has an email on file, a reset link is on its way. It works for an hour.</p><p><a href="/">Back to sign in</a></p>`);
