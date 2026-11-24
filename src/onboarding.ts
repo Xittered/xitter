@@ -191,7 +191,7 @@ const LINKS: Record<string, string> = {
 const TEXTS: Record<string, () => string> = {
 	Login: () => `Sign in to ${settings().instance_name}`,
 	"See what's happening": () => `Sign in to ${settings().instance_name}`,
-	"Select an option below:": () => "Enter your username to continue.",
+	"Select an option below:": () => `Enter your username to continue. ${settings().instance_name} is an unofficial third-party instance and is not affiliated with or endorsed by X Corp.`,
 	"Email or username": () => "Username",
 	"We sent you a security code": () => "Enter your invite code",
 	"The code was sent to your device": () => `No account goes by that name yet. To create it, enter an invite to ${settings().instance_name}.`,
