@@ -5,7 +5,7 @@
 	"license": "AGPL-3.0-only",
 	"type": "module",
 	"scripts": {
-		"test:unit": "bun scripts/test-unit.ts",
+		"test:unit": "\"${npm_execpath:-bun}\" scripts/test-unit.ts",
 		"dev": "bun --watch src/server.ts",
 		"start": "bun src/server.ts",
 		"har:extract": "bun scripts/har-extract.ts",
