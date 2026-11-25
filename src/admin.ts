@@ -564,7 +564,12 @@ const ACTIONS: Record<string, Action> = {
 			await guard(a, id);
 			const on = !!b.on;
 			await sql`update users set reports_blocked = ${on} where id = ${id}::bigint`;
-			await audit(a, on ? "report_block" : "lift_report_block", id, { reason: String(b.reason ?? "").slice(0, 500) || undefined });
+			const message = on && b.notify ? newId() : undefined;
+			if (message) {
+				const body = String(b.message ?? "").trim().slice(0, 2000) || "You can no longer file reports because you filed a false report, which is against our Terms of Service.";
+				await sql`insert into staff_messages (id, user_id, actor_id, kind, body) values (${message}::bigint, ${id}::bigint, ${a.id}::bigint, 'warning', ${body})`;
+			}
+			await audit(a, on ? "report_block" : "lift_report_block", id, { reason: String(b.reason ?? "").slice(0, 500) || undefined, message });
 			return {};
 		},
 	},

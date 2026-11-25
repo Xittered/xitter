@@ -420,6 +420,27 @@ function ask(text) {
 	});
 }
 
+function askReportBlock(handle) {
+	return new Promise((done) => {
+		const back = document.createElement("div");
+		back.className = "ask";
+		back.innerHTML = '<div class="box"><p></p><label class="row"><input type="checkbox" data-tell> Tell them in their notifications</label><textarea data-text rows="4" style="width:100%;margin-top:8px" maxlength="2000" disabled></textarea><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Block</button></div></div>';
+		back.querySelector("p").textContent = "Block @" + handle + " from filing further reports?";
+		const tell = back.querySelector("[data-tell]");
+		const text = back.querySelector("[data-text]");
+		text.value = "You can no longer file reports because you filed a false report, which is against our Terms of Service.";
+		tell.onchange = () => { text.disabled = !tell.checked; };
+		const close = (answer) => { back.remove(); document.removeEventListener("keydown", key); done(answer); };
+		const key = (e) => { if (e.key === "Escape") close(null); };
+		back.querySelector("[data-no]").onclick = () => close(null);
+		back.querySelector("[data-yes]").onclick = () => close({ notify: tell.checked, message: text.value });
+		back.onclick = (e) => { if (e.target === back) close(null); };
+		document.addEventListener("keydown", key);
+		document.body.appendChild(back);
+		back.querySelector("[data-yes]").focus();
+	});
+}
+
 function notice(text, err = false) {
 	let n = $(".notice");
 	if (!n) { n = document.createElement("div"); document.body.appendChild(n); }
@@ -1641,8 +1662,9 @@ const RENDER = {
 				const span = hours ? "for " + box.querySelector("[data-for]").selectedOptions[0].textContent : "until lifted";
 				if (what === "suspended" && !(await ask("Suspend @" + r.screen_name + " " + span + "?"))) return;
 				if (what === "blockreporter") {
-					if (!(await ask("Block @" + r.reporter + " from filing further reports? This report is dismissed, and nobody is told."))) return;
-					await api("setReportBlock", { id: r.reporter_id, on: true, reason: note || "report: " + r.reason });
+					const choice = await askReportBlock(r.reporter);
+					if (!choice) return;
+					await api("setReportBlock", { id: r.reporter_id, on: true, reason: note || "report: " + r.reason, ...choice });
 					await api("resolveReport", { id: r.id, status: "dismissed", note: note || "reporter blocked from further reports", samePost: true });
 					await route();
 					refreshCounts();
@@ -2556,8 +2578,9 @@ async function renderUser(main, id) {
 	if ($("#impGo")) $("#impGo").onclick = () => act(() => api("impersonate", { id, reason: $("#impReason").value, password: $("#impPass").value, code: $("#impCode").value }).then((r) => { location.href = r.url; }));
 	if ($("#revealIps")) $("#revealIps").onclick = () => { revealIps = id; again(); };
 	if ($("#reportBlock")) $("#reportBlock").onclick = async () => {
-		if (!u.reports_blocked && !(await ask("Block reports from @" + u.screen_name + "?"))) return;
-		act(() => api("setReportBlock", { id, on: !u.reports_blocked, reason: $("#reason").value }), u.reports_blocked ? "Reports allowed again" : "Reports blocked").then(again);
+		const choice = u.reports_blocked ? {} : await askReportBlock(u.screen_name);
+		if (!choice) return;
+		act(() => api("setReportBlock", { id, on: !u.reports_blocked, reason: $("#reason").value, ...choice }), u.reports_blocked ? "Reports allowed again" : "Reports blocked").then(again);
 	};
 	if ($("#shadow")) $("#shadow").onclick = async () => {
 		if (!u.shadow_banned && !(await ask("Shadow ban @" + u.screen_name + "?"))) return;
