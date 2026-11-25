@@ -125,7 +125,8 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 			and user_id is not distinct from ${draft.userId}::bigint and reason = ${draft.reason} and created_at > now() - interval '1 minute'`;
 		const [recent] = await sql`select count(*)::int as n from reports where reporter_id = ${viewer.id}::bigint and created_at > now() - interval '1 hour'`;
 		if (recent.n >= 30) return Response.json({ errors: [{ code: 88, message: "You've sent a lot of reports. Try again later." }] }, { status: 429 });
-		if (!dupe) {
+		const [me] = await sql`select reports_blocked from users where id = ${viewer.id}::bigint`;
+		if (!dupe && !me?.reports_blocked) {
 			const reportId = newId();
 			await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
 				values (${reportId}::bigint, ${viewer.id}::bigint, ${draft.postId}::bigint, ${draft.userId}::bigint, ${draft.reason}, ${textIn})`;

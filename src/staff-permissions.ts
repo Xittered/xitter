@@ -18,6 +18,7 @@ type Permission = { group: string; label: string; role: Role; actions: string[] 
 
 export const PERMISSIONS: Record<string, Permission> = {
 	standing: { group: "Moderation", label: "Restrict, limit, suspend and reinstate accounts, for a while or until lifted, one at a time or many", role: "moderator", actions: ["setStatus", "setTemporaryStatus", "bulkStatus"] },
+	report_block: { group: "Moderation", label: "Stop accounts from filing reports: theirs are dropped and nobody is told", role: "moderator", actions: ["setReportBlock"] },
 	shadow_ban: { group: "Moderation", label: "Shadow ban accounts: their posts stay out of timelines and recommendations, and nobody is told", role: "moderator", actions: ["setShadowBan"] },
 	reports: { group: "Moderation", label: "Close reports", role: "moderator", actions: ["resolveReport"] },
 	appeals: { group: "Moderation", label: "See and answer appeals", role: "moderator", actions: ["appeals", "resolveAppeal"] },

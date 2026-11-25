@@ -73,7 +73,7 @@ export const AUDIT_ACTIONS = [
 	"resolve_errors", "review_community_note_appeal", "revoke_api_tokens", "revoke_invite", "revoke_platform", "revoke_session", "revoke_strike",
 	"rollback_client", "save_automod", "save_operations", "save_security", "save_settings", "self_update", "self_update_rollback", "send_staff_message",
 	"send_test_mail", "set_allow_affiliates", "set_badge", "set_badges", "set_clients", "set_feature_switch", "set_flag", "set_never_sensitive", "set_notes_access", "set_post_counts",
-	"set_post_note", "remove_post_note", "impersonate", "reveal_staff_ips", "shadow_ban", "lift_shadow_ban", "set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
+	"set_post_note", "remove_post_note", "impersonate", "reveal_staff_ips", "shadow_ban", "lift_shadow_ban", "report_block", "lift_report_block", "set_post_notice", "set_post_visibility", "set_profile_label", "set_remote_checkmarks", "set_role", "set_signup_mode", "set_staff_permissions",
 	"set_status", "set_translator", "set_user_client", "set_user_counts", "sign_out", "superadmin_emergency_block", "superadmin_emergency_lift", "suspend_blocked_names",
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",
 ];
@@ -412,7 +412,7 @@ const ACTIONS: Record<string, Action> = {
 		role: "support",
 		run: async (a, b) => {
 			const id = idOf(b.id);
-			const [u] = await sql`select ${userListCols}, ${allows(a.role, "invites") ? sql`u.invite_code` : sql`null::text as invite_code`}, u.bio, u.location, u.website, u.banner_url, u.based_in_override, u.country, u.signup_country, u.count_overrides, u.decor, u.notes_writer, u.never_sensitive, u.shadow_banned, u.org_badge_id::text, u.status_until, u.parody_label, u.label_id::text, u.instance, u.preferences->>'web_client' as web_client,
+			const [u] = await sql`select ${userListCols}, ${allows(a.role, "invites") ? sql`u.invite_code` : sql`null::text as invite_code`}, u.bio, u.location, u.website, u.banner_url, u.based_in_override, u.country, u.signup_country, u.count_overrides, u.decor, u.notes_writer, u.never_sensitive, u.shadow_banned, u.reports_blocked, u.org_badge_id::text, u.status_until, u.parody_label, u.label_id::text, u.instance, u.preferences->>'web_client' as web_client,
 				(select coalesce(json_agg(ub.badge_id::text order by ub.position), '[]') from user_badges ub where ub.user_id = u.id) as badge_ids,
 				(select count(*)::int from sessions s where s.user_id = u.id) as sessions,
 				(select count(*)::int from api_tokens t where t.user_id = u.id) as api_tokens,
@@ -552,6 +552,19 @@ const ACTIONS: Record<string, Action> = {
 			await sql`update users set shadow_banned = ${on} where id = ${id}::bigint`;
 			forgetAllRankings();
 			await audit(a, on ? "shadow_ban" : "lift_shadow_ban", id, { reason: String(b.reason ?? "").slice(0, 500) || undefined });
+			return {};
+		},
+	},
+
+	setReportBlock: {
+		role: "moderator",
+		run: async (a, b) => {
+			const id = idOf(b.id);
+			if (id === a.id) throw new AdminError("You can't block your own reports.");
+			await guard(a, id);
+			const on = !!b.on;
+			await sql`update users set reports_blocked = ${on} where id = ${id}::bigint`;
+			await audit(a, on ? "report_block" : "lift_report_block", id, { reason: String(b.reason ?? "").slice(0, 500) || undefined });
 			return {};
 		},
 	},
@@ -758,7 +771,7 @@ const ACTIONS: Record<string, Action> = {
 			const rows = await sql`select r.id::text as id, r.reason, r.details, r.status, r.note, r.created_at, r.handled_at,
 				r.post_id::text as post_id, p.text as post_text, p.created_at as post_created_at,
 				(select count(*)::int from media m where m.post_id = r.post_id) as post_media,
-				rep.screen_name as reporter, h.screen_name as handled_by,
+				rep.screen_name as reporter, r.reporter_id::text as reporter_id, h.screen_name as handled_by,
 				u.id::text as user_id, u.screen_name, u.name, u.avatar_url, u.verified_type, u.flag, u.status as user_status, u.role,
 				(select count(*)::int from reports o where o.user_id = r.user_id and o.status = 'open' and o.id <> r.id) as other_open,
 				(select count(*)::int from reports o where o.user_id = r.user_id and o.status = 'actioned') as actioned_before

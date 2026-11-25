@@ -1611,6 +1611,7 @@ const RENDER = {
 						'<button class="btn" data-do="dismiss">Dismiss</button>' +
 						(r.post_id && r.post_text !== null && can("deletePost") ? '<button class="btn danger" data-do="delete">Delete post</button>' : "") +
 						(r.user_id && can("setStatus") ? (can("setTemporaryStatus") ? '<select data-for aria-label="How long the sanction lasts"><option value="">until lifted</option><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="720">30 days</option></select>' : "") + '<button class="btn" data-do="restricted">Restrict author</button><button class="btn" data-do="limited">Limit author</button><button class="btn danger" data-do="suspended">Suspend author</button>' : "") +
+						(r.reporter_id && can("setReportBlock") ? '<button class="btn" data-do="blockreporter">Block reporter</button>' : "") +
 						(r.user_id ? '<a class="btn" href="#user/' + esc(r.user_id) + '">Open account</a>' : "") + "</div>"
 						: '<p class="dim small">' + esc(r.status) + (r.handled_by ? " by @" + esc(r.handled_by) : "") + (r.handled_at ? " · " + esc(when(r.handled_at)) : "") + (r.note ? " · " + esc(r.note) : "") + "</p>") +
 					"</div>";
@@ -1639,6 +1640,14 @@ const RENDER = {
 				const hours = box.querySelector("[data-for]")?.value || "";
 				const span = hours ? "for " + box.querySelector("[data-for]").selectedOptions[0].textContent : "until lifted";
 				if (what === "suspended" && !(await ask("Suspend @" + r.screen_name + " " + span + "?"))) return;
+				if (what === "blockreporter") {
+					if (!(await ask("Block @" + r.reporter + " from filing further reports? This report is dismissed, and nobody is told."))) return;
+					await api("setReportBlock", { id: r.reporter_id, on: true, reason: note || "report: " + r.reason });
+					await api("resolveReport", { id: r.id, status: "dismissed", note: note || "reporter blocked from further reports", samePost: true });
+					await route();
+					refreshCounts();
+					return;
+				}
 				if (what === "delete") await api("deletePost", { id: r.post_id });
 				const reason = note || "report: " + r.reason;
 				if (["restricted", "limited", "suspended"].includes(what))
@@ -2422,6 +2431,8 @@ async function renderUser(main, id) {
 			'<p class="dim small" style="margin:0 0 6px">Only for Suspend until lifted. Held entries are listed under Automod and can be released there.</p>' : "") +
 		(alts?.length && can("setStatus") && !self ? '<label class="row" style="margin:6px 0"><input type="checkbox" id="withAlts"> Also for the ' + alts.length + (alts.length === 1 ? " account" : " accounts") + ' seen from the same addresses: ' + alts.map((a) => "@" + esc(a.screen_name)).join(", ") + "</label>" : "") +
 		'<p class="dim small">Restrict: can read, can\'t post. Limit: only followers see their posts. Suspend: signed out and hidden everywhere.</p>' +
+		(can("setReportBlock") && !self ? '<div class="row" style="margin-top:8px"><button class="btn' + (u.reports_blocked ? "" : " danger") + '" id="reportBlock">' + (u.reports_blocked ? "Let them report again" : "Block reports") + "</button>" + (u.reports_blocked ? '<span class="dim small">Reports blocked</span>' : "") + "</div>" +
+			'<p class="dim small">Block reports: what they report is dropped before it reaches the queue. They still see it as sent, and nobody is told.</p>' : "") +
 		(can("setShadowBan") && !self ? '<div class="row" style="margin-top:8px"><button class="btn' + (u.shadow_banned ? "" : " danger") + '" id="shadow">' + (u.shadow_banned ? "Lift shadow ban" : "Shadow ban") + "</button>" + (u.shadow_banned ? '<span class="dim small">Shadow banned</span>' : "") + "</div>" +
 			'<p class="dim small">Shadow ban: their posts and reposts stay out of every timeline, For you, trends and topics, and they aren\'t suggested as a follow. Their profile, replies, search and notifications work as before. Nobody is told, them included.</p>' : "") + "</div>" +
 		// access
@@ -2544,6 +2555,10 @@ async function renderUser(main, id) {
 	};
 	if ($("#impGo")) $("#impGo").onclick = () => act(() => api("impersonate", { id, reason: $("#impReason").value, password: $("#impPass").value, code: $("#impCode").value }).then((r) => { location.href = r.url; }));
 	if ($("#revealIps")) $("#revealIps").onclick = () => { revealIps = id; again(); };
+	if ($("#reportBlock")) $("#reportBlock").onclick = async () => {
+		if (!u.reports_blocked && !(await ask("Block reports from @" + u.screen_name + "?"))) return;
+		act(() => api("setReportBlock", { id, on: !u.reports_blocked, reason: $("#reason").value }), u.reports_blocked ? "Reports allowed again" : "Reports blocked").then(again);
+	};
 	if ($("#shadow")) $("#shadow").onclick = async () => {
 		if (!u.shadow_banned && !(await ask("Shadow ban @" + u.screen_name + "?"))) return;
 		act(() => api("setShadowBan", { id, on: !u.shadow_banned, reason: $("#reason").value }), u.shadow_banned ? "Shadow ban lifted" : "Shadow banned").then(again);
