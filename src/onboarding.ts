@@ -193,6 +193,8 @@ const TEXTS: Record<string, () => string> = {
 	"See what's happening": () => `Sign in to ${settings().instance_name}`,
 	"Select an option below:": () => `Enter your username to continue. ${settings().instance_name} is an unofficial third-party instance and is not affiliated with or endorsed by X Corp.`,
 	"Email or username": () => "Username",
+	"By continuing, you agree to our ": () => `${settings().instance_name} is an unofficial third-party instance and is not affiliated with or endorsed by X Corp. By continuing, you agree to our `,
+	"By signing up, you agree to our ": () => `${settings().instance_name} is an unofficial third-party instance and is not affiliated with or endorsed by X Corp. By signing up, you agree to our `,
 	"We sent you a security code": () => "Enter your invite code",
 	"The code was sent to your device": () => `No account goes by that name yet. To create it, enter an invite to ${settings().instance_name}.`,
 	"Didn't receive a code? ": () => "",
