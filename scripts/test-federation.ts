@@ -367,7 +367,7 @@ try {
 		for (const i of list.instances) if (i.id === idOf(A.origin)) i.public_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 		await Bun.write(forgedList, JSON.stringify(list));
 		const probe = (clear = false) => {
-			const run = Bun.spawnSync(["bun", "-e", `import { sql } from "./src/db"; import { refreshRegistry, keyFor, pendingKeyChange } from "./src/federation"; await refreshRegistry(); ${clear ? `await sql\`update federation_peers set key = null where instance = \${${JSON.stringify(idOf(A.origin))}}\`;` : ""} console.log(JSON.stringify({ key: await keyFor(${JSON.stringify(idOf(A.origin))}), pending: await pendingKeyChange(${JSON.stringify(idOf(A.origin))}) })); process.exit(0);`], {
+			const run = Bun.spawnSync([process.execPath, "-e", `import { sql } from "./src/db"; import { refreshRegistry, keyFor, pendingKeyChange } from "./src/federation"; await refreshRegistry(); ${clear ? `await sql\`update federation_peers set key = null where instance = \${${JSON.stringify(idOf(A.origin))}}\`;` : ""} console.log(JSON.stringify({ key: await keyFor(${JSON.stringify(idOf(A.origin))}), pending: await pendingKeyChange(${JSON.stringify(idOf(A.origin))}) })); process.exit(0);`], {
 				env: { ...process.env, DATABASE_URL: process.env.FED_B_DB ?? "postgres://tiago@127.0.0.1:5432/fed_b", PUBLIC_ORIGIN: B.origin, FEDERATION_REGISTRY_URL: forgedList, FEDERATION_KEY_FILE: process.env.FED_B_KEY_FILE, FEDERATION_ALLOW_HTTP: "1", XITTER_TEST_SUPERADMINS: `meow@${idOf(A.origin)}` },
 			});
 			return { stdout: run.stdout, stderr: run.stderr };

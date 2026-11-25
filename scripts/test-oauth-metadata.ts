@@ -137,7 +137,7 @@ test("a host that answers with a private address is never connected to", async (
 
 // the real HTTPS fetch against a local server with a throwaway certificate
 const dir = mkdtempSync(join(tmpdir(), "oauth-metadata-"));
-const made = Bun.spawnSync(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=app.example", "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stderr: "ignore", stdout: "ignore" });
+const made = !Bun.which("openssl") ? { exitCode: 1 } : Bun.spawnSync(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=app.example", "-keyout", join(dir, "key.pem"), "-out", join(dir, "cert.pem")], { stderr: "ignore", stdout: "ignore" });
 const haveCert = made.exitCode === 0;
 let server: ReturnType<typeof Bun.serve> | undefined;
 beforeAll(() => {

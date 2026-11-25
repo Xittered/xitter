@@ -53,7 +53,7 @@ async function fixture() {
 
 if (process.argv.includes("--fixture")) await fixture();
 else test("CreateTweet persists a media-only conversation card and returns it on a fresh read", async () => {
-	const subprocess = Bun.spawn([Bun.which("bun")!, join(import.meta.dir, "test-conversation-publication.ts"), "--fixture"], { stdout: "pipe", stderr: "pipe" });
+	const subprocess = Bun.spawn([process.execPath, join(import.meta.dir, "test-conversation-publication.ts"), "--fixture"], { stdout: "pipe", stderr: "pipe" });
 	const output = await new Response(subprocess.stdout).text();
 	const error = await new Response(subprocess.stderr).text();
 	const status = await subprocess.exited;
