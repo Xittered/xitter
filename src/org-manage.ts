@@ -10,7 +10,7 @@ import { sql } from "./db";
 import { lookupRemoteUser } from "./federation-sync";
 import { isOrganizationSql, localName } from "./users";
 
-export const AFFILIATION_LIMIT = 4;
+export const AFFILIATION_LIMIT = 10;
 
 type Org = { id: string; screen_name: string; name: string; self: boolean; allow_affiliates: boolean };
 

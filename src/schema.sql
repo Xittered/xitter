@@ -441,7 +441,7 @@ create index if not exists affiliations_user_created_idx on affiliations (user_i
 create or replace function affiliations_cap() returns trigger language plpgsql as $$
 begin
 	perform 1 from users where id = new.user_id for update;
-	if (select count(*) from affiliations where user_id = new.user_id) >= 4 then
+	if (select count(*) from affiliations where user_id = new.user_id) >= 10 then
 		raise exception 'affiliation_limit' using errcode = 'P0001';
 	end if;
 	return new;
