@@ -1,6 +1,6 @@
 # Instances
 
-Generated from [instances.json](instances.json), sequence 28. Edit that file, then run
+Generated from [instances.json](instances.json), sequence 29. Edit that file, then run
 `bun scripts/check-instances.ts --write-md` to update this one.
 
 | Instance | Name | State | Key | Source |
@@ -12,6 +12,7 @@ Generated from [instances.json](instances.json), sequence 28. Edit that file, th
 | [twitter.meowing.zip](https://twitter.meowing.zip) | NOT Twitter | federating | `umKV5puos6jxSWboWpvR3vgXcvVB-1EAx7U-nSFAW8E` | [code](https://github.com/10kbcat/xitter) |
 | [x.glitchprod.xyz](https://x.glitchprod.xyz) | Digital Circus | federating | `L2-aSa8he-ufDfTVKQdosl2vW0JyWZMiGae3qhTt1a8` | [code](https://github.com/MDCYT/xitter) |
 | [x.iambrdn.dev](https://x.iambrdn.dev) | xt.brdn | federating | `2AbfXEDcr4aaSA5SY6laQbVSfHWvxK1Pbye9A67H3WI` | [code](https://github.com/braidenhxyz/xitter-compose) |
+| [x.subchroma.net](https://x.subchroma.net) | Cyborg Xitter | federating | `Rz6GhLZmNRZFiJyHk4y2tXpRbukou7MqOGM84OORQHY` | [code](https://github.com/Xittered/xitter) |
 | [x.transfur.org](https://x.transfur.org) | Xitter | federating | `swH4RzAMdz0qh_yPtNxYG4yJnWAPTgvXyeGjZ8rVGdI` | [code](https://github.com/Xittered/xitter) |
 | [x12.area12.lol](https://x12.area12.lol) | X12 | federating | `BxDn6ty57Wbfp6R8fEk8cGxO8ucUDNfGDiDanyIvUs8` |  |
 | [xit.pixelatedaria.space](https://xit.pixelatedaria.space) | xit | federating | `Y0cHJS-cafemUL2VtqitM9IaETXLYAzy54c1drovxPk` | [code](https://github.com/xittered/xitter) |
