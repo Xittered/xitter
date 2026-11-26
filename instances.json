@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"sequence": 28,
+	"sequence": 29,
 	"instances": [
 		{
 			"id": "a.aagaming.me",
@@ -49,6 +49,13 @@
 			"name": "xt.brdn",
 			"source_url": "https://github.com/braidenhxyz/xitter-compose",
 			"public_key": "2AbfXEDcr4aaSA5SY6laQbVSfHWvxK1Pbye9A67H3WI",
+			"state": "active"
+		},
+		{
+			"id": "x.subchroma.net",
+			"name": "Cyborg Xitter",
+			"source_url": "https://github.com/Xittered/xitter",
+			"public_key": "Rz6GhLZmNRZFiJyHk4y2tXpRbukou7MqOGM84OORQHY",
 			"state": "active"
 		},
 		{
