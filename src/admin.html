@@ -1961,6 +1961,7 @@ const RENDER = {
 			'<div class="settings-sections"><section class="settings-section" id="settings-account"><h2>Account and access</h2><p class="dim small">Features switched off here disappear from everyone\'s menus and composer.</p><div class="settings-grid">' +
 			'<div class="box"><h2>Sign-up</h2>' +
 			Object.entries(modes).map(([k, v]) => '<label class="row" style="margin:6px 0"><input type="radio" name="mode" value="' + k + '"' + (s.signup_mode === k ? " checked" : "") + dis + "> " + esc(v) + "</label>").join("") +
+			'<label class="row" style="margin:10px 0 6px"><input type="checkbox" id="blockDisposable"' + (s.block_disposable_email ? " checked" : "") + dis + "> Refuse throwaway email addresses (temp-mail and the like) at sign-up and email change</label>" +
 			'<div class="field" style="margin-top:12px"><label>New accounts follow (handles, comma separated)</label><input id="follows" value="' + esc(s.default_follows.map((h) => "@" + h).join(", ")) + '"' + dis + "></div>" +
 			(admin ? '<button class="btn primary" id="saveFollows">Save</button>' : "") + "</div>" +
 			'<div class="box"><h2>Name and source</h2><div class="field"><label>Instance name (page titles, text in the app, sign-in page, mail)</label><input id="name" maxlength="30" value="' + esc(s.instance_name) + '"' + dis + "></div>" +
@@ -2117,6 +2118,7 @@ const RENDER = {
 
 		const save = (body, done) => act(() => api("saveSettings", body), done).then(route);
 		main.querySelectorAll("[name=mode]").forEach((r) => r.onchange = () => act(() => api("setSignupMode", { mode: r.value }), "Sign-up mode saved"));
+		if ($("#blockDisposable")) $("#blockDisposable").onchange = (e) => act(() => api("saveSettings", { block_disposable_email: e.target.checked }), e.target.checked ? "Throwaway emails refused" : "Throwaway emails allowed");
 		if ($("#aiPending")) api("archiveImports").then(({ imports }) => {
 			const box = $("#aiPending");
 			if (!imports.length) { box.textContent = "None."; return; }

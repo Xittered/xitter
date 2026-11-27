@@ -4,6 +4,7 @@
 // address counts once its link is clicked. Sign-up proves the address with a
 // 6-digit code on X's code screen (onboarding.ts) when mail is configured.
 
+import { DISPOSABLE_EMAIL_ERROR, disposableEmailRefused } from "./disposable-email";
 import { createHash } from "node:crypto";
 import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
@@ -131,6 +132,7 @@ export async function emailRoute(req: Request, url: URL, viewer: Viewer | undefi
 	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return emailPage(req, viewer, current, "", "That form is out of date. Try again.");
 	const email = String(f?.get("email") ?? "").trim().toLowerCase();
 	if (!EMAIL.test(email) || email.length > 254) return emailPage(req, viewer, current, "", "Enter a valid email address.");
+	if (disposableEmailRefused(email)) return emailPage(req, viewer, current, "", DISPOSABLE_EMAIL_ERROR);
 	// a session someone took mustn't be a place to guess the password from
 	const refund = passwordTry(viewer.screen_name.toLowerCase());
 	if (!refund) return emailPage(req, viewer, current, "", "Too many tries for this account. Wait 15 minutes.");

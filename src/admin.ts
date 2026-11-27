@@ -975,6 +975,10 @@ const ACTIONS: Record<string, Action> = {
 				await setSetting("announcement", { id: text ? newId() : "", text, link: "", buttons });
 				changed.push("announcement");
 			}
+			if (typeof b.block_disposable_email === "boolean") {
+				await setSetting("block_disposable_email", b.block_disposable_email);
+				changed.push("block_disposable_email");
+			}
 			if (Array.isArray(b.default_follows)) {
 				const handles = [...new Set(b.default_follows.map((h: unknown) => String(h).trim().replace(/^@/, "")).filter(Boolean))] as string[];
 				const found = handles.length ? await sql`select screen_name from users where lower(screen_name) = any(${sql.array(handles.map((h) => h.toLowerCase()), "TEXT")})` : [];

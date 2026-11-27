@@ -128,6 +128,7 @@ const DEFAULTS = {
 	// Admin > Federation: show the checkmarks other instances gave their accounts
 	// (model.ts shownVerifiedType); off, they look unverified here
 	remote_checkmarks: true,
+	block_disposable_email: true,
 	// backups.ts: while `daily` is on, a database dump every `every_hours` (one
 	// of BACKUP_INTERVALS), the newest `keep` kept
 	backups: { daily: false, keep: 7, every_hours: 24 },

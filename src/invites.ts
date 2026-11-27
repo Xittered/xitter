@@ -2,6 +2,7 @@
 // admin panel later. A code is spent in the same transaction that creates the
 // account, so two people can't both use its last use.
 
+import { DISPOSABLE_EMAIL_ERROR, disposableEmailRefused } from "./disposable-email";
 import { hateInName } from "./hate";
 import { forgetHeld, handleHeld } from "./held";
 import { blockedNameIn } from "./names";
@@ -96,6 +97,7 @@ export async function evadedSuspension(email: string, ip: string | null | undefi
 export async function checkSignup(f: SignupForm) {
 	const email = f.email.trim().toLowerCase();
 	if (!EMAIL.test(email) || email.length > 254) throw new SignupError("Enter a valid email address.");
+	if (disposableEmailRefused(email)) throw new SignupError(DISPOSABLE_EMAIL_ERROR);
 	const screenName = f.screenName.trim().replace(/^@/, "");
 	const name = looksBlank(f.name) ? screenName : f.name.trim();
 	const problem = usernameProblem(screenName);
