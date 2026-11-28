@@ -6,7 +6,7 @@ import { automodStrike, shutOut } from "./moderation";
 import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { superadminNameHere } from "./superadmins";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { type Viewer, clearedCookies, closeSignedOutSockets, revokeCredentials } from "./auth";
 import { passwordTry } from "./ratelimit";
 import { requestIp } from "./login-history";
@@ -61,8 +61,15 @@ export async function changeUsername(viewer: Viewer, wanted: string): Promise<st
 		if (!viewer.role) await suspendForName(viewer.id, wanted);
 		return "That username isn't allowed here.";
 	}
-	await sql`insert into username_changes (user_id, old_name, new_name) values (${viewer.id}::bigint, ${viewer.screen_name}, ${wanted})`;
-	await sql`update users set screen_name = ${wanted} where id = ${viewer.id}::bigint`;
+	const tooOften = await sql.begin(async (tx) => {
+		await holdLock(tx, `username-changes:${viewer.id}`);
+		const [renames] = await tx`select count(*)::int as n from username_changes where user_id = ${viewer.id}::bigint and changed_at > now() - interval '1 day'`;
+		if (renames.n >= 5) return true;
+		await tx`insert into username_changes (user_id, old_name, new_name) values (${viewer.id}::bigint, ${viewer.screen_name}, ${wanted})`;
+		await tx`update users set screen_name = ${wanted} where id = ${viewer.id}::bigint`;
+		return false;
+	});
+	if (tooOften) return "You've changed your username too often today. Try again tomorrow.";
 	forgetHeld();
 	return undefined;
 }

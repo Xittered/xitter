@@ -15,7 +15,7 @@ import { SUPERADMINS, isSuperadminHome, superadminNameHere, superadminOf } from 
 import { FEDERATION_ON, ID_RE, INSTANCE_ID, acceptKeyChange, isBlocked as isFederationBlocked, isPeer, liftBlock, listBlocks, listed, listedInstance, pendingKeyChange, publicKey, registryCheckedAt, registryError, registrySequence, setBlock as setFederationBlock } from "./federation";
 import { dropRemoteMedia, pullFrom, savedRemoteMedia, storesRemoteMedia } from "./federation-sync";
 import { type Viewer, closeSignedOutSockets, revokeCredentials } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { isOrganizationSql } from "./users";
 import { flagValue, unknownFlag } from "./flags";
 import { isId, newId } from "./ids";
@@ -586,7 +586,14 @@ const ACTIONS: Record<string, Action> = {
 			}
 			// nobody demotes staff at or above their own rank, the owner included
 			await guard(a, id, true);
-			await sql`update users set role = ${role}, role_granted_by = ${role ? a.id : null}::bigint where id = ${id}::bigint`;
+			await sql.begin(async (tx) => {
+				await holdLock(tx, "local-admins");
+				if (id === a.id && role !== "admin") {
+					const [{ n }] = await tx`select count(*)::int as n from users where role = 'admin' and instance is null`;
+					if (n <= 1) throw new AdminError("You are the last admin.");
+				}
+				await tx`update users set role = ${role}, role_granted_by = ${role ? a.id : null}::bigint where id = ${id}::bigint`;
+			});
 			await audit(a, "set_role", id, { role });
 			return {};
 		},

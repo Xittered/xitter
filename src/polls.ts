@@ -1,7 +1,7 @@
 // Polls are cards: the composer creates the card first (caps /v2/cards/create),
 // then posts with card_uri. Voting goes through the card passthrough endpoint.
 
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { isId, newId } from "./ids";
 import { mediaUrl } from "./media";
 import { forbiddenText } from "./names";
@@ -133,9 +133,14 @@ export async function createCard(userId: string, raw: unknown): Promise<{ status
 	const id = newId();
 	// Store labels and image references together; a failed card creation must
 	// not leave a half-configured poll behind.
-	await sql`insert into polls (id, user_id, choices, duration_minutes, choice_media)
-		values (${id}::bigint, ${userId}::bigint, ${sql.array(choices, "TEXT")}, ${duration},
-			${media ? sql.array(media.map((m) => m ?? "0"), "INT8") : null})`;
+	await sql.begin(async (tx) => {
+		await holdLock(tx, `polls:${userId}`);
+		const [recent] = await tx`select count(*)::int as n from polls where user_id = ${userId}::bigint and created_at > now() - interval '1 hour'`;
+		if (recent.n >= 60) throw new PollError("You've made too many polls. Try again later.", 429);
+		await tx`insert into polls (id, user_id, choices, duration_minutes, choice_media)
+			values (${id}::bigint, ${userId}::bigint, ${tx.array(choices, "TEXT")}, ${duration},
+				${media ? tx.array(media.map((m) => m ?? "0"), "INT8") : null})`;
+	});
 	return { status: "OK", card_uri: `card://${id}` };
 }
 

@@ -4,7 +4,7 @@
 // staff. The flow's state lives here between steps, keyed by its flow token.
 
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { queueReview } from "./claude-mod";
 import { isId, newId } from "./ids";
 
@@ -121,17 +121,21 @@ export async function reportFlow(viewer: Viewer, url: URL, body: any): Promise<R
 			draft.userId = p?.user_id ?? null;
 		}
 		// a resent last step files once
-		const [dupe] = await sql`select 1 from reports where reporter_id = ${viewer.id}::bigint and post_id is not distinct from ${draft.postId}::bigint
-			and user_id is not distinct from ${draft.userId}::bigint and reason = ${draft.reason} and created_at > now() - interval '1 minute'`;
-		const [recent] = await sql`select count(*)::int as n from reports where reporter_id = ${viewer.id}::bigint and created_at > now() - interval '1 hour'`;
-		if (recent.n >= 30) return Response.json({ errors: [{ code: 88, message: "You've sent a lot of reports. Try again later." }] }, { status: 429 });
-		const [me] = await sql`select reports_blocked from users where id = ${viewer.id}::bigint`;
-		if (!dupe && !me?.reports_blocked) {
+		const filed = await sql.begin(async (tx) => {
+			await holdLock(tx, `reports:${viewer.id}`);
+			const [dupe] = await tx`select 1 from reports where reporter_id = ${viewer.id}::bigint and post_id is not distinct from ${draft.postId}::bigint
+				and user_id is not distinct from ${draft.userId}::bigint and reason = ${draft.reason} and created_at > now() - interval '1 minute'`;
+			const [recent] = await tx`select count(*)::int as n from reports where reporter_id = ${viewer.id}::bigint and created_at > now() - interval '1 hour'`;
+			if (recent.n >= 30) return "full";
+			const [me] = await tx`select reports_blocked from users where id = ${viewer.id}::bigint`;
+			if (dupe || me?.reports_blocked) return "";
 			const reportId = newId();
-			await sql`insert into reports (id, reporter_id, post_id, user_id, reason, details)
+			await tx`insert into reports (id, reporter_id, post_id, user_id, reason, details)
 				values (${reportId}::bigint, ${viewer.id}::bigint, ${draft.postId}::bigint, ${draft.userId}::bigint, ${draft.reason}, ${textIn})`;
-			queueReview("report", reportId);
-		}
+			return reportId;
+		});
+		if (filed === "full") return Response.json({ errors: [{ code: 88, message: "You've sent a lot of reports. Try again later." }] }, { status: 429 });
+		if (filed) queueReview("report", filed);
 		return Response.json(flow(String(body.flow_token), doneStep()));
 	}
 	return Response.json(flow(String(body.flow_token), reasonStep(draft.postId ? "post" : "account")));
