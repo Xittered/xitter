@@ -70,8 +70,9 @@ synced.
 Pictures and videos from other instances aren't saved on your server. Your
 instance fetches them from their home instance when someone views them, and
 keeps the most recent ones in memory (64 MB by default, set with
-`FEDERATION_MEDIA_CACHE_MB`). They don't show while their home instance is
-down.
+`FEDERATION_MEDIA_CACHE_MB`); files too big for that are kept in
+`media/.remote-cache`, up to 1024 MB (`FEDERATION_MEDIA_DISK_CACHE_MB`). They
+don't show while their home instance is down, unless they're still cached.
 
 To keep copies on disk, set `FEDERATION_MEDIA=store`. To delete copies saved
 by an older version, run:

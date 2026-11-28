@@ -358,6 +358,7 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `MAIL_FROM` | `"<instance name>" <noreply@xit.chococat.lol>` | Sender of that mail. Set it on your own instance: its domain must be the mail server's, or verified in Resend |
 | `ARCHIVE_DIR`, `ARCHIVE_MAX_MB` | `data/imports`, `1024` | Where uploaded X archives wait while they import, and the largest accepted |
 | `ARCHIVE_MAX_JSON_MB` | `64` | Largest JSON file in an archive (`tweets.js` and its parts) an import reads; it's parsed in memory |
+| `ARCHIVE_MAX_TWEETS` | `300000` | Most posts one archive import reads |
 | `GIF_PROVIDER` | `auto` | Instance default provider (`klipy`, `tenor` or `giphy`); users can override it in Settings > GIF provider. Auto prefers configured Klipy, then Tenor, then Giphy |
 | `KLIPY_API_KEY` | unset | Account-specific key from the [Klipy Partner Panel](https://partner.klipy.com/api-keys). This server-proxied integration requires Klipy's prior written approval |
 | `TENOR_API_KEY` | built-in public client key | Tenor API key override; set empty to disable Tenor |
@@ -378,6 +379,7 @@ cache and autovacuum settings; adjust them for the host's memory and workload.
 | `CAP_RSW_T` | `10000` | How much sequential work the Cap RSW puzzle asks for |
 | `FEDERATION_REGISTRY_URL` | `instances.json` on this repository's `main` | The list of instances to federate with |
 | `FEDERATION_MEDIA`, `FEDERATION_MEDIA_CACHE_MB` | unset, `64` | `store` keeps other instances' media on disk; otherwise it's fetched on view and the newest kept in memory |
+| `FEDERATION_MEDIA_DISK_CACHE_MB`, `FEDERATION_MEDIA_PULLS` | `1024`, `3` | Without `store`, files too big for the memory cache are kept in `media/.remote-cache` up to this size; pulls from other instances that run at once |
 | `FEDERATION_EVENTS_PER_HOUR`, `FEDERATION_MAX_ACCOUNTS` | `20000`, `100000` | Changes taken from one other instance per hour before its sync pauses, and the most of its accounts this instance takes |
 | `FEDERATION_ALLOW_HTTP` | unset | `1` federates over plain HTTP. For test instances only |
 | `XITTER_VERSION` | `version` in `package.json` | The version this instance reports in `/.well-known/xitter` and compares when an account moves |
