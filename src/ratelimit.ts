@@ -288,6 +288,8 @@ export const isMutation = (operation: string) =>
         operationTypes.mutations.has(operation) ||
         (/Mutation$/.test(operation) && !operationTypes.queries.has(operation));
 
+export const isQuery = (operation: string) => operationTypes.queries.has(operation) && !operationTypes.mutations.has(operation);
+
 setInterval(() => void readOperationTypes(), 10 * MIN).unref();
 
 // what the client calls an endpoint for limits: the GraphQL operation, or the

@@ -320,6 +320,8 @@ async function serveApi(req: Request, url: URL, viewer: Viewer | undefined): Pro
 		const acting = await actingViewer(viewer, actAs);
 		if (!acting) return apiError(403, 200, "You can't act as this account.");
 		if (!delegateMay(acting.actor!.role, req.method, path, operation)) return apiError(403, 200, "Delegates can't do this for the account.");
+		if (viewer.status === "restricted" && restrictedRefuses(req.method, path, operation, url))
+			return apiError(403, 326, "Your account can't interact right now.");
 		viewer = acting;
 	}
 	const multiUser = req.headers.get("x-web-auth-multi-user-id");
