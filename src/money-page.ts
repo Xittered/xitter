@@ -3,7 +3,7 @@
 // request's own page under it; and merchant mode at /account/merchant, in
 // Settings.
 
-import { accountPage, esc, scriptNonce } from "./account-page";
+import { accountPage, esc, formCsrfOk, scriptNonce, withCsrf } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { peers } from "./federation";
@@ -234,7 +234,7 @@ const HEART = "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.
 const tile = `<span class="tile" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${MONEY_ICON}"/></svg></span>`;
 const HOME = { href: "/account/money", label: "Back to Equicoins" };
 const page = (req: Request, viewer: Viewer, title: string, body: string, status = 200, back = HOME) =>
-	accountPage({ req, viewer, status, title, back, css: CSS, head: `<script nonce="${scriptNonce(req)}">addEventListener("DOMContentLoaded",function(){${SCRIPT}})</script>`, body });
+	accountPage({ req, viewer, status, title, back, css: CSS, head: `<script nonce="${scriptNonce(req)}">addEventListener("DOMContentLoaded",function(){${SCRIPT}})</script>`, body: withCsrf(body, viewer) });
 const who = (p: Party) => `<span class="who"><span>${esc(p.merchant?.name ?? p.name)}</span>${badges(p)}</span>`;
 const postButton = (url: string, label = "Post", auto = false) =>
 	`<button type="button" class="pill primary" data-compose="${esc(url)}"${auto ? " data-auto" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POST_ICON}"/></svg>${label}</button>`;
@@ -488,8 +488,10 @@ export async function merchantRoute(req: Request, viewer: Viewer): Promise<Respo
 	let error = "";
 	if (req.method === "POST") {
 		const m = await merchantOf(viewer.id);
+		const fresh = await formCsrfOk(req, viewer);
 		const form = await req.formData();
-		if (!m.gold) error = "Merchant mode is for organisations with a gold checkmark.";
+		if (!fresh) error = "That form is out of date. Try again.";
+		else if (!m.gold) error = "Merchant mode is for organisations with a gold checkmark.";
 		else if (viewer.actor && viewer.actor.role !== "Admin") error = "Only the account or its admins can change this.";
 		else
 			try {
@@ -512,7 +514,7 @@ export async function merchantRoute(req: Request, viewer: Viewer): Promise<Respo
 		title: "Equicoins",
 		back: { href: "/account/", label: "Back to Xitter settings" },
 		css: CSS,
-		body: `<section class="settings">${tile}
+		body: withCsrf(`<section class="settings">${tile}
 ${notice ? `<div class="notice" role="status" style="margin:0">${esc(notice)}</div>` : ""}${error ? `<div class="notice error" role="alert" style="margin:0">${esc(error)}</div>` : ""}
 <h2>Merchant mode</h2>
 <p class="dim">Payments to your organisation read as purchases, like “${shortCents(352)} at ${esc(m.name || me.name)}”, and your Pay button carries your logo.${m.gold ? "" : " It's for organisations with a gold checkmark."}</p>
@@ -525,7 +527,7 @@ ${
 <button type="submit" class="pill primary wide">Save</button></form>
 <h2>Preview</h2><div class="preview">${paymentCard({ ...sample, recipient: asMerchant }, "")}${requestCard({ id: "0", amount: null, note: "", status: "open", at: new Date(), requester: asMerchant, payer: null, paidCount: 0, paidCents: 0 }, "")}</div>`
 		: ""
-}</section>`,
+}</section>`, viewer),
 	});
 }
 
@@ -570,6 +572,7 @@ export async function moneyRoute(req: Request, viewer: Viewer): Promise<Response
 		if (!f) return new Response("Not found", { status: 404 });
 		return new Response(f.image, { headers: { "content-type": f.mime, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
 	}
+	if (req.method === "POST" && !(await formCsrfOk(req, viewer))) return new Response("That form is out of date. Go back and try again.", { status: 403 });
 	if (!(await disclaimerAccepted(viewer.id))) {
 		if (req.method !== "POST") return disclaimer(req, viewer, p + url.search);
 		const form = await req.formData();

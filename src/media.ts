@@ -484,6 +484,7 @@ async function finalize(id: string, p: Pending): Promise<Response> {
 export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promise<Response> {
 	const { fields, file } = await params(req, url);
 	const id = fields.media_id;
+	if (req.method !== "POST" && fields.command !== "STATUS") return uploadError("Use POST for this command.", 405);
 
 	switch (fields.command) {
 		case "INIT": {

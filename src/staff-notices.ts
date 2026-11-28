@@ -59,7 +59,8 @@ export async function noticesApi(req: Request, v: Viewer) {
 export async function noticesPage(req: Request, v: Viewer) {
 	const [messages, appeals] = await Promise.all([messagesOf(v.id), appealsOf(v.id)]);
 	// opening the page reads them
-	await sql`update staff_messages set read_at = now() where user_id = ${v.id}::bigint and read_at is null`;
+	const site = req.headers.get("sec-fetch-site");
+	if (site === "same-origin" || site === "none") await sql`update staff_messages set read_at = now() where user_id = ${v.id}::bigint and read_at is null`;
 	const open = appeals.some((a: any) => a.status === "open");
 	const list = messages.length
 		? messages.map((m: any) => `<div class="card ${esc(m.kind)}">

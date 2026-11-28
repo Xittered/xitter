@@ -22,7 +22,7 @@ async function cookies(username: string) {
 
 // a token from the account page, as its HTML shows it once
 async function makeToken(cookie: string, name: string, scope: "read" | "write") {
-	const html = await (await fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams({ do: "create", name, scope }) })).text();
+	const html = await (await fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams({ csrf: /ct0=([^;]+)/.exec(cookie)?.[1] ?? "", do: "create", name, scope }) })).text();
 	return /xit_[0-9a-f]{48}/.exec(html)?.[0];
 }
 
@@ -141,7 +141,7 @@ check(del.status === 200 && (await a("GET", `/posts/${pid}`)).status === 404, "D
 for (const [cookie, tok] of [[cookieA, writeA], [cookieA, readA], [cookieB, writeB]] as const) {
 	const html = await (await fetch(`${origin}/account/api`, { headers: { cookie } })).text();
 	for (const m of html.matchAll(/<b>api test (?:write|read)<\/b>[\s\S]*?name="id" value="(\d+)"/g)) {
-		await fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams({ do: "delete", id: m[1] }) });
+		await fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams({ csrf: /ct0=([^;]+)/.exec(cookie)?.[1] ?? "", do: "delete", id: m[1] }) });
 	}
 	void tok;
 }

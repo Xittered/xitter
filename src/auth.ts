@@ -104,6 +104,7 @@ export const SECURE = PUBLIC_ORIGIN.startsWith("https:") ? "; Secure" : "";
 const HOST_ONLY = SECURE ? "__Host-" : "";
 export const SESSION_COOKIE = `${HOST_ONLY}auth_token`;
 export const MULTI_COOKIE = `${HOST_ONLY}auth_multi`;
+export const LOGIN_CSRF_COOKIE = `${HOST_ONLY}login_csrf`;
 const YEAR = 60 * 60 * 24 * 365;
 // a session unused this long is over, whatever its cookie's Max-Age says
 export const SESSION_IDLE_DAYS = 90;
@@ -248,6 +249,12 @@ export function getViewer(req: Request): Promise<Viewer | undefined> {
 	const loading = loadViewer(req);
 	viewers.set(req, loading);
 	return loading;
+}
+
+export function loginCsrf(req: Request): { csrf: string; cookie: string } {
+	const old = parseCookies(req)[LOGIN_CSRF_COOKIE];
+	const csrf = old && /^[0-9a-f]{48}$/.test(old) ? old : randomHex(24);
+	return { csrf, cookie: `${LOGIN_CSRF_COOKIE}=${csrf}; Path=/; Max-Age=3600; HttpOnly; SameSite=Lax${SECURE}` };
 }
 
 export function csrfCookie(csrf: string): string {

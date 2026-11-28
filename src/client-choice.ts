@@ -36,7 +36,7 @@ export async function saveClient(viewer: Viewer, id: string) {
 }
 
 // ?client=<id>: switch, then the same page without the parameter
-export async function switchByQuery(url: URL, viewer: Viewer | undefined): Promise<Response | undefined> {
+export async function switchByQuery(req: Request, url: URL, viewer: Viewer | undefined): Promise<Response | undefined> {
 	const id = url.searchParams.get("client");
 	if (id === null) return undefined;
 	const rest = new URL(url);
@@ -45,7 +45,8 @@ export async function switchByQuery(url: URL, viewer: Viewer | undefined): Promi
 	const headers = new Headers({ location: rest.pathname.replace(/^[/\\]+/, "/") + rest.search, "cache-control": "no-store" });
 	const build = clientBuild(id);
 	if (build && choiceAllowed()) {
-		if (viewer) await saveClient(viewer, build.id);
+		const site = req.headers.get("sec-fetch-site");
+		if (viewer && (site === "same-origin" || site === "none")) await saveClient(viewer, build.id);
 		headers.append("set-cookie", clientCookie(build.id));
 	}
 	return new Response(null, { status: 302, headers });

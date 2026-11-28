@@ -8,6 +8,14 @@ import { menuLinks } from "./tidy";
 
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+export const withCsrf = (html: string, viewer: Viewer) =>
+	html.replace(/<form method="post"[^>]*>/g, (tag) => `${tag}<input type="hidden" name="csrf" value="${esc(viewer.csrf)}">`);
+
+export async function formCsrfOk(req: Request, viewer: Viewer): Promise<boolean> {
+	const form = await req.clone().formData().catch(() => undefined);
+	return !!viewer.csrf && String(form?.get("csrf") ?? "") === viewer.csrf;
+}
+
 type Theme = "light" | "dim" | "dark";
 
 const TOKENS: Record<Theme, Record<string, string>> = {

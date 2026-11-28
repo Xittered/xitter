@@ -40,7 +40,7 @@ async function session(username: string, pass = password) {
 		get: async (op: string, variables: object) =>
 			(await (await fetch(`${origin}/i/api/graphql/q/${op}?variables=${encodeURIComponent(JSON.stringify(variables))}`, { headers })).json()) as any,
 		page: async (path: string, form?: Record<string, string>) => {
-			const res = await fetch(origin + path, form ? { method: "POST", headers: { cookie: headers.cookie }, body: new URLSearchParams(form) } : { headers: { cookie: headers.cookie } });
+			const res = await fetch(origin + path, form ? { method: "POST", headers: { cookie: headers.cookie }, body: new URLSearchParams({ csrf, ...form }) } : { headers: { cookie: headers.cookie } });
 			return { status: res.status, text: await res.text() };
 		},
 	};

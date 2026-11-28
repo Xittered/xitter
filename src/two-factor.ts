@@ -1,7 +1,7 @@
 // Two-factor sign-in with an authenticator app. Set-up lives on /account/2fa
 // (the settings page links to it); the code is asked for in the sign-in dialog.
 import { createHash, randomInt } from "node:crypto";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, withCsrf } from "./account-page";
 import { sql } from "./db";
 import { hit, passwordTry } from "./ratelimit";
 import { settings } from "./settings";
@@ -101,7 +101,7 @@ export async function answerChallenge(token: string, code: string): Promise<{ us
 	});
 }
 
-const page = (req: Request, viewer: Viewer, body: string) => accountPage({ req, viewer, title: "Two-factor authentication", body });
+const page = (req: Request, viewer: Viewer, body: string) => accountPage({ req, viewer, title: "Two-factor authentication", body: withCsrf(body, viewer) });
 
 const status = (req: Request, viewer: Viewer, enabled: boolean, error = "") =>
 	page(
@@ -132,6 +132,7 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 	const form = req.method === "POST" ? await req.formData().catch(() => undefined) : undefined;
 	const field = (k: string) => String(form?.get(k) ?? "");
 	const sub = url.pathname.slice("/account/2fa".length);
+	if (req.method === "POST" && field("csrf") !== viewer.csrf) return status(req, viewer, u.totp_enabled, "That form is out of date. Try again.");
 
 	if (req.method === "POST" && sub === "/start" && !u.totp_enabled) {
 		const secret = newSecret();

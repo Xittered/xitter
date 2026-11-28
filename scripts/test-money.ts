@@ -30,9 +30,9 @@ async function signIn(username: string) {
 	const json = async (path: string) => (await fetch(`${origin}/i/api/xitter/${path}`, { headers: api })).json();
 	const page = async (query = "") => (await fetch(`${origin}/account/money${query}`, { headers })).text();
 	const send = (body: Record<string, string>) =>
-		fetch(`${origin}/account/money`, { method: "POST", headers, body: new URLSearchParams({ idem: crypto.randomUUID(), ...body }), redirect: "manual" });
+		fetch(`${origin}/account/money`, { method: "POST", headers, body: new URLSearchParams({ idem: crypto.randomUUID(), csrf, ...body }), redirect: "manual" });
 	const form = (path: string, body: Record<string, string>) =>
-		fetch(`${origin}${path}`, { method: "POST", headers, body: new URLSearchParams(body), redirect: "manual" });
+		fetch(`${origin}${path}`, { method: "POST", headers, body: new URLSearchParams({ csrf, ...body }), redirect: "manual" });
 	const postApi = async (path: string) => (await fetch(`${origin}/i/api/xitter/${path}`, { method: "POST", headers: api })).json();
 	return { headers, page, send, gql, get, json, form, postApi };
 }

@@ -2,7 +2,7 @@
 // it, tidy.ts). Admin > Invites sets how many a month; staff make theirs in the
 // panel without a limit. Only while sign-up is by invite.
 
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, formCsrfOk, withCsrf } from "./account-page";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
@@ -38,7 +38,7 @@ async function view(req: Request, viewer: Viewer, notice = "", error = "") {
 		req,
 		viewer,
 		title: "Invites",
-		body: `<h1>Invites</h1>
+		body: withCsrf(`<h1>Invites</h1>
 <p>Invite people you know to ${esc(settings().instance_name)}. ${q.enabled ? `You can make ${q.per_month} a month${q.uses > 1 ? `, each good for ${q.uses} people` : ""}; each is open for 30 days.` : ""}</p>
 ${notice ? `<p>${notice}</p>` : ""}${error ? `<p class="error">${esc(error)}</p>` : ""}
 <form method="post"><button type="submit"${reason ? " disabled" : ""}>Make an invite</button></form>
@@ -49,12 +49,13 @@ ${mine
 <div class="dim">${esc(state(i))} · ${i.uses}/${i.max_uses} used${i.used_by.length ? ` by ${i.used_by.map((n: string) => `<a href="/${esc(n)}">@${esc(n)}</a>`).join(", ")}` : ""}</div>
 ${!i.revoked && i.uses < i.max_uses ? `<div class="dim">Link: <a href="${esc(`${PUBLIC_ORIGIN}/signup?code=${encodeURIComponent(i.code)}`)}">${esc(`${PUBLIC_ORIGIN}/signup?code=${i.code}`)}</a></div>` : ""}</div>`,
 	)
-	.join("")}`,
+	.join("")}`, viewer),
 	});
 }
 
 export async function memberInvitesRoute(req: Request, viewer: Viewer): Promise<Response> {
 	if (req.method !== "POST") return view(req, viewer);
+	if (!(await formCsrfOk(req, viewer))) return view(req, viewer, "", "That form is out of date. Try again.");
 	const { reason } = await blocker(viewer);
 	if (reason) return view(req, viewer, "", reason);
 	const q = settings().invite_quota;

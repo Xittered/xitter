@@ -6,7 +6,7 @@
 // client's. /api is the documentation.
 
 import { BodyTooLarge, boundedBody } from "./api-input";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, formCsrfOk, withCsrf } from "./account-page";
 import { type User, type Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { pronounsValue } from "./pronouns";
@@ -672,7 +672,7 @@ async function tokensView(req: Request, v: Viewer, fresh = "", error = "", statu
 		status,
 		// same-origin, not no-referrer: under no-referrer the form posts with "Origin: null"
 		referrer: "same-origin",
-		body: `<h1>API tokens</h1>
+		body: withCsrf(`<h1>API tokens</h1>
 <p>A token lets a script or bot use your account through the <a href="/api">API</a>. Anyone holding it can act as you, so keep it secret and delete it when you stop using it.</p>
 <p>Changing or resetting your password revokes all API tokens. Your scripts and bots will need new tokens afterward.</p>
 ${fresh ? `<div class="card success"><b>Your new token.</b> Copy it now; it won't be shown again.<p class="code">${esc(fresh)}</p></div>` : ""}
@@ -685,7 +685,7 @@ ${tokens.length
 	? tokens.map((t: any) => `<div class="card split"><div><b>${esc(t.name)}</b><div class="dim">${t.scope === "write" ? "read and write" : "read only"} · made ${esc(when(t.created_at))} · last used ${esc(when(t.last_used_at))}</div></div>
 <form method="post"><input type="hidden" name="do" value="delete"><input type="hidden" name="id" value="${esc(t.id)}"><button class="small danger" type="submit">Delete</button></form></div>`).join("")
 	: `<p class="dim">No tokens yet.</p>`}
-<p><a href="/api">API documentation</a></p>`,
+<p><a href="/api">API documentation</a></p>`, v),
 	});
 }
 
@@ -694,6 +694,7 @@ export async function apiTokensRoute(req: Request, v: Viewer): Promise<Response>
 	// a plain form post from this page only
 	const origin = req.headers.get("origin");
 	if (origin && origin !== PUBLIC_ORIGIN) return tokensView(req, v, "", "That request didn't come from this page.");
+	if (!(await formCsrfOk(req, v))) return tokensView(req, v, "", "That form is out of date. Try again.", 403);
 	const f = await req.formData().catch(() => new FormData());
 	if (f.get("do") === "delete") {
 		const id = String(f.get("id") ?? "");

@@ -4,7 +4,7 @@
 // accepts here first; the request shows in its notifications (notifications.ts).
 // Staff still add affiliates directly from the admin panel.
 
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, formCsrfOk, withCsrf } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { lookupRemoteUser } from "./federation-sync";
@@ -79,13 +79,14 @@ async function view(req: Request, viewer: Viewer, error = "", notice = "") {
 	}
 
 	if (!org && !mine.length && !asked.length) body += '<p class="dim">This page is for organisations (accounts with the gold or grey government badge) and the people they add.</p>';
-	return accountPage({ req, viewer, title: "Organisation", body });
+	return accountPage({ req, viewer, title: "Organisation", body: withCsrf(body, viewer) });
 }
 
 const isId = (v: string) => /^\d{1,19}$/.test(v);
 
 export async function orgRoute(req: Request, viewer: Viewer): Promise<Response> {
 	if (req.method !== "POST") return view(req, viewer);
+	if (!(await formCsrfOk(req, viewer))) return view(req, viewer, "That form is out of date. Try again.");
 	const f = await req.formData().catch(() => undefined);
 	const field = (k: string) => String(f?.get(k) ?? "").trim();
 	const action = field("do");

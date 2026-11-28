@@ -2,7 +2,7 @@
 // in X's own dialog, served by onboarding.ts.
 
 import { recordSignIn } from "./login-history";
-import { login, sessionCookies } from "./auth";
+import { login, loginCsrf, sessionCookies } from "./auth";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { passwordStep } from "./password-sign-in";
 import { passwordTry } from "./ratelimit";
@@ -87,8 +87,9 @@ export async function handleOldSessions(req: Request): Promise<Response> {
 	return signedIn(step.session);
 }
 
-const codePage = (challenge: string, error = "") =>
-	html(
+const codePage = (req: Request, challenge: string, error = "") => {
+	const { csrf, cookie } = loginCsrf(req);
+	const res = html(
 		layout(
 			"Enter your code",
 			`<form method="post" action="/sessions/code">
@@ -97,6 +98,7 @@ const codePage = (challenge: string, error = "") =>
 	<p class="alt">Open your authenticator app and enter the code for ${esc(settings().instance_name)}, or use a backup code.</p>
 	${error ? `<p class="error" role="alert">${esc(error)}</p>` : ""}
 	<input type="hidden" name="c" value="${esc(challenge)}">
+	<input type="hidden" name="csrf" value="${csrf}">
 	<input name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required aria-label="Code">
 	<button type="submit">Next</button>
 	<p class="alt"><a href="/login">Start again</a></p>
@@ -104,10 +106,13 @@ const codePage = (challenge: string, error = "") =>
 		),
 		error ? 400 : 200,
 	);
+	res.headers.append("set-cookie", cookie);
+	return res;
+};
 
 // the code step after /sessions, for accounts with a second factor
 export async function handleOldCode(req: Request): Promise<Response> {
-	if (req.method !== "POST") return codePage(new URL(req.url).searchParams.get("c") ?? "");
+	if (req.method !== "POST") return codePage(req, new URL(req.url).searchParams.get("c") ?? "");
 	const f = await fields(req);
 	const answered = await answerChallenge(f.c ?? "", (f.code ?? "").trim());
 	if (answered.session) {
@@ -115,7 +120,7 @@ export async function handleOldCode(req: Request): Promise<Response> {
 		return signedIn(answered.session);
 	}
 	if (answered.unknown) return new Response(null, { status: 303, headers: { location: "/login" } });
-	return codePage(f.c ?? "", answered.error ?? "That code isn't right.");
+	return codePage(req, f.c ?? "", answered.error ?? "That code isn't right.");
 }
 
 async function passwordLogin(req: Request, typed: string, password: string): Promise<Response> {

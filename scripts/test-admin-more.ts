@@ -26,7 +26,7 @@ async function session(username: string) {
 		},
 		gql: async (op: string, vars: any) => (await (await fetch(`${origin}/i/api/graphql/q/${op}`, { method: "POST", headers, body: JSON.stringify({ variables: vars }) })).json()) as any,
 		page: async (path: string, form?: Record<string, string>) => {
-			const r = await fetch(origin + path, form ? { method: "POST", headers: { cookie: headers.cookie }, body: new URLSearchParams(form) } : { headers: { cookie: headers.cookie } });
+			const r = await fetch(origin + path, form ? { method: "POST", headers: { cookie: headers.cookie }, body: new URLSearchParams({ csrf: headers["x-csrf-token"], ...form }) } : { headers: { cookie: headers.cookie } });
 			return { status: r.status, text: await r.text() };
 		},
 	};

@@ -39,7 +39,7 @@ try {
 	const login = await fetch(`${origin}/login`, { method: "POST", body: new URLSearchParams({ username: name, password: "testpass123" }), redirect: "manual" });
 	const cookies = login.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
 	const post = (path: string, body: Record<string, string> = {}) =>
-		fetch(`${origin}/account/2fa${path}`, { method: "POST", body: new URLSearchParams(body), headers: { cookie: cookies } });
+		fetch(`${origin}/account/2fa${path}`, { method: "POST", body: new URLSearchParams({ csrf: /ct0=([^;]+)/.exec(cookies)?.[1] ?? "", ...body }), headers: { cookie: cookies } });
 
 	const start = await (await post("/start")).text();
 	const secret = /<div class="box code">([A-Z2-7 ]+)<\/div>/.exec(start)?.[1].replace(/ /g, "");

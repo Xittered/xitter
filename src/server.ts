@@ -1,4 +1,4 @@
-import { MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie, suspendedViewer } from "./auth";
+import { LOGIN_CSRF_COOKIE, MULTI_COOKIE, SESSION_COOKIE, type Viewer, clearedCookies, expireSessions, getViewer, parseCookies, csrfCookie, suspendedViewer } from "./auth";
 import { multiViewer } from "./accounts";
 import { gbeePage } from "./gbee-page";
 import { CLIENT_DIR, clientDir, clientPathAllowed, getClientFile, getClientFilePath, hasClientFile, withClientDir } from "./client-cache";
@@ -252,6 +252,31 @@ export const guestViewer = (): Viewer => ({ id: GUEST_ID, screen_name: "", name:
 const guestPage = (p: string) => p === "/home" || !RESERVED_PATHS.has(p.split("/")[1]?.toLowerCase() ?? "") && /^\/[A-Za-z0-9_]{1,15}(?:\/(?:status\/\d{1,19}(?:\/(?:photo|video)\/\d)?|with_replies|media|highlights))?\/?$/.test(p);
 const RESERVED_PATHS = new Set(["home", "explore", "notifications", "messages", "settings", "i", "compose", "search", "login", "logout", "signup", "account", "admin", "abs", "api", "media", "public", "jobs", "tos", "privacy"]);
 
+const SIGN_IN_POST = /^\/(?:login|sessions(?:\/code)?|account\/passkey(?:\/.*)?|(?:i\/jfapi\/)?onboarding\/web(?:\/.*)?)$/;
+
+async function formTokenOk(req: Request): Promise<boolean> {
+	if (!/^(?:application\/x-www-form-urlencoded|multipart\/form-data)/i.test(req.headers.get("content-type") ?? "")) return false;
+	const sent = String((await req.clone().formData().catch(() => undefined))?.get("csrf") ?? "");
+	if (!sent) return false;
+	if (sent === parseCookies(req)[LOGIN_CSRF_COOKIE]) return true;
+	const own = (await getViewer(req))?.csrf ?? (await suspendedViewer(req))?.csrf;
+	return !!own && sent === own;
+}
+
+async function crossSiteWrite(req: Request, url: URL): Promise<boolean> {
+	if (req.method === "GET" || req.method === "HEAD") return false;
+	const signIn = SIGN_IN_POST.test(url.pathname);
+	if (!signIn && !req.headers.has("cookie")) return false;
+	const site = req.headers.get("sec-fetch-site");
+	if (site) return site !== "same-origin" && site !== "none";
+	const origin = req.headers.get("origin");
+	if (origin) return origin !== PUBLIC_ORIGIN && origin !== url.origin;
+	if (!/^Mozilla\//.test(req.headers.get("user-agent") ?? "")) return false;
+	if (req.headers.get("x-csrf-token") || (await formTokenOk(req))) return false;
+	if (signIn) return true;
+	return !!((await getViewer(req)) ?? (await suspendedViewer(req)));
+}
+
 async function guestApi(url: URL): Promise<Response> {
 	if (url.pathname.endsWith("/1.1/hashflags.json")) return Response.json(await hashflagsJson());
 	const parts = url.pathname.split("/").filter(Boolean);
@@ -471,12 +496,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		return encoding ? new Response(await compressedFile(body, encoding), { headers: { ...headers, "content-encoding": encoding } }) : new Response(new Uint8Array(body), { headers });
 	}
 	if (p.startsWith("/i/xitter/")) return new Response("not found", { status: 404 });
-	if (req.method !== "GET" && req.method !== "HEAD" && req.headers.has("cookie")) {
-		const site = req.headers.get("sec-fetch-site");
-		const origin = req.headers.get("origin");
-		if (site ? site !== "same-origin" && site !== "none" : origin && origin !== PUBLIC_ORIGIN && origin !== url.origin)
-			return new Response("This request came from another site.", { status: 403 });
-	}
+	if (await crossSiteWrite(req, url)) return new Response("This request came from another site.", { status: 403 });
 	if (p.startsWith("/abs/")) return serveClient(req, p);
 	if (p === "/.well-known/xitter" || p.startsWith("/federation/v1/")) {
 		const answer = await federationRoute(req, url);
@@ -589,7 +609,7 @@ async function route(req: Request): Promise<Response | undefined> {
 	setRequestLanguage(viewer?.language ?? undefined);
 	if (!p.startsWith("/api/")) setHidden({ parody: !!viewer?.hide_parody_labels, checks: !!viewer?.hide_checkmarks });
 	if (req.method === "GET" && url.searchParams.has("client") && !API_PREFIX.test(p)) {
-		const switched = await switchByQuery(url, viewer ?? undefined);
+		const switched = await switchByQuery(req, url, viewer ?? undefined);
 		if (switched) return switched;
 	}
 	const steam = /^\/public\/steam\/(\d+)\/([^/]+)$/.exec(p);

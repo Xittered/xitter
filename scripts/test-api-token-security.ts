@@ -25,7 +25,7 @@ const origin = `http://localhost:${port}`;
 const server = Bun.spawn([process.execPath, "src/server.ts"], { cwd: join(import.meta.dir, ".."),
 	env: { ...process.env, DATABASE_URL: database.href, PORT: String(port), PUBLIC_ORIGIN: origin, MEDIA_DIR: dir, RATE_LIMITS: "off" }, stdout: "ignore", stderr: "pipe" });
 const diagnostics = new Response(server.stderr).text();
-const form = (cookie: string, data: Record<string, string>) => fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams(data) });
+const form = (cookie: string, data: Record<string, string>) => fetch(`${origin}/account/api`, { method: "POST", headers: { cookie, origin }, body: new URLSearchParams({ csrf: /ct0=([^;]+)/.exec(cookie)?.[1] ?? "", ...data }) });
 const bearer = (token: string, path = "/me", init: RequestInit = {}) => fetch(`${origin}/api/v1${path}`, { ...init,
 	headers: { ...Object.fromEntries(new Headers(init.headers)), authorization: `Bearer ${token}` } });
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
