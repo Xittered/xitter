@@ -31,5 +31,12 @@ test("GIF proxy follows redirects within provider hosts", async () => {
 test("GIF proxy rejects oversized image bodies", async () => {
 	globalThis.fetch = (async () => new Response(new Uint8Array(20 * 1024 * 1024 + 1), { headers: { "content-type": "image/gif" } })) as typeof fetch;
 	const response = await gifProxy(new URL("http://localhost/i/api/xitter/gif?u=https%3A%2F%2Ftenor.googleapis.com%2Fimage.gif"));
+	const outcome = response.status === 413 ? "refused" : await response.arrayBuffer().then(() => "served", () => "refused");
+	expect(outcome).toBe("refused");
+});
+
+test("GIF proxy refuses a declared oversized length up front", async () => {
+	globalThis.fetch = (async () => new Response(new Uint8Array(8), { headers: { "content-type": "image/gif", "content-length": String(20 * 1024 * 1024 + 1) } })) as typeof fetch;
+	const response = await gifProxy(new URL("http://localhost/i/api/xitter/gif?u=https%3A%2F%2Ftenor.googleapis.com%2Fimage.gif"));
 	expect(response.status).toBe(413);
 });
