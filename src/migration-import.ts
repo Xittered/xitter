@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { withSafeLinks } from "./articles";
 import type { Viewer } from "./auth";
 import { isBlockedEitherWay, replyLimited } from "./blocks";
 import { PUBLIC_ORIGIN } from "./config";
@@ -390,7 +391,7 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 					continue;
 				}
 				const id = newId();
-				const body = a.content_state && typeof a.content_state === "object" ? JSON.stringify(remapMedia(a.content_state)) : null;
+				const body = a.content_state && typeof a.content_state === "object" ? JSON.stringify(withSafeLinks(remapMedia(a.content_state))) : null;
 				if (body && body.length > 4 * 1024 * 1024) {
 					skip("articles", `The article "${str(a.title, 60)}" is too large.`);
 					continue;

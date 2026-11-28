@@ -422,6 +422,19 @@ function groupText(value: unknown, max: number): string | null {
 	return text;
 }
 
+function webUrl(value: unknown): string | null {
+	if (typeof value !== "string" || !value) return null;
+	try {
+		return /^https?:$/.test(new URL(value).protocol) ? value : null;
+	} catch {
+		return null;
+	}
+}
+
+function groupAvatar(value: unknown): string | null {
+	return webUrl(groupText(value, 2048));
+}
+
 // --- the inbox
 
 type Vars = Record<string, any>;
@@ -459,7 +472,7 @@ async function conversationData(viewerId: string, conversationId: string) {
 			is_grok_enabled: false,
 			participants_results: participants,
 			...(!direct && group ? {
-				group_metadata: { __typename: "XChatGroupMetadata", ...group.metadata,
+				group_metadata: { __typename: "XChatGroupMetadata", ...group.metadata, group_avatar_url: webUrl(group.metadata.group_avatar_url),
 					admin_settings: { __typename: "XChatGroupAdminSettings", ...Object.fromEntries(
 						["add_member", "edit_group_info", "send_message", "start_call", "edit_message_ttl", "block_screen_capture"].map((field) => [field, typeof group.metadata.admin_settings?.[field] === "boolean" ? group.metadata.admin_settings[field] : !["send_message", "start_call"].includes(field)]),
 					) },
@@ -629,7 +642,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const admins = [...new Set([v.id, ...ids(vars.admin_user_ids)])];
 		const now = String(Date.now());
 		const metadata = { group_name: groupText(vars.group_title, 4000) ?? "", description: "", description_ckey_version: groupText(vars.conversation_key_version, 40) ?? "1",
-			created_at_msec: now, updated_at_msec: now, group_avatar_url: groupText(vars.avatar_url, 2048), message_ttl_msec: Number.isFinite(Number(vars.ttl_msec)) && vars.ttl_msec != null ? String(Math.max(0, Math.min(Number(vars.ttl_msec), 31_536_000_000))) : null,
+			created_at_msec: now, updated_at_msec: now, group_avatar_url: groupAvatar(vars.avatar_url), message_ttl_msec: Number.isFinite(Number(vars.ttl_msec)) && vars.ttl_msec != null ? String(Math.max(0, Math.min(Number(vars.ttl_msec), 31_536_000_000))) : null,
 			classification: { __typename: "XChatGroupClassification", group_type: vars.group_type === "Normal" || vars.group_type == null ? "Normal" : (groupText(vars.group_type, 40) ?? "Normal") },
 			group_invite_details: null, screen_capture_blocking_enabled: false, is_grok_enabled: false,
 			admin_settings: { __typename: "XChatGroupAdminSettings", add_member: true, edit_group_info: true, send_message: false, start_call: false, edit_message_ttl: true, block_screen_capture: true }, admins };
@@ -650,8 +663,9 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const id = String(vars.conversation_id ?? "");
 		const group = await groupAdmin(v, id);
 		const metadata = { ...group.metadata, updated_at_msec: String(Date.now()) };
-		for (const [input, output, max] of [["group_name", "group_name", 4000], ["group_description", "description", 8000], ["avatar_url", "group_avatar_url", 2048]] as const)
+		for (const [input, output, max] of [["group_name", "group_name", 4000], ["group_description", "description", 8000]] as const)
 			if (vars[input] != null) metadata[output] = groupText(vars[input], max);
+		if (vars.avatar_url != null) metadata.group_avatar_url = groupAvatar(vars.avatar_url);
 		metadata.description_ckey_version = groupText(vars.conversation_key_version, 40);
 		await sql`update chat_conversations set metadata = ${JSON.stringify(metadata)}::text::jsonb where id = ${id}`;
 		const seqs = await actionEvents(v, id, vars.action_signatures, [3, 4]);

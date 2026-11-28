@@ -72,6 +72,21 @@ function camelKeys(v: unknown): unknown {
 	if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [camel(k), camelKeys(x)]));
 	return v;
 }
+const LINK_SCHEMES = new Set(["http:", "https:", "mailto:"]);
+const LINK_KEY = /(url|href|src|link)$/i;
+function safeLink(v: string): boolean {
+	try {
+		return LINK_SCHEMES.has(new URL(v, "https://link.invalid").protocol);
+	} catch {
+		return false;
+	}
+}
+export function withSafeLinks(v: unknown, key = ""): unknown {
+	if (typeof v === "string") return LINK_KEY.test(key) && !safeLink(v) ? "" : v;
+	if (Array.isArray(v)) return v.map((x) => withSafeLinks(x, key));
+	if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, withSafeLinks(x, k)]));
+	return v;
+}
 function clientContent(stored: any) {
 	if (!stored || !Array.isArray(stored.blocks)) return { blocks: [], entityMap: [] };
 	return {
@@ -79,13 +94,13 @@ function clientContent(stored: any) {
 			key: b.key,
 			text: b.text ?? "",
 			type: b.type ?? "unstyled",
-			data: b.data ?? {},
+			data: withSafeLinks(b.data ?? {}),
 			entityRanges: b.entity_ranges ?? b.entityRanges ?? [],
 			inlineStyleRanges: b.inline_style_ranges ?? b.inlineStyleRanges ?? [],
 		})),
 		entityMap: [stored.entity_map ?? stored.entityMap ?? []].flat().filter((e: any) => e && typeof e === "object").map((e: any) => ({
 			key: String(e.key),
-			value: { type: e.value?.type, mutability: e.value?.mutability ?? "Immutable", data: camelKeys(e.value?.data ?? {}) },
+			value: { type: e.value?.type, mutability: e.value?.mutability ?? "Immutable", data: camelKeys(withSafeLinks(e.value?.data ?? {})) },
 		})),
 	};
 }
@@ -97,6 +112,7 @@ function checkContent(content: unknown) {
 	const entities = (content as any).entity_map ?? (content as any).entityMap ?? [];
 	if (!(content as any).blocks.every(plain) || !Array.isArray(entities) || !entities.every(plain)) throw new ArticleError("The article body is not a document.");
 	if (JSON.stringify(content).length > MAX_CONTENT_BYTES) throw new ArticleError("The article is too long.");
+	if (JSON.stringify(withSafeLinks(content)) !== JSON.stringify(content)) throw new ArticleError("Links in an article must be web or email addresses.");
 }
 
 function checkTitle(title: unknown): string {
