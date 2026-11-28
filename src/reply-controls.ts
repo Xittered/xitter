@@ -75,5 +75,6 @@ export const replyDenied = (userId: string) => sql`r.reply_policy is not null an
 	or (r.reply_policy = 'Followers' and exists (select 1 from follows f where f.follower_id = ${userId}::bigint and f.followee_id = r.user_id))
 	or exists (select 1 from post_mentions m where m.post_id = r.id and m.user_id = ${userId}::bigint)
 	or (r.reply_policy in ('Verified', 'Premium') and exists (select 1 from users x where x.id = ${userId}::bigint and (x.verified_type is not null or (${feature("affiliate_checkmarks")} and exists (select 1 from affiliations af where af.user_id = x.id)))))
-	or (r.reply_policy in ('Country', 'CountryOfOrigin') and exists (select 1 from users x where x.id = ${userId}::bigint and (coalesce(nullif(trim(x.based_in_override), ''), trim(x.country)) = any(r.reply_allowed_values) or lower(coalesce(nullif(trim(x.based_in_override), ''), trim(x.country))) = any(r.reply_allowed_values))))
+	or (r.reply_policy in ('Country', 'CountryOfOrigin') and exists (select 1 from users x where x.id = ${userId}::bigint
+		and (nullif(trim(x.based_in_override), '') is not null or x.country_changed_at is null or x.country_changed_at < now() - interval '7 days') and (coalesce(nullif(trim(x.based_in_override), ''), trim(x.country)) = any(r.reply_allowed_values) or lower(coalesce(nullif(trim(x.based_in_override), ''), trim(x.country))) = any(r.reply_allowed_values))))
 )`;

@@ -801,6 +801,7 @@ create table if not exists repost_mutes (
 -- for "About this account": the app and country an account signed up from
 alter table users add column if not exists signup_source text;
 alter table users add column if not exists signup_country text;
+alter table users add column if not exists country_changed_at timestamptz;
 -- staff's own text for "Account based in", shown as typed instead of the detected region
 alter table users add column if not exists based_in_override text;
 

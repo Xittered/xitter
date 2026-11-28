@@ -38,6 +38,6 @@ export async function changeCountryFlow(viewer: Viewer, body: unknown): Promise<
 	const code = codeIn(body)?.trim().toUpperCase();
 	const name = code && /^[A-Z]{2}$/.test(code) ? countryName(code) : undefined;
 	if (!code || !name) return Response.json(step("Country not changed", "That isn't a country we know."));
-	await sql`update users set country = ${code} where id = ${viewer.id}::bigint`;
+	await sql`update users set country_changed_at = case when country is distinct from ${code} then now() else country_changed_at end, country = ${code} where id = ${viewer.id}::bigint`;
 	return Response.json(step("Country changed", `Your account is now based in ${name}. To show the country instead of the region, go to Settings > About your account.`));
 }
