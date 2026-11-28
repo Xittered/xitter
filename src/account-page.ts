@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { parseCookies, type Viewer } from "./auth";
 import { loadBuild } from "./build";
 import { readCached } from "./client-cache";
@@ -175,6 +176,14 @@ const FRAMED = `(function(){
 
 const ARROW = "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z";
 
+const nonces = new WeakMap<Request, string>();
+
+export function scriptNonce(req: Request): string {
+	let nonce = nonces.get(req);
+	if (!nonce) nonces.set(req, (nonce = randomBytes(16).toString("base64")));
+	return nonce;
+}
+
 type PageOptions = {
 	req: Request;
 	title: string;
@@ -222,7 +231,7 @@ export async function accountPage({ req, title, body, viewer, status = 200, back
 <link rel="icon" type="image/png" href="/public/favicon.png">
 ${head}
 <style>${fontFaces()}${CSS}${extra}${css}</style>
-<script>${FRAMED}</script>
+<script nonce="${scriptNonce(req)}">${FRAMED}</script>
 </head>
 <body>
 <div class="col">
@@ -237,7 +246,7 @@ ${body}
 	// never inside another site's frame: these pages hold one-click actions
 	// (authorizing an app, removing 2FA) a hidden frame could be clicked into.
 	// Our own client frames them in Settings.
-	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": cache, "x-frame-options": "SAMEORIGIN", "content-security-policy": "frame-ancestors 'self'" });
+	const headers = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": cache, "x-frame-options": "SAMEORIGIN", "content-security-policy": `frame-ancestors 'self'; script-src 'nonce-${scriptNonce(req)}' 'wasm-unsafe-eval'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'` });
 	if (referrer) headers.set("referrer-policy", referrer);
 	if (viewer) for (const c of nightModeCookies(look)) headers.append("set-cookie", c);
 	return new Response(html, { status, headers });

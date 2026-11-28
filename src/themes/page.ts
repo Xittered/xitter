@@ -666,7 +666,7 @@ function swatchStyle(g: Gradient) {
 }
 
 async function themePage(req: Request, viewer: Viewer, current: Theme | null, notices: { error?: string; warnings?: string[] } = {}) {
-	const { accountPage, esc } = await import("../account-page");
+	const { accountPage, esc, scriptNonce } = await import("../account-page");
 	const form = (fields: string, extra = "") =>
 		`<form method="post" action="/account/theme" ${extra}><input type="hidden" name="csrf" value="${esc(viewer.csrf)}">${fields}</form>`;
 	const pick = (id: string, name: string, g: Gradient, on: boolean) =>
@@ -834,8 +834,8 @@ async function themePage(req: Request, viewer: Viewer, current: Theme | null, no
 		<div id="shop" class="shop" data-pick="theme" data-kind="background" data-lock="1"></div>
 		<button type="button" id="more" hidden>Load more</button>
 	</dialog>
-	<script>${shopBrowserScript()}</script>
-	<script>${EDITOR_SCRIPT}</script>`;
+	<script nonce="${scriptNonce(req)}">${shopBrowserScript()}</script>
+	<script nonce="${scriptNonce(req)}">${EDITOR_SCRIPT}</script>`;
 	const head = fontLinks(current);
 	return accountPage({ req, viewer, title: "Theme", status: notices.error ? 400 : 200, body, css: PAGE_CSS, head });
 }

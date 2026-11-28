@@ -10,7 +10,7 @@
 // field's autofill, as its autocomplete="username webauthn" asks, and adds a
 // button above the field.
 import { signInCookies } from "./accounts";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import { startSession, type Viewer } from "./auth";
 import { PASSKEY_ORIGINS, PUBLIC_HOSTNAME } from "./config";
 import { sql } from "./db";
@@ -207,7 +207,7 @@ function signInPage(req: Request): Promise<Response> {
 <p class="error" id="unsupported" hidden>This browser can't use passkeys.</p>
 <form><button type="button" id="go">Sign in with a passkey</button></form>
 <p class="dim"><a href="/">Sign in with your password instead</a></p>
-<script>${CLIENT}
+<script nonce="${scriptNonce(req)}">${CLIENT}
 if(window.xitterPasskey){document.getElementById("go").onclick=function(){xitterPasskey.signIn()}}
 else{document.getElementById("unsupported").hidden=false;document.getElementById("go").disabled=true}</script>`,
 	});
@@ -215,6 +215,7 @@ else{document.getElementById("unsupported").hidden=false;document.getElementById
 
 // Settings: the account's passkeys
 const MANAGE_SCRIPT = `${CLIENT}
+document.querySelectorAll("form[data-confirm]").forEach(function(f){f.addEventListener("submit",function(e){if(!confirm(f.dataset.confirm))e.preventDefault()})});
 (function(){
 	var form=document.getElementById("add"),err=document.getElementById("add-error");
 	if(!window.xitterPasskey){err.textContent="This browser can't make passkeys.";err.hidden=false;form.querySelector("button").disabled=true;return}
@@ -317,7 +318,7 @@ export async function passkeysRoute(req: Request, url: URL, viewer: Viewer): Pro
 				.map(
 					(k: any) => `<div class="card split"><div><p><strong>${esc(k.name)}</strong></p>
 <p class="meta">Added ${when(k.created_at)} · last used ${when(k.last_used_at)}${k.backed_up ? " · synced" : ""}</p></div>
-<form method="post" action="/account/passkeys/remove" class="inline" onsubmit="return confirm('Remove this passkey? You won\\'t be able to sign in with it any more.')"><input type="hidden" name="csrf" value="${esc(viewer.csrf)}"><input type="hidden" name="id" value="${esc(k.id)}"><button class="secondary small" type="submit">Remove</button></form></div>`,
+<form method="post" action="/account/passkeys/remove" class="inline" data-confirm="Remove this passkey? You won&#39;t be able to sign in with it any more."><input type="hidden" name="csrf" value="${esc(viewer.csrf)}"><input type="hidden" name="id" value="${esc(k.id)}"><button class="secondary small" type="submit">Remove</button></form></div>`,
 				)
 				.join("\n")
 		: `<p class="dim">You haven't added any passkeys yet.</p>`;
@@ -333,6 +334,6 @@ ${list}
 <form id="add"><label for="pk-name">Name (optional)</label><input id="pk-name" name="name" maxlength="50" placeholder="${esc(deviceName(req))}" autocomplete="off">
 <label for="pk-password">Your password</label><input id="pk-password" type="password" name="password" autocomplete="current-password" required>
 <p class="error" id="add-error" hidden></p><button type="submit">Add a passkey</button></form>
-<script>${MANAGE_SCRIPT}</script>`,
+<script nonce="${scriptNonce(req)}">${MANAGE_SCRIPT}</script>`,
 	});
 }

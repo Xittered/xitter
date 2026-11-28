@@ -3,7 +3,7 @@
 // request's own page under it; and merchant mode at /account/merchant, in
 // Settings.
 
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { peers } from "./federation";
@@ -234,7 +234,7 @@ const HEART = "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.
 const tile = `<span class="tile" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${MONEY_ICON}"/></svg></span>`;
 const HOME = { href: "/account/money", label: "Back to Equicoins" };
 const page = (req: Request, viewer: Viewer, title: string, body: string, status = 200, back = HOME) =>
-	accountPage({ req, viewer, status, title, back, css: CSS, head: `<script>addEventListener("DOMContentLoaded",function(){${SCRIPT}})</script>`, body });
+	accountPage({ req, viewer, status, title, back, css: CSS, head: `<script nonce="${scriptNonce(req)}">addEventListener("DOMContentLoaded",function(){${SCRIPT}})</script>`, body });
 const who = (p: Party) => `<span class="who"><span>${esc(p.merchant?.name ?? p.name)}</span>${badges(p)}</span>`;
 const postButton = (url: string, label = "Post", auto = false) =>
 	`<button type="button" class="pill primary" data-compose="${esc(url)}"${auto ? " data-auto" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${POST_ICON}"/></svg>${label}</button>`;

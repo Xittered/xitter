@@ -27,7 +27,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { appendFile, truncate } from "node:fs/promises";
 import { join } from "node:path";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { hateIn, hateInName } from "./hate";
@@ -484,7 +484,7 @@ async function page(req: Request, viewer: Viewer, r: Row | undefined, error = ""
 	<p class="dim" id="progress" hidden></p>
 	<button type="submit">Upload and import</button>
 </form>
-<script>
+<script nonce="${scriptNonce(req)}">
 (function(){
 	var form=document.getElementById("import"),file=document.getElementById("file"),out=document.getElementById("progress"),csrf=form.csrf.value,CHUNK=${CHUNK_BYTES};
 	form.addEventListener("submit",async function(e){

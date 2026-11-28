@@ -1,7 +1,7 @@
 // Forgot password: a mailed link opens a page that sets a new one. Tokens are
 // stored hashed, last an hour and work once.
 import { createHash } from "node:crypto";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import { sql } from "./db";
 import { PUBLIC_ORIGIN } from "./config";
 import { mailEnabled, sendMail } from "./mail";
@@ -107,8 +107,8 @@ export async function forgotRoute(req: Request, url: URL): Promise<Response> {
 <form method="post" action="/account/forgot"><input name="who" value="${esc(value)}" placeholder="Username or email" autocomplete="username" required>
 <cap-widget data-cap-api-endpoint="/i/xitter/cap/" required></cap-widget>
 <button type="submit">Send reset link</button></form>
-<script>window.CAP_CUSTOM_HASHWX_URL="/i/xitter/cap/hashwx.wasm";window.CAP_CUSTOM_WASM_URL="/i/xitter/cap/cap_wasm_bg.wasm"</script>
-<script src="/i/xitter/cap/widget.js"></script>`,
+<script nonce="${scriptNonce(req)}">window.CAP_CUSTOM_HASHWX_URL="/i/xitter/cap/hashwx.wasm";window.CAP_CUSTOM_WASM_URL="/i/xitter/cap/cap_wasm_bg.wasm";window.CAP_SCRIPT_NONCE="${scriptNonce(req)}"</script>
+<script nonce="${scriptNonce(req)}" src="/i/xitter/cap/widget.js"></script>`,
 		);
 	if (req.method === "GET") return ask(url.searchParams.get("u") ?? "");
 	if (!capPassed(req, true)) return ask(url.searchParams.get("u") ?? "");

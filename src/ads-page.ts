@@ -1,4 +1,4 @@
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import {
 	type Ad,
 	AdError,
@@ -270,7 +270,7 @@ ${notices(opts)}${busy ? `<p class="card warning">That post is already in a camp
 		viewer,
 		title: "Create campaign",
 		css: CSS,
-		head: `<script>addEventListener("DOMContentLoaded",function(){${MAKE}})</script>`,
+		head: `<script nonce="${scriptNonce(req)}">addEventListener("DOMContentLoaded",function(){${MAKE}})</script>`,
 		back: { href: "/account/ads", label: "Ads Manager" },
 		body,
 		status: opts.error ? 400 : 200,

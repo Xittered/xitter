@@ -1,4 +1,4 @@
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { BEE } from "./bee-icon";
 import { grokName } from "./grok";
@@ -61,8 +61,8 @@ export function gbeePage(req: Request, viewer: Viewer) {
 <div class="gb-log" id="gbLog"><p class="gb-empty" id="gbEmpty">Ask ${esc(name)} anything.</p></div>
 <form class="gb-form" id="gbForm"><textarea id="gbText" placeholder="Ask anything" rows="1"></textarea><button type="submit">Send</button></form>
 </div>
-<script>${SCRIPT}</script>
-<script>${PIRATE_SCRIPT}</script>
-<script>${DOUG_SCRIPT}</script>`,
+<script nonce="${scriptNonce(req)}">${SCRIPT}</script>
+<script nonce="${scriptNonce(req)}">${PIRATE_SCRIPT}</script>
+<script nonce="${scriptNonce(req)}">${DOUG_SCRIPT}</script>`,
 	});
 }

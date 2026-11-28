@@ -3,7 +3,7 @@
 // the old one with it, shows what doesn't line up, and runs the import
 // (migration-import.ts), whose progress and report show here too.
 
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { INSTANCE_ID } from "./federation";
@@ -111,7 +111,7 @@ ${on ? `<h2>Move here from another instance</h2>
 	<p class="dim">Nothing is copied yet: the next step shows whether the two instances line up.</p>
 </form>` : ""}
 ${recent.length ? `<h2>Imports</h2>${recent.map((j: any, i: number) => jobCard(j, i === 0)).join("")}` : ""}
-${running ? `<script>setTimeout(function(){location.reload()},2000)</script>` : ""}
+${running ? `<script nonce="${scriptNonce(req)}">setTimeout(function(){location.reload()},2000)</script>` : ""}
 
 ${on || codeCard ? `<h2>Move to another instance</h2>` : ""}
 ${on ? `<p class="dim">A migration code lets the new instance copy this account's data. When the move is done there, this account can leave a note on its profile pointing to the new one, and be deactivated. Followers can't be moved for them, and encrypted chats stay here.</p>` : ""}

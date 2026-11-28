@@ -1,4 +1,4 @@
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { DISCORD_DECORATIONS } from "./decoration-presets";
@@ -114,7 +114,7 @@ ${radio("ears", "Cat ears")}
 <div class="gallery" id="gallery">${gallery}</div>
 <div class="save"><button type="submit">Save decoration</button></div>
 </form>
-<script>(function(){
+<script nonce="${scriptNonce(req)}">(function(){
 var f=document.getElementById("form"),deco=document.getElementById("deco");
 function earsUrl(style){var q=new URLSearchParams({s:style||f.style.value||"pointy",c:f.color.value.slice(1),i:f.inner.value.slice(1)});if(f.with_bow.checked)q.set("b",f.bow.value.slice(1));return "/i/xitter/decoration/ears.svg?"+q}
 function update(e){

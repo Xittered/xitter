@@ -1,4 +1,4 @@
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { fontSlug, prepareFonts, validateFamily } from "./fonts";
@@ -64,7 +64,7 @@ async function page(req: Request, viewer: Viewer, pref: FontPref, notes: { error
 		${field("display", "Display names and headings", "Same as text", "Ada Lovelace")}
 		<p class="split"><button type="submit">Save</button><button type="submit" name="reset" value="1" class="secondary">Use X's font</button></p>
 	</form>
-	<script>document.querySelectorAll("[data-sample]").forEach(function(i){i.addEventListener("change",function(){var n=i.value.trim();var s=document.getElementById("sample-"+i.dataset.sample);if(!/^[A-Za-z0-9 ]{1,40}$/.test(n)){s.style.fontFamily="";return}var l=document.createElement("link");l.rel="stylesheet";l.href="/i/xitter/fonts/"+n.toLowerCase().replace(/ +/g,"-")+"/fonts.css?family="+encodeURIComponent(n);document.head.appendChild(l);s.style.fontFamily='"'+n+'"'})})</script>`,
+	<script nonce="${scriptNonce(req)}">document.querySelectorAll("[data-sample]").forEach(function(i){i.addEventListener("change",function(){var n=i.value.trim();var s=document.getElementById("sample-"+i.dataset.sample);if(!/^[A-Za-z0-9 ]{1,40}$/.test(n)){s.style.fontFamily="";return}var l=document.createElement("link");l.rel="stylesheet";l.href="/i/xitter/fonts/"+n.toLowerCase().replace(/ +/g,"-")+"/fonts.css?family="+encodeURIComponent(n);document.head.appendChild(l);s.style.fontFamily='"'+n+'"'})})</script>`,
 	});
 }
 

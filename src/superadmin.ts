@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import { type Viewer, sessionCookies, sessionKey } from "./auth";
 import { sql } from "./db";
 import { FEDERATION_ON, INSTANCE_ID, type Incoming, b64url, baseUrl, keyFor, liftBlock, listed, listedInstance, open, seal, setBlock, signedAnswer, signedFetch } from "./federation";
@@ -209,7 +209,7 @@ export async function superadminHomeRoute(req: Request, url: URL, viewer: Viewer
 			title: "Superadmin",
 			body: `<h1>Opening ${esc(instance)}</h1><p>If nothing happens, press the button. The link works once, within ${TICKET_SECONDS} seconds.</p>
 <form method="post" action="${esc(baseUrl(instance))}/federation/superadmin/accept" id="enter"><input type="hidden" name="ticket" value="${esc(JSON.stringify(ticket))}"><button>Open ${esc(instance)}</button></form>
-<script>document.getElementById("enter").submit()</script>`,
+<script nonce="${scriptNonce(req)}">document.getElementById("enter").submit()</script>`,
 		});
 	}
 	const refused = await reauthenticate(u, form.get("password"), form.get("code"));

@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { MEDIA_DIR } from "./media";
@@ -360,7 +360,7 @@ async function page(req: Request, viewer: Viewer, d: Decor, error = "") {
 		<datalist id="decor-fonts">${fonts}</datalist>
 		<div class="row"><button type="submit" class="small">Save font</button></div>
 	</form>
-	<script>${FONT_PREVIEW}</script>
+	<script nonce="${scriptNonce(req)}">${FONT_PREVIEW}</script>
 	<h2>Themes</h2>
 	<form method="post" action="/account/decor" class="themes"><input type="hidden" name="csrf" value="${esc(viewer.csrf)}">${themes}</form>
 	<h2>Steam items</h2>
@@ -372,7 +372,7 @@ async function page(req: Request, viewer: Viewer, d: Decor, error = "") {
 	<div id="shop" class="shop" data-csrf="${esc(viewer.csrf)}" data-avatar="${esc(viewer.avatar_url ?? "")}"></div>
 	<button type="button" id="more" class="secondary" hidden>Load more</button>
 	<p class="dim">Items and art belong to Valve and the games' makers, shown from Steam.</p>
-	<script>${shopBrowserScript()}</script>`
+	<script nonce="${scriptNonce(req)}">${shopBrowserScript()}</script>`
 		: `<h1>Profile decor</h1><p class="dim">Profile themes, backgrounds and avatar frames from Steam are for gold and grey check accounts.</p>`;
 	return accountPage({ req, viewer, title: "Profile decor", status: error ? 400 : 200, body, css: PAGE_CSS });
 }

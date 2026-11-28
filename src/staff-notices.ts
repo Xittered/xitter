@@ -6,7 +6,7 @@
 import { newerReason } from "./restricted-page";
 import { passwordTry } from "./ratelimit";
 import { randomBytes } from "node:crypto";
-import { accountPage, esc } from "./account-page";
+import { accountPage, esc, scriptNonce } from "./account-page";
 import type { Viewer } from "./auth";
 import { SECURE, clearedCookies } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
@@ -82,7 +82,7 @@ export async function noticesPage(req: Request, v: Viewer) {
 		<p class="error" id="appeal-error" role="alert"></p>
 		<button type="submit">Send appeal</button>
 	</form>`}
-<script>
+<script nonce="${scriptNonce(req)}">
 (function(){
 	var csrf=(document.cookie.match(/(?:^|;\\s*)ct0=([^;]+)/)||[])[1]||"",form=document.getElementById("appeal"),message;
 	document.querySelectorAll("[data-appeal]").forEach(function(b){b.onclick=function(){message=b.dataset.appeal;form.hidden=false;form.querySelector("textarea").focus()}});
