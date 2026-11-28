@@ -130,7 +130,7 @@ create table if not exists data_exports (
 	body jsonb not null,
 	created_at timestamptz not null default now()
 );
-create unique index if not exists users_email_idx on users (lower(email));
+drop index if exists users_email_idx;
 alter table users add column if not exists status_restore text;
 alter table posts add column if not exists hidden boolean not null default false;
 alter table posts add column if not exists sensitive boolean not null default false;
@@ -903,6 +903,7 @@ alter table users add column if not exists translator text check (translator in 
 
 -- email-address.ts: whether the address was proven (a sign-up code or a confirmation link)
 alter table users add column if not exists email_verified boolean not null default false;
+create unique index if not exists users_verified_email_idx on users (lower(email)) where email_verified;
 create table if not exists email_confirmations (
 	token_hash text primary key,
 	user_id bigint not null references users (id) on delete cascade,
@@ -916,6 +917,7 @@ alter table signup_sessions add column if not exists pending jsonb;
 alter table signup_sessions add column if not exists email_code_hash text;
 alter table signup_sessions add column if not exists email_code_at timestamptz;
 alter table signup_sessions add column if not exists email_attempts integer not null default 0;
+alter table signup_sessions add column if not exists email_sends integer not null default 0;
 
 -- errors.ts: server and browser errors for Admin > Errors, one row per distinct error;
 -- a resolved error that happens again opens again

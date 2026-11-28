@@ -25,7 +25,7 @@ import { platformSource } from "./platforms";
 import { mailEnabled } from "./mail";
 import { checkSignupCode, sendSignupCode } from "./email-address";
 import { settings } from "./settings";
-import { hit } from "./ratelimit";
+import { hit, take } from "./ratelimit";
 import { requestCountry, requestIp } from "./login-history";
 import { capPassed } from "./cap";
 
@@ -333,8 +333,8 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 		const [held] = await sql`select pending from signup_sessions where token = ${token}::uuid and pending is not null`;
 		if (held) {
 			const result = await checkSignupCode(token, String(f.code ?? ""));
-			if (result !== "ok") return respond(fieldError("code", result === "wrong" ? "That code isn't right." : "That code has expired. Go back and start again."));
-			const p = held.pending;
+			if (result.state !== "ok") return respond(fieldError("code", result.state === "wrong" ? "That code isn't right." : "That code has expired. Go back and start again."));
+			const p = result.pending;
 			let userId: string;
 			try {
 				userId = await signUp({ code: s.code, screenName: p.screenName, name: p.name, email: p.email, passwordHash: p.passwordHash, emailVerified: true, source: p.source, country: p.country, ip: requestIp(req) ?? p.ip });
@@ -378,9 +378,9 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: requestCountry(req) ?? null };
 			// a code sent for an earlier address mustn't confirm this one
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb, email_code_hash = null where token = ${token}::uuid`;
-			if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("message", "Too many codes sent from here. Wait an hour."));
+			if (!take([["mail", requestIp(req) ?? "unknown"], ["mail", `to:${checked.email}`]]).ok) return respond(fieldError("message", "Too many codes sent from here. Wait an hour."));
 			try {
-				await sendSignupCode(token, checked.email);
+				if (!(await sendSignupCode(token, held))) return respond(fieldError("message", "Too many codes sent for this sign-up. Go back and start again."));
 			} catch (e: any) {
 				return respond(fieldError("message", `We couldn't send a code to that address: ${e.message}`));
 			}

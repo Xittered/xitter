@@ -19,7 +19,10 @@ export async function requestReset(usernameOrEmail: string): Promise<void> {
 		// Lock before reading the recipient and issuing the token. Changing the
 		// verified email uses the same lock and invalidates previously issued links.
 		const [account] = await tx`select id::text, screen_name, email from users
-			where (lower(screen_name) = lower(${who}) or lower(email) = lower(${who}))
+			where id = (select m.id from (select id, lower(screen_name) = lower(${who}) as by_name, email_verified, count(*) over () as n from users
+					where (lower(screen_name) = lower(${who}) or lower(email) = lower(${who})) and instance is null) m
+				where m.by_name or m.email_verified or m.n = 1 order by m.by_name desc, m.email_verified desc limit 1)
+			and (lower(screen_name) = lower(${who}) or lower(email) = lower(${who}))
 			and email is not null and status <> 'suspended' and instance is null for update`;
 		if (!account) return undefined;
 		const [recent] = await tx`select 1 from password_resets where user_id = ${account.id}::bigint and created_at > now() - interval '2 minutes'`;

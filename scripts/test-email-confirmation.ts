@@ -45,7 +45,7 @@ try {
  const retryReset = randomBytes(32).toString("hex");
  await sql`insert into password_resets (token_hash, user_id) values (${hash(retryReset)}, ${owner}::bigint)`;
  const duplicate = await token(owner, address("claimed"));
- await sql`update users set email = ${address("claimed")} where id = ${other}::bigint`;
+ await sql`update users set email = ${address("claimed")}, email_verified = true where id = ${other}::bigint`;
  assert.equal((await confirm(duplicate)).status, 410, "another account owns the address");
  assert.equal(await email(), address("simultaneous"), "failed confirmation preserves recovery address");
  const [pending] = await sql`select used from email_confirmations where token_hash = ${hash(duplicate)}`;

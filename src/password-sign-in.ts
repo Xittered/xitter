@@ -15,8 +15,9 @@ export async function byEmail(typed: string): Promise<string | undefined> {
 	if (!typed.includes("@")) return undefined;
 	const [taken] = await sql`select 1 from users where lower(screen_name) = lower(${typed}) and instance is null`;
 	if (taken) return undefined;
-	const rows = await sql`select screen_name from users where lower(email) = lower(${typed}) and instance is null and status <> 'suspended' limit 2`;
-	return rows.length === 1 ? rows[0].screen_name : undefined;
+	const rows = await sql`select screen_name, email_verified, status from users where lower(email) = lower(${typed}) and instance is null order by email_verified desc limit 2`;
+	const owner = rows[0]?.email_verified || rows.length === 1 ? rows[0] : undefined;
+	return owner && owner.status !== "suspended" ? owner.screen_name : undefined;
 }
 
 export async function passwordStep(typed: string, password: string): Promise<{ session: Session } | { challenge: string } | { error: string }> {

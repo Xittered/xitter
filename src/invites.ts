@@ -3,6 +3,7 @@
 // account, so two people can't both use its last use.
 
 import { DISPOSABLE_EMAIL_ERROR, disposableEmailRefused } from "./disposable-email";
+import { validEmail } from "./mail";
 import { hateInName } from "./hate";
 import { forgetHeld, handleHeld } from "./held";
 import { blockedNameIn } from "./names";
@@ -67,8 +68,6 @@ export async function usernameState(raw: string): Promise<"available" | "taken" 
 	return taken || (await handleHeld(screenName)) ? "taken" : "available";
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
 type SignupForm = { code: string; screenName: string; name: string; password: string; email: string; flag?: string; ip?: string | null };
 
 const CANONICAL_EMAIL = (column: ReturnType<typeof sql>) => sql`case when split_part(lower(${column}), '@', 2) in ('gmail.com', 'googlemail.com')
@@ -96,7 +95,7 @@ export async function evadedSuspension(email: string, ip: string | null | undefi
 // (onboarding.ts) can refuse a bad form before sending a code.
 export async function checkSignup(f: SignupForm) {
 	const email = f.email.trim().toLowerCase();
-	if (!EMAIL.test(email) || email.length > 254) throw new SignupError("Enter a valid email address.");
+	if (!validEmail(email)) throw new SignupError("Enter a valid email address.");
 	if (disposableEmailRefused(email)) throw new SignupError(DISPOSABLE_EMAIL_ERROR);
 	const screenName = f.screenName.trim().replace(/^@/, "");
 	const name = looksBlank(f.name) ? screenName : f.name.trim();
@@ -111,7 +110,7 @@ export async function checkSignup(f: SignupForm) {
 	if (f.password.length > 256) throw new SignupError("Passwords are at most 256 characters.");
 	if ((await getSetting("signup_mode")) === "closed") throw new SignupError("Sign-up is closed on this instance.");
 	if ((await sql`select 1 from users where lower(screen_name) = lower(${screenName})`).length) throw new SignupError("That username is taken.");
-	const [owner] = await sql`select deactivated_at from users where lower(email) = ${email}`;
+	const [owner] = await sql`select deactivated_at from users where lower(email) = ${email} and email_verified`;
 	if (owner?.deactivated_at) throw new SignupError("That email belongs to a deactivated account. Sign in to it to restore it, or ask this instance's staff to delete it.");
 	if (owner) throw new SignupError("That email is already used by another account.");
 	const evaded = await evadedSuspension(email, f.ip);
@@ -138,7 +137,7 @@ export async function signUp(
 	await sql.begin(async (tx) => {
 		const [taken] = await tx`select 1 from users where lower(screen_name) = lower(${screenName})`;
 		if (taken) throw new SignupError("That username is taken.");
-		const [mailTaken] = await tx`select 1 from users where lower(email) = ${email}`;
+		const [mailTaken] = await tx`select 1 from users where lower(email) = ${email} and email_verified`;
 		if (mailTaken) throw new SignupError("That email is already used by another account.");
 		// with open sign-up a code is optional, but one that is given must be good
 		const [invite] =

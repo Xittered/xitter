@@ -5,6 +5,7 @@
 // Every attempt is kept in mail_log (Admin > Settings > Email), including the
 // ones skipped for want of a transport, so it shows whether mail would have gone out.
 import nodemailer from "nodemailer";
+import addressparser from "nodemailer/lib/addressparser";
 import { sql } from "./db";
 import { newId } from "./ids";
 import { settings } from "./settings";
@@ -16,6 +17,14 @@ const FROM_ADDRESS = "noreply@xit.chococat.lol";
 export const mailFrom = () => process.env.MAIL_FROM ?? `${JSON.stringify(settings().instance_name)} <${FROM_ADDRESS}>`;
 
 export const mailEnabled = () => !!(SMTP_URL || KEY);
+
+const BARE_ADDRESS = /^[^\s\x00-\x1f\x7f@<>()[\]\\,;:"]{1,64}@[^\s\x00-\x1f\x7f@<>()[\]\\,;:"]{1,253}\.[^\s\x00-\x1f\x7f@<>()[\]\\,;:".]{2,}$/;
+
+export function validEmail(email: string): boolean {
+	if (email.length > 254 || !BARE_ADDRESS.test(email)) return false;
+	const parsed = addressparser(email);
+	return parsed.length === 1 && !("group" in parsed[0]) && parsed[0].address === email;
+}
 
 const smtp = SMTP_URL
 	? nodemailer.createTransport(SMTP_URL, {
@@ -55,6 +64,7 @@ async function viaResend(to: string, subject: string, text: string): Promise<str
 
 export async function sendMail(to: string, subject: string, text: string, meta: { kind?: string; userId?: string } = {}): Promise<void> {
 	const kind = meta.kind ?? "other";
+	if (!validEmail(to)) throw new Error("that isn't a single email address");
 	if (!mailEnabled()) {
 		await log(to, kind, subject, "skipped", "neither SMTP_URL nor RESEND_API_KEY is set", meta.userId);
 		throw new Error("mail isn't configured (SMTP_URL or RESEND_API_KEY)");

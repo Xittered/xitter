@@ -31,7 +31,7 @@ import { SLOTS, brandingState, resetBranding, saveBranding } from "./branding";
 import { createPlatform, renameWebSource } from "./platforms";
 import { TopicError, deleteTopic, listTopics, saveTopic } from "./topics";
 import { CardError, deleteCard, listCards, saveCard } from "./explore-cards";
-import { mailEnabled, mailFrom, sendMail } from "./mail";
+import { mailEnabled, mailFrom, sendMail, validEmail } from "./mail";
 import { mailDigests } from "./mail-digest";
 import { toolActions } from "./admin-tools";
 import { stickerActions } from "./stickers";
@@ -278,7 +278,7 @@ const ACTIONS: Record<string, Action> = {
 	// what Resend says to a test mail answers whether the sending domain is verified
 	sendTestMail: { role: "admin", run: async (a, b) => {
 		const to = typeof b.to === "string" ? b.to.trim() : "";
-		if (!/^[^\s@]{1,64}@[^\s@]{1,253}$/.test(to)) throw new AdminError("Enter an email address.");
+		if (!validEmail(to)) throw new AdminError("Enter an email address.");
 		const name = settings().instance_name;
 		try {
 			await sendMail(to, `Test mail from ${name}`, `This is a test from the ${name} admin panel, sent by @${a.screen_name}. If you can read it, mail works.`, { kind: "test", userId: a.id });
