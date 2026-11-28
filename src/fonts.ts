@@ -15,6 +15,8 @@ const MAX_FAMILY = 8 * 1024 * 1024;
 const FAIL_MS = 10 * 60 * 1000;
 // families kept on disk at most, so typing names can't fill it
 const MAX_FAMILIES = 200;
+const MAX_FAILED = 1000;
+const MAX_PENDING = 10;
 const CHROME_UA =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
@@ -234,6 +236,8 @@ export async function ensureFont(raw: unknown): Promise<FontResult> {
 	if (died && Date.now() - died < FAIL_MS) return { ok: false, error: `couldn't load ${family}` };
 	let job = pending.get(slug);
 	if (!job) {
+		for (const [name, at] of failed) if (Date.now() - at >= FAIL_MS || failed.size > MAX_FAILED) failed.delete(name);
+		if (pending.size >= MAX_PENDING || familiesKept() + pending.size >= MAX_FAMILIES) return { ok: false, error: `couldn't load ${family}` };
 		job = downloadFamily(family).finally(() => pending.delete(slug));
 		pending.set(slug, job);
 	}
