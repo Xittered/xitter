@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_POST_MEDIA, PUBLIC_ORIGIN } from "./config";
 import { holdLock, sql } from "./db";
@@ -606,7 +606,7 @@ async function pokePeers() {
 	await Promise.all(peers().map((p) => signedFetch(p.id, "POST", "/federation/v1/poke", {}).catch(() => undefined)));
 }
 
-const MAX_PULLS = Number(process.env.FEDERATION_MEDIA_PULLS) || 4;
+const MAX_PULLS = Number(process.env.FEDERATION_MEDIA_PULLS) || 3;
 const MAX_WAITING_PULLS = 200;
 let mediaPulls = 0;
 const pullWaiting: (() => void)[] = [];
@@ -647,10 +647,42 @@ function remember(key: string, body: Uint8Array) {
 	}
 }
 
+const DISK_CACHE = (Number(process.env.FEDERATION_MEDIA_DISK_CACHE_MB) || 1024) * 1024 * 1024;
+const DISK_DIR = join(MEDIA_DIR, ".remote-cache");
+
+function cacheOnDisk(key: string, body: Uint8Array): Blob {
+	mkdirSync(DISK_DIR, { recursive: true });
+	const file = join(DISK_DIR, key);
+	const temp = `${file}.part${newId()}`;
+	writeFileSync(temp, body);
+	renameSync(temp, file);
+	const files = readdirSync(DISK_DIR)
+		.filter((f) => !f.includes(".part"))
+		.flatMap((f) => {
+			try {
+				const s = statSync(join(DISK_DIR, f));
+				return [{ f, size: s.size, at: s.mtimeMs }];
+			} catch {
+				return [];
+			}
+		})
+		.sort((a, b) => a.at - b.at);
+	let total = files.reduce((n, x) => n + x.size, 0);
+	for (const x of files) {
+		if (total <= DISK_CACHE || x.f === key) continue;
+		try {
+			rmSync(join(DISK_DIR, x.f), { force: true });
+			total -= x.size;
+		} catch {}
+	}
+	return Bun.file(file);
+}
+
 export async function remoteMediaFile(localId: string, poster = false): Promise<Blob | undefined> {
 	const file = poster ? posterFile(MEDIA_DIR, localId) : join(MEDIA_DIR, localId);
 	if (existsSync(file)) return Bun.file(file);
 	const key = `${localId}${poster ? "p" : ""}`;
+	if (!STORE_MEDIA && existsSync(join(DISK_DIR, key))) return Bun.file(join(DISK_DIR, key));
 	const cached = memory.get(key);
 	if (cached) {
 		memory.delete(key);
@@ -660,6 +692,7 @@ export async function remoteMediaFile(localId: string, poster = false): Promise<
 	const body = await pullOnce(localId, poster);
 	if (!body) return undefined;
 	if (!STORE_MEDIA) {
+		if (body.length > MEMORY_CACHE / 4) return cacheOnDisk(key, body);
 		remember(key, body);
 		return new Blob([body as Uint8Array<ArrayBuffer>]);
 	}
