@@ -253,23 +253,28 @@ const responseText = (from: string, to: string, nonce: string, status: number, b
 
 export class FederationError extends Error {}
 
+export function signedHeaders(to: string, method: string, path: string, bytes: Uint8Array): Record<string, string> {
+	const ts = String(Date.now());
+	const nonce = b64url(randomBytes(16));
+	return {
+		"x-xitter-from": INSTANCE_ID,
+		"x-xitter-to": to,
+		"x-xitter-timestamp": ts,
+		"x-xitter-nonce": nonce,
+		"x-xitter-signature": signBytes(requestText(method, path, INSTANCE_ID, to, ts, nonce, bytes)),
+	};
+}
+
 export async function signedFetch(to: string, method: "GET" | "POST", path: string, body?: unknown, max = MAX_BODY, opts: { anyListed?: boolean } = {}): Promise<{ status: number; body: Uint8Array; json: () => any }> {
 	if (!isPeer(to) && !(isSuperadminHome(to) && listedInstance(to)?.state !== "blocked") && !(opts.anyListed && listedInstance(to)?.state === "active" && FEDERATION_ON)) throw new FederationError(`${to} isn't an instance this one federates with`);
 	const bytes = body === undefined ? new Uint8Array() : new TextEncoder().encode(JSON.stringify(body));
-	const ts = String(Date.now());
-	const nonce = b64url(randomBytes(16));
+	const headers = signedHeaders(to, method, path, bytes);
+	const nonce = headers["x-xitter-nonce"];
 	const r = await fetch(`${baseUrl(to)}${path}`, {
 		method,
 		redirect: "manual",
 		signal: AbortSignal.timeout(20_000),
-		headers: {
-			"content-type": "application/json",
-			"x-xitter-from": INSTANCE_ID,
-			"x-xitter-to": to,
-			"x-xitter-timestamp": ts,
-			"x-xitter-nonce": nonce,
-			"x-xitter-signature": signBytes(requestText(method, path, INSTANCE_ID, to, ts, nonce, bytes)),
-		},
+		headers: { "content-type": "application/json", ...headers },
 		body: method === "POST" ? bytes : undefined,
 	});
 	const answer = await readLimited(r, max);

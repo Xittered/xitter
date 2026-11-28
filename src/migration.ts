@@ -17,7 +17,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
-import { FEDERATION_ON, INSTANCE_ID, isPeer } from "./federation";
+import { FEDERATION_ON, INSTANCE_ID, type Incoming, isPeer, verifyIncoming } from "./federation";
 import { MEDIA_DIR } from "./media";
 import { hit, limitedResponse } from "./ratelimit";
 import { requestIp } from "./login-history";
@@ -216,7 +216,10 @@ export async function migrationApi(req: Request, url: URL): Promise<Response> {
 		return new Response(Bun.file(path), { headers: { "content-type": poster ? "image/jpeg" : m.mime, "cache-control": "no-store", "x-content-type-options": "nosniff" } });
 	}
 	if (p === "complete" && req.method === "POST") {
-		const body = await req.json().catch(() => ({}));
+		const copy = req.clone();
+		const incoming = req.headers.has("x-xitter-signature") ? await verifyIncoming(req, url.pathname) : undefined;
+		const signedBy = incoming && !(incoming instanceof Response) ? incoming.from : null;
+		const body = signedBy ? (incoming as Incoming).json() : await copy.json().catch(() => ({}));
 		const to = typeof body?.to === "string" && /^\w{1,15}@[a-z0-9.-]{1,253}(?::\d{1,5})?$/i.test(body.to) ? body.to.toLowerCase() : undefined;
 		if (!to) return fail(400, "Say where the account went, as handle@instance.");
 		const done = await sql.begin(async (tx) => {
@@ -238,7 +241,7 @@ export async function migrationApi(req: Request, url: URL): Promise<Response> {
 		});
 		if (!done) return fail(409, "This move was already finished.");
 		if (done.deactivated) void import("./chat").then((chat) => chat.closeSockets(who.userId));
-		void import("./money").then(({ moveBalance }) => moveBalance(who.userId, to)).catch((e) => console.error("Equicoins balance move:", e instanceof Error ? e.message : e));
+		if (signedBy === to.slice(to.indexOf("@") + 1)) void import("./money").then(({ moveBalance }) => moveBalance(who.userId, to)).catch((e) => console.error("Equicoins balance move:", e instanceof Error ? e.message : e));
 		return Response.json({ ok: true, ...done }, { headers: { "cache-control": "no-store" } });
 	}
 	return fail(404, "Unknown migration call.");

@@ -25,7 +25,7 @@ import { MAX_CONTENT_BYTES } from "./articles";
 import { MAX_LEAD_DAYS, MAX_PENDING, pendingCost, requestCost } from "./scheduled";
 import { PUBLIC_ORIGIN } from "./config";
 import { holdLock, sql } from "./db";
-import { FEDERATION_ON, INSTANCE_ID, isPeer, readLimited } from "./federation";
+import { FEDERATION_ON, INSTANCE_ID, isPeer, readLimited, signedHeaders } from "./federation";
 import { lookupRemoteUser } from "./federation-sync";
 import { flagValue } from "./flags";
 import { isId, newId, newIdAt } from "./ids";
@@ -79,17 +79,20 @@ export function parseSource(input: string): Source {
 
 export const privateAddress = reservedAddress;
 
-type Call = { method?: "GET" | "POST"; body?: unknown; max?: number; timeout?: number };
+type Call = { method?: "GET" | "POST"; body?: unknown; max?: number; timeout?: number; signedFor?: string };
 
 // The address is the person's to choose, so it may only lead to the public
 // internet (public-net.ts): not to this instance's database or anything else beside it.
 async function call(source: Source, code: string, path: string, opts: Call = {}): Promise<Response> {
+	const method = opts.method ?? "GET";
+	const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
+	const signed = opts.signedFor ? signedHeaders(opts.signedFor, method, `/migration/v1/${path}`, new TextEncoder().encode(body ?? "")) : {};
 	const init: RequestInit = {
-		method: opts.method ?? "GET",
+		method,
 		redirect: "manual",
 		signal: AbortSignal.timeout(opts.timeout ?? 30_000),
-		headers: { authorization: `Bearer ${code}`, "content-type": "application/json", "x-xitter-migration-to": INSTANCE_ID, "user-agent": `xitter-migration (+${PUBLIC_ORIGIN})` },
-		body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+		headers: { authorization: `Bearer ${code}`, "content-type": "application/json", "x-xitter-migration-to": INSTANCE_ID, "user-agent": `xitter-migration (+${PUBLIC_ORIGIN})`, ...signed },
+		body,
 	};
 	const url = `${source.origin}/migration/v1/${path}`;
 	return (ALLOW_PRIVATE ? fetch(url, init) : publicFetch(url, init)).catch((e) => {
@@ -769,7 +772,7 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 		if (options.finish && !capped && !filesCapped) {
 			await progress("Finishing on the old instance", undefined, undefined, true);
 			const to = `${viewer.screen_name}@${INSTANCE_ID}`;
-			finished = await callJson(source, code, "complete", { method: "POST", body: { to, note: options.note, deactivate: options.deactivate } })
+			finished = await callJson(source, code, "complete", { method: "POST", body: { to, note: options.note, deactivate: options.deactivate }, signedFor: verified ? srcInstance : undefined })
 				.then((r) => ({ ok: true, deactivated: !!r.deactivated }))
 				.catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
 		}
