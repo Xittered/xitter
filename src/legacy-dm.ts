@@ -7,6 +7,7 @@
 import type { Viewer } from "./auth";
 import { sql } from "./db";
 import { queueReview } from "./claude-mod";
+import { ChatError, mayMessage } from "./chat";
 import { isId, newId } from "./ids";
 import { legacyUser } from "./model";
 import { usersByIds } from "./users";
@@ -135,6 +136,9 @@ async function send(viewer: Viewer, f: Obj): Promise<Response> {
 	const [exists] = await sql`select 1 from users where id = ${other}::bigint`;
 	if (!exists || other === viewer.id || (await blockedBetween(viewer.id, other))) return error(403, 349, "You cannot send messages to this user.");
 	const conversationId = pairId(pair[0], pair[1]);
+	const [replied] = await sql`select 1 from legacy_dm_events where conversation_id = ${conversationId} and sender_id = ${other}::bigint limit 1`;
+	const refused = await mayMessage(viewer.id, other, !!replied).then(() => false, (e) => { if (e instanceof ChatError) return true; throw e; });
+	if (refused) return error(403, 349, "You cannot send messages to this user.");
 	const id = newId();
 	await sql.begin(async (tx) => {
 		await tx`insert into legacy_dm_participants (conversation_id, user_id) values (${conversationId}, ${viewer.id}::bigint), (${conversationId}, ${other}::bigint) on conflict do nothing`;
