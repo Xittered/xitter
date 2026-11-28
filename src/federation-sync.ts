@@ -606,12 +606,30 @@ async function pokePeers() {
 	await Promise.all(peers().map((p) => signedFetch(p.id, "POST", "/federation/v1/poke", {}).catch(() => undefined)));
 }
 
+const MAX_PULLS = Number(process.env.FEDERATION_MEDIA_PULLS) || 4;
+const MAX_WAITING_PULLS = 200;
+let mediaPulls = 0;
+const pullWaiting: (() => void)[] = [];
+async function pullInTurn<T>(job: () => Promise<T>): Promise<T | undefined> {
+	if (mediaPulls >= MAX_PULLS) {
+		if (pullWaiting.length >= MAX_WAITING_PULLS) return undefined;
+		await new Promise<void>((go) => pullWaiting.push(go));
+	}
+	mediaPulls++;
+	try {
+		return await job();
+	} finally {
+		mediaPulls--;
+		pullWaiting.shift()?.();
+	}
+}
+
 const fetching = new Map<string, Promise<Uint8Array | undefined>>();
 function pullOnce(localId: string, poster: boolean): Promise<Uint8Array | undefined> {
 	const key = `${localId}${poster ? "p" : ""}`;
 	const running = fetching.get(key);
 	if (running) return running;
-	const job = pullRemoteMedia(localId, poster).finally(() => fetching.delete(key));
+	const job = pullInTurn(() => pullRemoteMedia(localId, poster)).finally(() => fetching.delete(key));
 	fetching.set(key, job);
 	return job;
 }

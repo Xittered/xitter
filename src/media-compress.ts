@@ -21,7 +21,7 @@ const PHOTO = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PHOTO_MS = 30_000;
 // decoding takes about 4 bytes a pixel: a 774 KB PNG of 16000x16000 held
 // almost a gigabyte, two at a time. Bigger ones are kept as they came.
-const MAX_PIXELS = 40_000_000;
+export const MAX_PIXELS = 40_000_000;
 
 // EXIF orientation 2-8 as ffmpeg filters; 1 is upright
 const ORIENT: Record<number, string> = { 2: "hflip", 3: "hflip,vflip", 4: "vflip", 5: "transpose=0", 6: "transpose=1", 7: "transpose=3", 8: "transpose=2" };
@@ -83,7 +83,7 @@ const qscale = (quality: number) => Math.max(2, Math.min(31, Math.round(2 + (100
 const MAX_RUNNING = 2;
 let running = 0;
 const waiting: (() => void)[] = [];
-async function inTurn<T>(job: () => Promise<T>): Promise<T> {
+export async function inTurn<T>(job: () => Promise<T>): Promise<T> {
 	if (running >= MAX_RUNNING) await new Promise<void>((go) => waiting.push(go));
 	running++;
 	try {

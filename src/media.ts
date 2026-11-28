@@ -21,7 +21,7 @@ import { isId, newId } from "./ids";
 import { settings } from "./settings";
 import { limitedResponse, take } from "./ratelimit";
 import { gifProxy } from "./gifs";
-import { compressUpload } from "./media-compress";
+import { MAX_PIXELS, compressUpload, inTurn } from "./media-compress";
 import { cropGif, FFMPEG, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, spawnLimited, videoError, videoSupported } from "./video";
 
 export const MEDIA_DIR = process.env.MEDIA_DIR ?? "media";
@@ -715,20 +715,19 @@ export async function serveMedia(req: Request, pathname: string, viewer: Viewer)
 	const poster = /^\/media\/poster\/(\d{1,19})\.jpg$/.exec(pathname);
 	if (cardVideo && isId(cardVideo[1])) return serveConversationVideo(cardVideo[1], viewer);
 	if (poster && isId(poster[1])) {
-		const body = await remoteMediaFile(poster[1], true);
-		const served = body && (await servedOf(poster[1]));
+		const served = await servedOf(poster[1]);
 		const cache = served && (await cacheFor(viewer, served));
-		if (!body || !cache) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
+		const body = cache && (await remoteMediaFile(poster[1], true));
+		if (!served || !body || !cache) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
 		const headers: Record<string, string> = { "content-type": "image/jpeg", "cache-control": cache, "x-content-type-options": "nosniff", "content-security-policy": MEDIA_CSP, ...tagOf(served, body, cache) };
 		if (unchanged(req, headers)) return new Response(null, { status: 304, headers });
 		return new Response(body, { headers });
 	}
 	const m = /^\/media\/(?:banner\/)?(\d{1,19})(?:\.[a-z0-9]+)?(?:\/[\w-]+)?$/.exec(pathname);
-	const body = m && isId(m[1]) && (await remoteMediaFile(m[1]));
-	if (!m || !body) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
-	const served = await servedOf(m[1]);
+	const served = m && isId(m[1]) ? await servedOf(m[1]) : undefined;
 	const cache = served && (await cacheFor(viewer, served));
-	if (!served || !cache) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
+	const body = m && cache && (await remoteMediaFile(m[1]));
+	if (!m || !served || !cache || !body) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
 	const headers: Record<string, string> = { "content-type": servedType(served.mime), "cache-control": cache, "x-content-type-options": "nosniff", "content-security-policy": MEDIA_CSP, "accept-ranges": "bytes", ...tagOf(served, body, cache) };
 	if (unchanged(req, headers)) return new Response(null, { status: 304, headers });
 	const size = body.size;
@@ -758,6 +757,8 @@ const AVATAR_DIR = () => join(MEDIA_DIR, ".avatars");
 const RESIZABLE = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PIPE_FORMAT: Record<string, string> = { "image/jpeg": "jpeg_pipe", "image/png": "png_pipe", "image/webp": "webp_pipe" };
 const resizing = new Map<string, Promise<Blob | undefined>>();
+const resizeFailed = new Map<string, number>();
+const RESIZE_RETRY_MS = 10 * 60_000;
 
 function avatarWidth(suffix: string | undefined): number | undefined {
 	if (!suffix) return undefined;
@@ -775,27 +776,36 @@ async function resizedAvatar(served: Served, body: Blob, width: number): Promise
 	const key = out;
 	const running = resizing.get(key);
 	if (running) return running;
+	if ((resizeFailed.get(key) ?? 0) > Date.now()) return undefined;
 	const job = (async () => {
-		mkdirSync(AVATAR_DIR(), { recursive: true });
-		const input = await body.bytes();
-		const tmp = `${out}.${process.pid}.tmp`;
-		const p = spawnLimited([FFMPEG, "-v", "error", "-protocol_whitelist", "pipe,file", "-f", PIPE_FORMAT[served.mime] ?? "png_pipe", "-i", "pipe:0", "-vf", `scale='min(${width * 2},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "2"]), "-y", tmp], 20_000, "ignore", input);
-		if ((await p.exited) !== 0 || !existsSync(tmp)) {
-			rmSync(tmp, { force: true });
-			return undefined;
-		}
-		renameSync(tmp, out);
-		return Bun.file(out);
+		const image = sniffImage(Buffer.from(await body.slice(0, 256 * 1024).arrayBuffer()));
+		if (!image || image.width * image.height > MAX_PIXELS) return undefined;
+		return inTurn(() => resizeAvatar(served, body, width, out, png));
 	})().finally(() => resizing.delete(key));
 	resizing.set(key, job);
 	return job;
 }
 
+async function resizeAvatar(served: Served, body: Blob, width: number, out: string, png: boolean): Promise<Blob | undefined> {
+	mkdirSync(AVATAR_DIR(), { recursive: true });
+	const input = await body.bytes();
+	const tmp = `${out}.${process.pid}.tmp`;
+	const p = spawnLimited([FFMPEG, "-v", "error", "-protocol_whitelist", "pipe,file", "-f", PIPE_FORMAT[served.mime] ?? "png_pipe", "-i", "pipe:0", "-vf", `scale='min(${width * 2},iw)':-1:flags=lanczos`, "-frames:v", "1", ...(png ? ["-f", "image2", "-c:v", "png"] : ["-f", "image2", "-c:v", "mjpeg", "-q:v", "2"]), "-y", tmp], 20_000, "ignore", input);
+	if ((await p.exited) !== 0 || !existsSync(tmp)) {
+		rmSync(tmp, { force: true });
+		if (resizeFailed.size > 10_000) resizeFailed.clear();
+		resizeFailed.set(out, Date.now() + RESIZE_RETRY_MS);
+		return undefined;
+	}
+	renameSync(tmp, out);
+	return Bun.file(out);
+}
+
 export async function serveAvatar(req: Request, pathname: string, viewer: Viewer): Promise<Response> {
 	const m = /^\/profile_images\/(\d{1,19})(?:_([a-z][a-z0-9_]*|\d{1,4}x\d{1,4}))?\.(?:jpe?g|png)$/.exec(pathname);
-	const original = m && isId(m[1]) && (await remoteMediaFile(m[1]));
-	const served = original && (await servedOf(m![1]));
+	const served = m && isId(m[1]) ? await servedOf(m[1]) : undefined;
 	const cache = served && (await cacheFor(viewer, served));
+	const original = m && cache && (await remoteMediaFile(m[1]));
 	if (!m || !original || !served || !cache) return new Response("not found", { status: 404, headers: { "cache-control": PRIVATE } });
 	const width = RESIZABLE.has(served.mime) ? avatarWidth(m[2]) : undefined;
 	const body = (width && (await resizedAvatar(served, original, width))) || original;

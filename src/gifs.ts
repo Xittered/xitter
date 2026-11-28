@@ -140,7 +140,29 @@ export const gifHandlers = {
 	},
 };
 
+const MAX_PROXIED = 64;
+let proxying = 0;
+
 export async function gifProxy(url: URL): Promise<Response> {
+	if (proxying >= MAX_PROXIED) return new Response("busy", { status: 503, headers: { "retry-after": "1" } });
+	proxying++;
+	let released = false;
+	const release = () => {
+		if (released) return;
+		released = true;
+		proxying--;
+	};
+	try {
+		const res = await proxyGif(url, release);
+		if (res.status !== 200) release();
+		return res;
+	} catch (e) {
+		release();
+		throw e;
+	}
+}
+
+async function proxyGif(url: URL, release: () => void): Promise<Response> {
 	let target: URL;
 	try {
 		target = new URL(url.searchParams.get("u") ?? "");
@@ -178,18 +200,33 @@ export async function gifProxy(url: URL): Promise<Response> {
 	}
 	const reader = upstream.body?.getReader();
 	if (!reader) return new Response("not found", { status: 404 });
-	const chunks: Uint8Array[] = [];
 	let size = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			size += value.byteLength;
-			if (size > maxBytes) return new Response("image too large", { status: 413 });
-			chunks.push(value);
-		}
-	} finally {
-		await reader.cancel().catch(() => { });
-	}
-	return new Response(new Uint8Array(Buffer.concat(chunks)), { headers: { "content-type": type, "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" } });
+	const body = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			try {
+				const { done, value } = await reader.read();
+				if (done) {
+					release();
+					controller.close();
+					return;
+				}
+				size += value.byteLength;
+				if (size > maxBytes) {
+					release();
+					await reader.cancel().catch(() => {});
+					controller.error(new Error("image too large"));
+					return;
+				}
+				controller.enqueue(value);
+			} catch (e) {
+				release();
+				controller.error(e);
+			}
+		},
+		async cancel() {
+			release();
+			await reader.cancel().catch(() => {});
+		},
+	});
+	return new Response(body, { headers: { "content-type": type, "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" } });
 }
