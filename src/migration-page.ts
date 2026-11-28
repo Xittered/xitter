@@ -29,6 +29,11 @@ details summary{cursor:pointer;color:var(--accent)}
 const when = (d: Date | string | null) => (d ? new Date(d).toUTCString().replace(/:\d\d GMT$/, " UTC") : "");
 const versionLine = (v: { version: string; schema: string; commit: string | null }) => `Xitter ${esc(v.version)} · schema <code>${esc(v.schema)}</code>${v.commit ? ` · commit <code>${esc(v.commit)}</code>` : ""}`;
 
+const count = (v: unknown) => {
+	const n = Math.trunc(Number(v));
+	return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 function findings(list: Finding[], kind: "strike" | "warning" | "", title: string) {
 	if (!list.length) return "";
 	return `<div class="card ${kind}"><b>${esc(title)}</b><ul>${list.map((f) => `<li>${esc(f.text)}</li>`).join("")}</ul></div>`;
@@ -150,7 +155,7 @@ ${findings(c.blockers, "strike", "This move can't go ahead")}
 ${findings(c.warnings, "warning", "Check these before you continue")}
 ${findings(c.notes, "", "Good to know")}
 <div class="card"><b>@${esc(a.screen_name)} · ${esc(a.name ?? "")}</b>
-	<div class="counts"><span><b>${a.posts}</b> posts</span><span><b>${media.length}</b> files (${(bytes / 1024 / 1024).toFixed(1)} MB)</span><span><b>${a.following}</b> following</span><span><b>${a.likes}</b> likes</span><span><b>${a.bookmarks}</b> bookmarks</span><span><b>${a.lists}</b> lists</span><span><b>${a.drafts}</b> drafts and scheduled</span><span><b>${a.articles}</b> articles</span></div>
+	<div class="counts"><span><b>${count(a.posts)}</b> posts</span><span><b>${media.length}</b> files (${(bytes / 1024 / 1024).toFixed(1)} MB)</span><span><b>${count(a.following)}</b> following</span><span><b>${count(a.likes)}</b> likes</span><span><b>${count(a.bookmarks)}</b> bookmarks</span><span><b>${count(a.lists)}</b> lists</span><span><b>${count(a.drafts)}</b> drafts and scheduled</span><span><b>${count(a.articles)}</b> articles</span></div>
 </div>
 ${c.blockers.length ? `<p><a href="/account/migrate">Back</a></p>` : `<form method="post" action="/account/migrate">
 	${csrf}<input type="hidden" name="action" value="start">

@@ -610,6 +610,8 @@ const ACTIONS: Record<string, Action> = {
 				await tx`update users set password_hash = ${hash} where id = ${id}::bigint`;
 				await tx`delete from sessions where user_id = ${id}::bigint`;
 				await tx`delete from api_tokens where user_id = ${id}::bigint`;
+				await tx`delete from oauth_codes where user_id = ${id}::bigint`;
+				await tx`delete from migration_tokens where user_id = ${id}::bigint and completed_at is null`;
 				await tx`update password_resets set used = true where user_id = ${id}::bigint and not used`;
 				await tx`delete from login_challenges where user_id = ${id}::bigint`;
 				await tx`delete from passkeys where user_id = ${id}::bigint`;

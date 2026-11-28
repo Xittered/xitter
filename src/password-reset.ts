@@ -86,6 +86,7 @@ export async function resetRoute(req: Request, url: URL): Promise<Response> {
 		await tx`delete from api_tokens where user_id = ${row.user_id}::bigint`;
 		// an app approved just before would otherwise trade its code for a new token
 		await tx`delete from oauth_codes where user_id = ${row.user_id}::bigint`;
+		await tx`delete from migration_tokens where user_id = ${row.user_id}::bigint and completed_at is null`;
 		await tx`delete from login_challenges where user_id = ${row.user_id}::bigint`;
 		// passkeys stay: they live on the owner's devices, and dropping them on
 		// every forgotten password locked people out of their usual sign-in

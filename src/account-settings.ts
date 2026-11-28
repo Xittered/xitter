@@ -107,6 +107,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 			await tx`delete from sessions where user_id = ${viewer.id}::bigint and token <> ${viewer.token}`;
 			await tx`delete from api_tokens where user_id = ${viewer.id}::bigint`;
 			await tx`delete from oauth_codes where user_id = ${viewer.id}::bigint`;
+			await tx`delete from migration_tokens where user_id = ${viewer.id}::bigint and completed_at is null`;
 			await tx`delete from login_challenges where user_id = ${viewer.id}::bigint`;
 			await tx`delete from passkey_challenges where user_id = ${viewer.id}::bigint`;
 			await tx`update email_confirmations set used = true where user_id = ${viewer.id}::bigint and not used`;
