@@ -16,7 +16,7 @@ import { automodStrike } from "./moderation";
 import { hasBlockedPhrase } from "./settings";
 
 export const MAX_TITLE = 100;
-const MAX_CONTENT_BYTES = 512 * 1024;
+export const MAX_CONTENT_BYTES = 512 * 1024;
 const PREVIEW_LENGTH = 200;
 
 export class ArticleError extends Error {

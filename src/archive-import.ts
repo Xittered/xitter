@@ -49,6 +49,10 @@ const MAX_BYTES = Number(process.env.ARCHIVE_MAX_MB ?? 1024) * MB;
 // one of the archive's JSON files, read and parsed in memory; X splits a big
 // tweets.js into parts (tweets-part1.js…)
 const MAX_JSON = Number(process.env.ARCHIVE_MAX_JSON_MB ?? 64) * MB;
+const MAX_JSON_TOTAL = 4 * MAX_JSON;
+const TCO = /^https?:\/\/t\.co\/\w{1,40}$/;
+const MAX_ENTITIES = 20;
+const MAX_TEXT = 50_000;
 const CHUNK_BYTES = 8 * MB;
 // imports running at once; each holds one archive's posts in memory
 const AT_ONCE = 2;
@@ -85,10 +89,13 @@ const inData = (e: ZipEntry, pattern: RegExp) => pattern.test(e.name.replace(/^[
 
 // each file matching `pattern`, in order, as its parsed rows
 async function* jsFiles(zip: Zip, pattern: RegExp): AsyncGenerator<any[]> {
-	for (const e of zip.entries.filter((x) => inData(x, pattern)).sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }))) {
+	const files = zip.entries.filter((x) => inData(x, pattern)).sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+	if (files.reduce((sum, e) => sum + e.size, 0) > MAX_JSON_TOTAL)
+		throw new ImportError(`The archive's ${files[0].name.slice(files[0].name.lastIndexOf("/") + 1).replace(/(-part\d+)?\.js$/, "")} files are larger than this instance reads (${MAX_JSON_TOTAL / MB} MB in all; an admin can raise ARCHIVE_MAX_JSON_MB).`);
+	for (const e of files) {
 		if (e.size > MAX_JSON || e.compressed > MAX_JSON)
 			throw new ImportError(`${e.name.slice(e.name.lastIndexOf("/") + 1)} is larger than this instance reads (${MAX_JSON / MB} MB; an admin can raise ARCHIVE_MAX_JSON_MB).`);
-		yield ytd((await zip.read(e, MAX_JSON)).toString("utf8"), e.name);
+		yield ytd((await zip.read(e, Math.max(e.size, 1))).toString("utf8"), e.name);
 	}
 }
 
@@ -120,6 +127,7 @@ function idAt(date: Date): string {
 	return (((BigInt(date.getTime()) - EPOCH) << 22n) | random).toString();
 }
 
+const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 const decode = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const basename = (url: unknown) => (typeof url === "string" ? (url.split("?")[0].split("/").pop() ?? "") : "");
 
@@ -127,15 +135,17 @@ const basename = (url: unknown) => (typeof url === "string" ? (url.split("?")[0]
 function postText(t: any, note: any | undefined): string {
 	if (note?.core?.text) {
 		let text = String(note.core.text);
-		for (const u of note.core.urls ?? []) if (u?.shortUrl && u?.expandedUrl) text = text.split(u.shortUrl).join(u.expandedUrl);
+		for (const u of arr(note.core.urls).slice(0, MAX_ENTITIES))
+			if (TCO.test(String(u?.shortUrl)) && typeof u.expandedUrl === "string") text = text.split(u.shortUrl).join(u.expandedUrl.slice(0, 2000)).slice(0, MAX_TEXT);
 		return text.trim();
 	}
 	// the range counts the text as X sends it, with &amp; still escaped
 	const chars = [...String(t.full_text ?? t.text ?? "")];
 	const range = Array.isArray(t.display_text_range) ? t.display_text_range.map(Number) : [0, chars.length];
-	let text = decode(chars.slice(range[0] || 0, range[1] || chars.length).join(""));
-	for (const u of t.entities?.urls ?? []) if (u?.url && u?.expanded_url) text = text.split(u.url).join(u.expanded_url);
-	for (const m of t.extended_entities?.media ?? t.entities?.media ?? []) if (m?.url) text = text.split(m.url).join("");
+	let text = decode(chars.slice(range[0] || 0, range[1] || chars.length).join("")).slice(0, MAX_TEXT);
+	for (const u of arr(t.entities?.urls).slice(0, MAX_ENTITIES))
+		if (TCO.test(String(u?.url)) && typeof u.expanded_url === "string") text = text.split(u.url).join(u.expanded_url.slice(0, 2000)).slice(0, MAX_TEXT);
+	for (const m of arr(t.extended_entities?.media ?? t.entities?.media).slice(0, MAX_ENTITIES)) if (TCO.test(String(m?.url))) text = text.split(m.url).join("");
 	return text.trim();
 }
 
@@ -150,6 +160,7 @@ type Tweet = { id: string; date: Date | undefined; text: string; replyTo: string
 async function readTweets(zip: Zip, xUserId: string, notes: Map<number, any>): Promise<{ tweets: Tweet[]; retweets: number }> {
 	const tweets: Tweet[] = [];
 	let retweets = 0;
+	let kept = 0;
 	for await (const rows of jsFiles(zip, /^data\/tweets?(-part\d+)?\.js$/))
 		for (const raw of rows) {
 			const t = raw?.tweet ?? raw;
@@ -165,10 +176,13 @@ async function readTweets(zip: Zip, xUserId: string, notes: Map<number, any>): P
 				const best = video ? [...(m.video_info?.variants ?? [])].filter((v: any) => v?.content_type === "video/mp4").sort((a: any, b: any) => Number(b.bitrate ?? 0) - Number(a.bitrate ?? 0))[0] : null;
 				return { video, file: `${t.id_str}-${basename(video ? best?.url : m?.media_url_https)}` };
 			});
+			const text = postText(t, date && notes.get(Math.floor(date.getTime() / 1000)));
+			kept += text.length;
+			if (kept > MAX_JSON) throw new ImportError(`The archive holds more tweet text than this instance reads (${MAX_JSON / MB} MB; an admin can raise ARCHIVE_MAX_JSON_MB).`);
 			tweets.push({
 				id: t.id_str,
 				date,
-				text: postText(t, date && notes.get(Math.floor(date.getTime() / 1000))),
+				text,
 				replyTo,
 				toSelf: !!replyTo && (!t.in_reply_to_user_id_str || String(t.in_reply_to_user_id_str) === xUserId),
 				source: appName(t.source),
@@ -321,7 +335,7 @@ export async function runImport(userId: string) {
 				continue;
 			}
 			// the X id, unless it doesn't match the post's date (a hand-made archive)
-			const id = Math.abs(idTime(t.id).getTime() - t.date.getTime()) < 86_400_000 ? t.id : idAt(t.date);
+			const id = idTime(t.id).getTime() <= Date.now() && Math.abs(idTime(t.id).getTime() - t.date.getTime()) < 86_400_000 ? t.id : idAt(t.date);
 			if ((await sql`select 1 from posts where id = ${id}::bigint`).length) {
 				skipped++;
 				continue;
@@ -529,38 +543,61 @@ export async function importRoute(req: Request, url: URL, viewer: Viewer): Promi
 		if (p === "/account/import/upload") return json({ error: "Importing from X is turned off on this instance." }, 404);
 		return accountPage({ req, viewer, title: "Import from X", status: 404, body: `<h1>Import from X</h1><p class="dim">Importing from X is turned off on this instance.</p>` });
 	}
-	const r = await row(viewer.id);
-	const busy = r?.state === "pending" || r?.state === "queued" || r?.state === "running";
 	if (p === "/account/import/upload") {
 		if (req.method !== "POST") return json({ error: "Use POST." }, 405);
 		if (req.headers.get("x-csrf-token") !== viewer.csrf) return json({ error: "That page is out of date. Reload it and try again." }, 403);
-		if (busy) return json({ error: "An import is already running." }, 409);
-		const young = await tooNew(viewer);
-		if (young) return json({ error: young }, 403);
+		if (isBusy(await row(viewer.id))) return json({ error: "An import is already running." }, 409);
 		const offset = Number(url.searchParams.get("offset"));
 		const data = new Uint8Array(await req.arrayBuffer());
-		if (!Number.isSafeInteger(offset) || offset < 0 || data.length > CHUNK_BYTES) return json({ error: "Bad upload piece." }, 400);
-		mkdirSync(DIR, { recursive: true });
-		const file = fileOf(viewer.id);
-		if (offset === 0) {
-			await sql`insert into archive_imports (user_id, state, size) values (${viewer.id}::bigint, 'uploading', 0)
-				on conflict (user_id) do update set state = 'uploading', size = 0, total = 0, posts = 0, media = 0, skipped = 0, refused = 0, waiting_until = null, error = null, updated_at = now()`;
-			writeFileSync(file, "");
-		}
-		const size = existsSync(file) ? statSync(file).size : -1;
-		if (size !== offset) return json({ error: "The upload got out of step. Start again." }, 409);
-		if (size + data.length > MAX_BYTES) {
-			await truncate(file, 0);
-			return json({ error: `Archives up to ${Math.round(MAX_BYTES / MB)} MB can be imported.` }, 413);
-		}
-		await appendFile(file, data);
-		await sql`update archive_imports set size = ${size + data.length}, updated_at = now() where user_id = ${viewer.id}::bigint`;
-		return json({ size: size + data.length });
+		return serial(viewer.id, () => uploadPiece(viewer, offset, data));
 	}
-	if (req.method !== "POST") return page(req, viewer, r);
+	if (req.method !== "POST") return page(req, viewer, await row(viewer.id));
 	const f = await req.formData().catch(() => undefined);
+	return serial(viewer.id, () => submit(req, viewer, f));
+}
+
+const isBusy = (r: any) => r?.state === "pending" || r?.state === "queued" || r?.state === "running";
+const uploads = new Map<string, Promise<unknown>>();
+
+function serial<T>(userId: string, job: () => Promise<T>): Promise<T> {
+	const run = (uploads.get(userId) ?? Promise.resolve()).then(job);
+	const tail = run.catch(() => {});
+	uploads.set(userId, tail);
+	void tail.then(() => {
+		if (uploads.get(userId) === tail) uploads.delete(userId);
+	});
+	return run;
+}
+
+async function uploadPiece(viewer: Viewer, offset: number, data: Uint8Array): Promise<Response> {
+	if (isBusy(await row(viewer.id))) return json({ error: "An import is already running." }, 409);
+	const young = await tooNew(viewer);
+	if (young) return json({ error: young }, 403);
+	if (!Number.isSafeInteger(offset) || offset < 0 || data.length > CHUNK_BYTES) return json({ error: "Bad upload piece." }, 400);
+	mkdirSync(DIR, { recursive: true });
+	const file = fileOf(viewer.id);
+	if (offset === 0) {
+		const reset = await sql`insert into archive_imports (user_id, state, size) values (${viewer.id}::bigint, 'uploading', 0)
+			on conflict (user_id) do update set state = 'uploading', size = 0, total = 0, posts = 0, media = 0, skipped = 0, refused = 0, waiting_until = null, error = null, updated_at = now()
+			where archive_imports.state not in ('pending', 'queued', 'running') returning 1`;
+		if (!reset.length) return json({ error: "An import is already running." }, 409);
+		writeFileSync(file, "");
+	}
+	const size = existsSync(file) ? statSync(file).size : -1;
+	if (size !== offset) return json({ error: "The upload got out of step. Start again." }, 409);
+	if (size + data.length > MAX_BYTES) {
+		await truncate(file, 0);
+		return json({ error: `Archives up to ${Math.round(MAX_BYTES / MB)} MB can be imported.` }, 413);
+	}
+	await appendFile(file, data);
+	await sql`update archive_imports set size = ${size + data.length}, updated_at = now() where user_id = ${viewer.id}::bigint`;
+	return json({ size: size + data.length });
+}
+
+async function submit(req: Request, viewer: Viewer, f: FormData | undefined): Promise<Response> {
+	const r = await row(viewer.id);
 	if (String(f?.get("csrf") ?? "") !== viewer.csrf) return page(req, viewer, r, "That form is out of date. Try again.");
-	if (busy) return page(req, viewer, r, "An import is already running.");
+	if (isBusy(r)) return page(req, viewer, r, "An import is already running.");
 	if (r?.state !== "uploading" || !existsSync(fileOf(viewer.id))) return page(req, viewer, r, "Upload your archive first.");
 	const [me] = await sql`select status, deactivated_at from users where id = ${viewer.id}::bigint`;
 	if (!canPost(me)) return page(req, viewer, r, "Your account can't post right now, so it can't import posts either.");

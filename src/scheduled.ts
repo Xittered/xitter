@@ -21,9 +21,9 @@ type Vars = Record<string, any>;
 
 // Scheduled quota counts future posts, including every reply in a thread.
 // Drafts retain their existing quota of 100 saved composer requests.
-const MAX_PENDING = 100;
+export const MAX_PENDING = 100;
 const MIN_LEAD_SECONDS = 30;
-const MAX_LEAD_DAYS = 365 * 2;
+export const MAX_LEAD_DAYS = 365 * 2;
 const RETRIES = 5;
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.map(String).filter(isId) : []);
@@ -160,9 +160,9 @@ async function check(userId: string, request: Vars, kind: "scheduled" | "draft",
 	}
 }
 
-const requestCost = (request: Vars): number => 1 + (Array.isArray(request.thread_tweets) ? request.thread_tweets.length : 0);
+export const requestCost = (request: Vars): number => 1 + (Array.isArray(request.thread_tweets) ? request.thread_tweets.length : 0);
 
-async function pendingCost(db: typeof sql, userId: string, kind: "scheduled" | "draft"): Promise<number> {
+export async function pendingCost(db: typeof sql, userId: string, kind: "scheduled" | "draft"): Promise<number> {
 	const [row] = await db`select coalesce(sum(case when kind = 'scheduled' then 1 +
 		case when jsonb_typeof(request->'thread_tweets') = 'array' then jsonb_array_length(request->'thread_tweets') else 0 end
 		else 1 end), 0)::int as n from scheduled_posts where user_id = ${userId}::bigint and kind = ${kind}`;

@@ -219,7 +219,7 @@ export async function postsByIds(viewerId: string, ids: string[], quotes = true,
 }
 
 const EDIT_WINDOW_MS = 60 * 60 * 1000;
-const MAX_EDITS = 5;
+export const MAX_EDITS = 5;
 
 // Text changes only; media, replies and quotes stay as posted. The post keeps its
 // id and what it said before goes to post_versions.

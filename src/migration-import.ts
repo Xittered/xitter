@@ -17,14 +17,20 @@ import { join } from "node:path";
 import { withSafeLinks } from "./articles";
 import type { Viewer } from "./auth";
 import { isBlockedEitherWay, replyLimited } from "./blocks";
+import { MAX_FOLDERS } from "./bookmark-folders";
+import { hateIn, hateInName } from "./hate";
+import { addListMember, MAX_LISTS } from "./lists";
+import { automodStrike } from "./moderation";
+import { MAX_CONTENT_BYTES } from "./articles";
+import { MAX_LEAD_DAYS, MAX_PENDING, pendingCost, requestCost } from "./scheduled";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { FEDERATION_ON, INSTANCE_ID, isPeer, readLimited } from "./federation";
 import { lookupRemoteUser } from "./federation-sync";
 import { flagValue } from "./flags";
 import { isId, newId, newIdAt } from "./ids";
 import { saveMentions } from "./mentions";
-import { checkLength, PostError, seenBy } from "./posts";
+import { checkLength, getPost, MAX_EDITS, PostError, seenBy } from "./posts";
 import { MEDIA_DIR, sniffImage } from "./media";
 import { FORMAT, FORMAT_VERSION, type VersionInfo, versionInfo } from "./migration";
 import { blockedNameIn, forbiddenText } from "./names";
@@ -47,6 +53,8 @@ const MAX_MEDIA_BYTES = 10 * 1024 ** 3;
 const MAX_STARTS_A_DAY = 5;
 const MAX_GIF = 15 * 1024 * 1024;
 const MAX_RUNNING = 2;
+const MAX_REMOTE_LOOKUPS = 1000;
+const MAX_MUTED_WORDS = 1000;
 
 export class MigrationError extends Error {}
 
@@ -164,6 +172,8 @@ export async function check(viewer: Viewer, sourceInput: string, codeInput: stri
 					: "";
 	if (why)
 		warnings.push({ code: "unfederated", text: `The two instances don't federate (${why}). Accounts and posts from ${source.host} aren't known here, so follows, lists, likes, reposts, bookmarks, replies and quotes involving them can't be matched and are left out (the report lists the accounts). Your followers there won't see your new account either.` });
+	if (!(FEDERATION_ON && isPeer(info.instance) && source.host === info.instance))
+		warnings.push({ code: "unverified", text: `${source.host} isn't an instance this one federates with at its own address, so what it says about the account's posts can't be confirmed. Posts and articles come over dated today, without their edit history or the app they were sent from.` });
 	if (info.format_version < FORMAT_VERSION) warnings.push({ code: "older-format", text: `${source.host} exports an older format (${info.format_version}); things added since won't come over.` });
 	const [mine] = await sql`select (select count(*)::int from posts where user_id = ${viewer.id}::bigint) as posts,
 		(select count(*)::int from follows where follower_id = ${viewer.id}::bigint) as following`;
@@ -188,21 +198,28 @@ const running = new Set<string>();
 
 export async function start(viewer: Viewer, sourceInput: string, code: string, ack: string, options: Options): Promise<string> {
 	if (running.size >= MAX_RUNNING) throw new MigrationError("This instance is busy with other imports. Try again in a few minutes.");
-	const checked = await check(viewer, sourceInput, code);
-	if (checked.blockers.length) throw new MigrationError(checked.blockers[0].text);
-	if (checked.warnings.length && ack !== checked.ack) throw new MigrationError("The checks changed since you looked at them. Review them again before you start.");
-	const [today] = await sql`select count(*)::int as n from account_migrations where user_id = ${viewer.id}::bigint and created_at > now() - interval '1 day'`;
-	if (today.n >= MAX_STARTS_A_DAY) throw new MigrationError(`An account can start ${MAX_STARTS_A_DAY} imports a day. Try again tomorrow; what was already brought over is kept.`);
 	const id = newId();
-	try {
-		await sql`insert into account_migrations (id, user_id, source, source_user_id, source_handle, state, progress)
-			values (${id}::bigint, ${viewer.id}::bigint, ${checked.source.origin}, ${checked.info.account.id}::bigint, ${checked.info.account.screen_name}, 'running', ${JSON.stringify({ step: "Starting" })}::text::jsonb)`;
-	} catch {
-		throw new MigrationError("An import into this account is already running. Wait for it to finish.");
-	}
 	running.add(id);
-	void run(id, viewer, checked, code.trim(), options).finally(() => running.delete(id));
-	return id;
+	let started = false;
+	try {
+		const checked = await check(viewer, sourceInput, code);
+		if (checked.blockers.length) throw new MigrationError(checked.blockers[0].text);
+		if (checked.warnings.length && ack !== checked.ack) throw new MigrationError("The checks changed since you looked at them. Review them again before you start.");
+		await sql.begin(async (tx) => {
+			await holdLock(tx, `migration-starts:${viewer.id}`);
+			const [today] = await tx`select count(*)::int as n from account_migrations where user_id = ${viewer.id}::bigint and created_at > now() - interval '1 day'`;
+			if (today.n >= MAX_STARTS_A_DAY) throw new MigrationError(`An account can start ${MAX_STARTS_A_DAY} imports a day. Try again tomorrow; what was already brought over is kept.`);
+			await tx`insert into account_migrations (id, user_id, source, source_user_id, source_handle, state, progress)
+				values (${id}::bigint, ${viewer.id}::bigint, ${checked.source.origin}, ${checked.info.account.id}::bigint, ${checked.info.account.screen_name}, 'running', ${JSON.stringify({ step: "Starting" })}::text::jsonb)`;
+		}).catch((e) => {
+			throw e instanceof MigrationError ? e : new MigrationError("An import into this account is already running. Wait for it to finish.");
+		});
+		started = true;
+		void run(id, viewer, checked, code.trim(), options).finally(() => running.delete(id));
+		return id;
+	} finally {
+		if (!started) running.delete(id);
+	}
 }
 
 // imports that were running when the server stopped; started again they resume
@@ -222,12 +239,21 @@ type Counts = Record<string, { done: number; skipped: number }>;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
 const date = (v: unknown, fallback: Date | null = new Date()) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v) : fallback);
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+const textsIn = (value: unknown, out: string[] = [], depth = 0): string[] => {
+	if (depth > 12) return out;
+	if (typeof value === "string") out.push(value);
+	else if (value && typeof value === "object") for (const v of Object.values(value)) textsIn(v, out, depth + 1);
+	return out;
+};
 
 async function run(jobId: string, viewer: Viewer, checked: Check, code: string, options: Options) {
 	const { source } = checked;
 	const srcInstance = checked.info.instance;
 	const key = sourceKey(srcInstance, checked.info.account.id);
 	const me = viewer.id;
+	const verified = FEDERATION_ON && isPeer(srcInstance) && source.host === srcInstance;
+	const trusted = (v: unknown, fallback: Date | null = new Date()) => (verified ? date(v, fallback) : date(v, null) ? new Date() : fallback);
+	const lookedUp = new Map<string, string | undefined>();
 	const counts: Counts = {};
 	const skipped: string[] = [];
 	const unresolved = new Set<string>();
@@ -271,8 +297,10 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 			: await sql`select id::text from users where instance = ${ref.i} and remote_id = ${ref.id}::bigint`;
 		if (row) return row.id === me ? undefined : row.id;
 		const name = str(ref.h, 80).split("@")[0];
-		if (FEDERATION_ON && name && isPeer(ref.i)) {
-			const found = await lookupRemoteUser(`${name}@${ref.i}`).catch(() => undefined);
+		const handle = `${name}@${ref.i}`;
+		if (FEDERATION_ON && name && isPeer(ref.i) && (lookedUp.has(handle) || lookedUp.size < MAX_REMOTE_LOOKUPS)) {
+			if (!lookedUp.has(handle)) lookedUp.set(handle, await lookupRemoteUser(handle).catch(() => undefined));
+			const found = lookedUp.get(handle);
 			if (found && found !== me) return found;
 		}
 		if (name) unresolved.add(`@${name}@${ref.i}`);
@@ -391,15 +419,19 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 					continue;
 				}
 				const id = newId();
+				if (a.content_state && typeof a.content_state === "object" && forbiddenText(...textsIn(a.content_state))) {
+					skip("articles", `The article "${str(a.title, 60)}" has words this instance doesn't allow.`);
+					continue;
+				}
 				const body = a.content_state && typeof a.content_state === "object" ? JSON.stringify(withSafeLinks(remapMedia(a.content_state))) : null;
-				if (body && body.length > 4 * 1024 * 1024) {
+				if (body && body.length > MAX_CONTENT_BYTES) {
 					skip("articles", `The article "${str(a.title, 60)}" is too large.`);
 					continue;
 				}
 				await sql.begin(async (tx) => {
 					await tx`insert into articles (id, user_id, title, content_state, plain_text, cover_media_id, state, created_at, modified_at, first_published_at)
 						values (${id}::bigint, ${me}::bigint, ${str(a.title, 300)}, ${body}::text::jsonb, ${str(a.plain_text, 200_000)}, ${mapped("media", a.cover_media_id) ?? null}::bigint,
-							${a.state === "Published" ? "Published" : "Draft"}, ${date(a.created_at)}, ${date(a.modified_at)}, ${date(a.first_published_at, null)})`;
+							${a.state === "Published" ? "Published" : "Draft"}, ${trusted(a.created_at)}, ${trusted(a.modified_at)}, ${trusted(a.first_published_at, null)})`;
 					await remember("article", a.id, id, tx);
 				});
 				count("articles", true);
@@ -465,7 +497,7 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 					skip("posts", "A post whose files or poll couldn't be brought over.");
 					continue;
 				}
-				const created = date(p.created_at)!;
+				const created = trusted(p.created_at)!;
 				const replyPolicy = ["Community", "ByInvitation", "Verified"].includes(p.reply_policy) ? p.reply_policy : null;
 				let id: string | undefined;
 				await sql.begin(async (tx) => {
@@ -474,14 +506,16 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						const rows = await tx`insert into posts (id, user_id, text, reply_to_id, reply_to_user_id, conversation_id, quote_id, poll_id, article_id, sensitive,
 								reply_policy, place_id, source, created_at, edit_count, edited_at)
 							values (${tryId}::bigint, ${me}::bigint, ${text}, ${replyTo}::bigint, ${replyToUser}::bigint, ${conversation ?? tryId}::bigint, ${quote}::bigint, ${poll}::bigint,
-								${article}::bigint, ${!!p.sensitive}, ${replyTo ? null : replyPolicy}, ${str(p.place_id, 100) || null}, ${str(p.source, 60) || "Xitter for Web"}, ${created},
-								${Math.max(0, Number(p.edit_count) || 0)}, ${date(p.edited_at, null)})
+								${article}::bigint, ${!!p.sensitive}, ${replyTo ? null : replyPolicy}, ${str(p.place_id, 100) || null}, ${(verified && str(p.source, 60)) || "Xitter for Web"}, ${created},
+								${verified ? Math.min(MAX_EDITS, Math.max(0, Number(p.edit_count) || 0)) : 0}, ${verified ? date(p.edited_at, null) : null})
 							on conflict (id) do nothing returning id::text`;
 						id = rows[0]?.id;
 					}
 					if (!id) throw new MigrationError("no free id for a post");
-					for (const v of arr(p.versions))
+					for (const v of verified ? arr(p.versions).slice(0, MAX_EDITS) : []) {
+						if (forbiddenText(str(v?.text, 100_000))) continue;
 						await tx`insert into post_versions (version_id, post_id, seq, text, created_at) values (${newId()}::bigint, ${id}::bigint, ${Number(v?.seq) || 0}, ${str(v?.text, 100_000)}, ${date(v?.created_at)})`;
+					}
 					await tx`update media set post_id = ${id}::bigint, position = x.position from (
 							select (e->>'local')::bigint as id, (e->>'position')::smallint as position from jsonb_array_elements(${JSON.stringify(
 								arr(archive.media).filter((m) => m?.post_id === p.id && mapped("media", m.id)).map((m) => ({ local: mapped("media", m.id), position: Number(m.position) || 0 })),
@@ -515,13 +549,21 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 				}
 				const body = JSON.stringify(request);
 				if (body.length > 256 * 1024) continue;
+				const at = d.kind === "scheduled" ? date(d.execute_at) : null;
+				if (at && at.getTime() > Date.now() + MAX_LEAD_DAYS * 86400_000) {
+					count(d.kind === "draft" ? "drafts" : "scheduled", false);
+					continue;
+				}
 				const id = newId();
-				await sql.begin(async (tx) => {
+				const kept = await sql.begin(async (tx) => {
+					await holdLock(tx, `scheduled-quota:${me}`);
+					if (await pendingCost(tx, me, d.kind) + (d.kind === "scheduled" ? requestCost(request) : 1) > MAX_PENDING) return false;
 					await tx`insert into scheduled_posts (id, user_id, kind, execute_at, request, created_at)
-						values (${id}::bigint, ${me}::bigint, ${d.kind}, ${d.kind === "scheduled" ? date(d.execute_at) : null}, ${body}::text::jsonb, ${date(d.created_at)})`;
+						values (${id}::bigint, ${me}::bigint, ${d.kind}, ${at}, ${body}::text::jsonb, ${date(d.created_at)})`;
 					await remember("draft", d.id, id, tx);
+					return true;
 				});
-				count(d.kind === "draft" ? "drafts" : "scheduled", true);
+				count(d.kind === "draft" ? "drafts" : "scheduled", kept);
 			}
 		}
 
@@ -530,6 +572,9 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 			const a = archive.account;
 			const changes: Record<string, unknown> = {};
 			const name = str(a.name, NAME_MAX).replace(/\s+/g, " ").trim();
+			const nameHate = hateInName(name);
+			const hate = nameHate ?? hateIn(str(a.bio, 160), str(a.location, 30));
+			if (hate) await automodStrike(me, hate, nameHate ? "name" : "profile", nameHate ? name : `${str(a.bio, 160)} ${str(a.location, 30)}`).catch(() => {});
 			if (name && !blockedNameIn(name) && !forbiddenText(name)) changes.name = name;
 			else if (name) skipped.push("The display name has words this instance doesn't allow, so it wasn't changed.");
 			for (const [field, max] of [["bio", 160], ["location", 30]] as const) {
@@ -598,16 +643,23 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 					count(label, true);
 				}
 			}
+			let [{ n: words }] = await sql`select count(*)::int as n from muted_keywords where user_id = ${me}::bigint`;
 			for (const k of arr(archive.muted_keywords)) {
 				const word = str(k?.keyword, 100).trim();
 				const surfaces = arr(k?.surfaces).filter((s) => ["home_timeline", "tweet_replies", "notifications"].includes(s));
 				if (!word || !surfaces.length) continue;
+				if (words >= MAX_MUTED_WORDS) {
+					count("muted words", false);
+					continue;
+				}
 				const rows = await sql`insert into muted_keywords (id, user_id, keyword, surfaces, exclude_following, valid_until, created_at)
 					values (${newId()}::bigint, ${me}::bigint, ${word}, ${sql.array(surfaces, "TEXT")}, ${!!k.exclude_following}, ${date(k.valid_until, null)}, ${date(k.created_at)})
 					on conflict do nothing returning id`;
 				count("muted words", rows.length > 0);
+				words += rows.length;
 			}
 			await progress("Lists", undefined, undefined, true);
+			let [{ n: lists }] = await sql`select count(*)::int as n from lists where owner_id = ${me}::bigint`;
 			for (const l of arr(archive.lists)) {
 				if (!isId(l?.id)) continue;
 				let id = mapped("list", l.id);
@@ -617,6 +669,10 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						skip("lists", `The list "${name}" has words this instance doesn't allow.`);
 						continue;
 					}
+					if (lists >= MAX_LISTS) {
+						skip("lists", `The list "${name}" didn't fit: an account can have up to ${MAX_LISTS} lists.`);
+						continue;
+					}
 					id = newId();
 					await sql.begin(async (tx) => {
 						await tx`insert into lists (id, owner_id, name, description, is_private, banner_media_id, created_at)
@@ -624,10 +680,16 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						await remember("list", l.id, id!, tx);
 					});
 					count("lists", true);
+					lists++;
 				}
 				for (const member of arr(l.members)) {
 					const user = await resolveUser(member);
-					if (user) await sql`insert into list_members (list_id, user_id) values (${id}::bigint, ${user}::bigint) on conflict do nothing`;
+					if (!user) continue;
+					const added = await sql.begin((tx) => addListMember(tx, me, id!, user)).then(() => true, (e) => {
+						if (e instanceof PostError) return false;
+						throw e;
+					});
+					if (!added) count("list members", false);
 				}
 			}
 			const marks = [["likes", sql`likes`], ["bookmarks", sql`bookmarks`], ["highlights", sql`highlights`]] as const;
@@ -642,6 +704,10 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 						continue;
 					}
 					if (list === "highlights" && !(await sql`select 1 from posts where id = ${post}::bigint and user_id = ${me}::bigint`).length) continue;
+					if (!(await getPost(me, post))) {
+						count(list, false);
+						continue;
+					}
 					await sql`insert into ${table} (user_id, post_id, created_at) values (${me}::bigint, ${post}::bigint, ${date(item.created_at)}) on conflict do nothing`;
 					count(list, true);
 				}
@@ -655,9 +721,13 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 					count("reposts", false);
 					continue;
 				}
-				const [owner] = await sql`select user_id::text from posts where id = ${post}::bigint`;
+				const [owner] = await sql`select p.user_id::text, u.protected, p.circle_owner_id is not null as circle, p.ad_only from posts p join users u on u.id = p.user_id where p.id = ${post}::bigint`;
 				if (owner && owner.user_id !== me && (await isBlockedEitherWay(me, owner.user_id))) continue;
-				const created = date(item.created_at)!;
+				if (!owner || owner.circle || owner.ad_only || (owner.protected && owner.user_id !== me) || !(await getPost(me, post))) {
+					count("reposts", false);
+					continue;
+				}
+				const created = trusted(item.created_at)!;
 				// the id places the repost in timelines, so it keeps its time; it
 				// isn't unique by itself, so a clash is retried
 				for (let attempt = 0; attempt < 8; attempt++) {
@@ -668,10 +738,16 @@ async function run(jobId: string, viewer: Viewer, checked: Check, code: string, 
 				}
 				count("reposts", true);
 			}
+			let [{ n: folders }] = await sql`select count(*)::int as n from bookmark_folders where user_id = ${me}::bigint`;
 			for (const f of arr(archive.bookmark_folders)) {
 				if (!isId(f?.id)) continue;
 				let id = mapped("folder", f.id);
 				if (!id) {
+					if (folders >= MAX_FOLDERS) {
+						count("bookmark folders", false);
+						continue;
+					}
+					folders++;
 					id = newId();
 					await sql.begin(async (tx) => {
 						await tx`insert into bookmark_folders (id, user_id, name, created_at) values (${id}::bigint, ${me}::bigint, ${str(f.name, 25) || "Bookmarks"}, ${date(f.created_at)})`;

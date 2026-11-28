@@ -5,7 +5,8 @@
 import { createReadStream, createWriteStream, rmSync } from "node:fs";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createInflateRaw, inflateRawSync } from "node:zlib";
+import { promisify } from "node:util";
+import { createInflateRaw, inflateRaw } from "node:zlib";
 
 export type ZipEntry = { name: string; method: number; size: number; compressed: number; offset: number; encrypted: boolean };
 
@@ -107,7 +108,7 @@ export class Zip {
 		const raw = Buffer.from(await Bun.file(this.path).slice(start, start + entry.compressed).arrayBuffer());
 		if (entry.method === 0) return raw;
 		try {
-			return inflateRawSync(raw, { maxOutputLength: Math.max(max, 1) });
+			return await promisify(inflateRaw)(raw, { maxOutputLength: Math.max(max, 1) });
 		} catch {
 			// damaged, or unpacks to more than its size says (a zip bomb)
 			throw new ZipError(`${entry.name} couldn't be unpacked.`);
