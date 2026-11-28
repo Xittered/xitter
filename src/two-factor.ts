@@ -133,6 +133,7 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 	const field = (k: string) => String(form?.get(k) ?? "");
 	const sub = url.pathname.slice("/account/2fa".length);
 	if (req.method === "POST" && field("csrf") !== viewer.csrf) return status(req, viewer, u.totp_enabled, "That form is out of date. Try again.");
+	if (req.method === "POST" && viewer.impersonator) return status(req, viewer, u.totp_enabled, "Not while signed in as someone else.");
 
 	if (req.method === "POST" && sub === "/start" && !u.totp_enabled) {
 		const secret = newSecret();

@@ -7,7 +7,7 @@ import { reauthenticate } from "./superadmin";
 import { superadminOf } from "./superadmins";
 
 const MINUTES = 60;
-const RETURN_COOKIE = "xitter_impersonating";
+const RETURN_COOKIE = `${SECURE ? "__Host-" : ""}xitter_impersonating`;
 const tickets = new Map<string, { actorId: string; token: string; csrf: string; userId: string; until: number }>();
 
 const localSuperadmin = (a: Viewer) => !a.instance && !a.superadmin && a.role === "admin" && !!superadminOf(INSTANCE_ID, a.screen_name, a.id);
@@ -41,10 +41,13 @@ export const impersonateActions: Record<string, Action> = {
 
 export async function impersonateRoute(req: Request, path: string, viewer: Viewer | undefined): Promise<Response | undefined> {
 	if (path === "/account/impersonate/exit") {
-		const back = parseCookies(req)[RETURN_COOKIE];
+		const cookies = parseCookies(req);
+		const back = cookies[RETURN_COOKIE];
 		const headers = new Headers({ location: "/admin" });
-		if (viewer?.impersonator) await sql`delete from sessions where token = ${viewer.token}`;
-		const [own] = back ? await sql`select s.csrf, s.user_id::text from sessions s join users u on u.id = s.user_id where s.token = ${sessionKey(back)} and s.impersonator_id is null` : [];
+		const current = cookies[SESSION_COOKIE];
+		const [acting] = current ? await sql`delete from sessions where token = ${sessionKey(current)} and impersonator_id is not null returning impersonator_id::text` : [];
+		const [own] = back && acting ? await sql`select s.csrf, s.user_id::text from sessions s join users u on u.id = s.user_id
+			where s.token = ${sessionKey(back)} and s.impersonator_id is null and s.user_id = ${acting.impersonator_id}::bigint` : [];
 		if (own) for (const c of sessionCookies({ token: back!, csrf: own.csrf, userId: own.user_id })) headers.append("set-cookie", c);
 		else headers.set("location", "/");
 		headers.append("set-cookie", `${RETURN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${SECURE}`);

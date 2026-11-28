@@ -186,6 +186,7 @@ ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ""}<form method="p
 export async function oauthAuthorize(req: Request, url: URL, viewer: Viewer | undefined): Promise<Response> {
 	if (!viewer) return signInFirst(req, url);
 	if (viewer.status !== "active") return new Response("This account cannot authorize apps.", { status: 403 });
+	if (req.method === "POST" && viewer.impersonator) return new Response("Not while signed in as someone else.", { status: 403 });
 	const f = req.method === "POST" ? await form(req) : undefined;
 	if (req.method === "POST" && (!f || value(f, "csrf") !== viewer.csrf || (req.headers.get("origin") && req.headers.get("origin") !== PUBLIC_ORIGIN))) return new Response("Invalid authorization form.", { status: 403 });
 	// opening the page may fetch an app's metadata document; keep that bounded

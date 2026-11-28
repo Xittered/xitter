@@ -695,6 +695,7 @@ export async function apiTokensRoute(req: Request, v: Viewer): Promise<Response>
 	const origin = req.headers.get("origin");
 	if (origin && origin !== PUBLIC_ORIGIN) return tokensView(req, v, "", "That request didn't come from this page.");
 	if (!(await formCsrfOk(req, v))) return tokensView(req, v, "", "That form is out of date. Try again.", 403);
+	if (v.impersonator) return tokensView(req, v, "", "Not while signed in as someone else.", 403);
 	const f = await req.formData().catch(() => new FormData());
 	if (f.get("do") === "delete") {
 		const id = String(f.get("id") ?? "");
