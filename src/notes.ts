@@ -26,11 +26,13 @@ async function membership(v: Viewer) {
 	return (!!user?.notes_writer || feature("notes_everyone")) && v.status === "active";
 }
 
+const contributor = (voter = sql`voter`) => sql`(${voter}.notes_writer or (${voter}.role is not null and ${voter}.instance is null) or ${feature("notes_everyone")})`;
+
 async function profile(v: Viewer, alias?: string) {
 	const [user] = await sql`select id::text, notes_alias, (notes_writer or (role is not null and instance is null)) as notes_writer from users where ${alias === undefined ? sql`id = ${v.id}::bigint` : sql`notes_alias = ${alias}`}`;
 	if (!user) return null;
 	const scores = await sql`select n.id, count(voter.id) as ratings, count(voter.id) filter(where r.rating = 'Helpful') as helpful, count(voter.id) filter(where r.rating = 'NotHelpful') as not_helpful
-		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active'
+		from community_notes n left join community_note_ratings r on r.note_id = n.id left join users voter on voter.id = r.user_id and voter.status = 'active' and ${contributor()}
 		where n.author_id = ${user.id}::bigint group by n.id`;
 	const counts = { awaiting_more_ratings: 0, currently_rated_helpful: 0, currently_rated_not_helpful: 0 };
 	for (const score of scores) {
@@ -55,7 +57,7 @@ async function notesMany(v: Viewer, postIds: string[], noteIds?: string[]) {
 		count(r.user_id) filter(where r.rating = 'NotHelpful')::int as not_helpful,
 		max(r.rating) filter(where r.user_id = ${v.id}::bigint) as viewer_rating,
 		(jsonb_agg(r.data_v2) filter(where r.user_id = ${v.id}::bigint))->0 as viewer_data
-		from community_notes n left join (select x.* from community_note_ratings x join users voter on voter.id = x.user_id and voter.status = 'active') r on r.note_id = n.id
+		from community_notes n left join (select x.* from community_note_ratings x join users voter on voter.id = x.user_id and voter.status = 'active' and ${contributor()}) r on r.note_id = n.id
 		join users u on u.id = n.author_id and u.status <> 'suspended' left join community_note_appeals a on a.note_id = n.id
 		where n.post_id = any(${sql.array(postIds, "INT8")}) and ${noteIds ? sql`n.id = any(${sql.array(noteIds, "INT8")})` : sql`true`} group by n.id, u.notes_alias, a.status order by n.id desc`;
 	const result = new Map<string, any[]>();
@@ -137,6 +139,7 @@ export const noteHandlers = {
 	},
 	BirdwatchCreateRating: async (v: Viewer, vars: any) => {
 		const note = await target(v, vars.note_id, true);
+		if (!await membership(v)) throw new PostError("Community Notes rating access is required.", 403);
 		if (note.author_id === v.id) throw new PostError("You can't rate your own note.", 144);
 		const rating = vars.data_v2?.helpfulness_level;
 		if (!["Helpful", "SomewhatHelpful", "NotHelpful"].includes(rating)) throw new PostError("Invalid rating.", 144);
