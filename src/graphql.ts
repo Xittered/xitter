@@ -28,7 +28,7 @@ import { activeCards, cardsEntry } from "./explore-cards";
 import { isBlockedEitherWay, blockedIds, blockedFor, outOfView, protectedFor, shadowedFor } from "./blocks";
 import { chargeView, pickAd } from "./ads";
 import { feature, settings } from "./settings";
-import { freshAsOf, newView, rankedFeed } from "./ranking";
+import { freshAsOf, newView, rankedFeed, wasIssued } from "./ranking";
 import * as articles from "./articles";
 import type { User, Viewer } from "./auth";
 import { revealSuspended, seesSuspended } from "./staff-access";
@@ -184,7 +184,8 @@ const forYou: Handler = async (viewer, vars) => {
 	const age = parsed && isId(parsed[2]) ? Date.now() - idTime(parsed[2]).getTime() : Number.NaN;
 	const ranked = age > -60_000 && age < 24 * 3600_000 ? parsed : null;
 	const count = Math.min(Math.max(Number(vars.count) || 20, 1), 100);
-	const asOf = ranked ? ranked[2] : await freshAsOf(viewer.id);
+	const known = ranked && wasIssued(viewer.id, ranked[2]);
+	const asOf = known ? ranked[2] : await freshAsOf(viewer.id);
 	const offset = ranked ? Number(ranked[1]) : 0;
 	const seed = ranked ? Number(ranked[3] ?? 0) : newView();
 	const page = await rankedFeed(viewer.id, { asOf, offset, limit: count, view: seed });

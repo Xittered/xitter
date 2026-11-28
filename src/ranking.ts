@@ -33,6 +33,18 @@ const RANKING_TTL = 10 * 60_000;
 const MAX_RANKINGS = 200;
 const MAX_PER_VIEWER = 3;
 const rankings = new Map<string, { rows: Promise<Ranked>; until: number }>();
+const rankQueue = new Map<string, Promise<Ranked>>();
+
+function rankInTurn(viewerId: string, asOf: string): Promise<Ranked> {
+	const before = rankQueue.get(viewerId);
+	const rows = before ? before.then(() => rank(viewerId, asOf), () => rank(viewerId, asOf)) : rank(viewerId, asOf);
+	rankQueue.set(viewerId, rows);
+	const clear = () => {
+		if (rankQueue.get(viewerId) === rows) rankQueue.delete(viewerId);
+	};
+	rows.then(clear, clear);
+	return rows;
+}
 
 function ranking(viewerId: string, asOf: string): Promise<Ranked> {
 	const key = `${viewerId}:${asOf}`;
@@ -43,7 +55,7 @@ function ranking(viewerId: string, asOf: string): Promise<Ranked> {
 	const own = [...rankings.keys()].filter((k) => k.startsWith(`${viewerId}:`));
 	for (const k of own.slice(0, Math.max(0, own.length - (MAX_PER_VIEWER - 1)))) rankings.delete(k);
 	while (rankings.size >= MAX_RANKINGS) rankings.delete(rankings.keys().next().value!);
-	const rows = rank(viewerId, asOf);
+	const rows = rankInTurn(viewerId, asOf);
 	rankings.set(key, { rows, until: now + RANKING_TTL });
 	rows.catch(() => rankings.delete(key));
 	return rows;
@@ -115,6 +127,20 @@ export const newView = () => 1 + Math.floor(Math.random() * 2_000_000_000);
 // measured from a few seconds back, which moves no post more than a hair.
 const REUSE_MS = 60_000;
 const latest = new Map<string, { asOf: string; at: number }>();
+const MAX_ISSUED = 4;
+const MAX_ISSUED_VIEWERS = 10_000;
+const issued = new Map<string, string[]>();
+
+function issue(viewerId: string, asOf: string) {
+	const list = (issued.get(viewerId) ?? []).filter((a) => a !== asOf);
+	list.push(asOf);
+	issued.delete(viewerId);
+	issued.set(viewerId, list.slice(-MAX_ISSUED));
+	while (issued.size > MAX_ISSUED_VIEWERS) issued.delete(issued.keys().next().value!);
+	return asOf;
+}
+
+export const wasIssued = (viewerId: string, asOf: string) => issued.get(viewerId)?.includes(asOf) ?? false;
 
 export async function freshAsOf(viewerId: string): Promise<string> {
 	const now = Date.now();
@@ -122,12 +148,12 @@ export async function freshAsOf(viewerId: string): Promise<string> {
 	if (last && now - last.at < REUSE_MS && rankings.has(`${viewerId}:${last.asOf}`)) {
 		const [{ newer }] = await sql`select exists (select 1 from posts where id > ${last.asOf}::bigint and reply_to_id is null)
 			or exists (select 1 from reposts where id > ${last.asOf}::bigint) as newer`;
-		if (!newer) return last.asOf;
+		if (!newer) return issue(viewerId, last.asOf);
 	}
 	if (latest.size >= MAX_RANKINGS) for (const [k, l] of latest) if (now - l.at >= REUSE_MS) latest.delete(k);
 	const asOf = newId();
 	latest.set(viewerId, { asOf, at: now });
-	return asOf;
+	return issue(viewerId, asOf);
 }
 
 export const forgetRanking = (viewerId: string) => void latest.delete(viewerId);
