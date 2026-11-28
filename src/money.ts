@@ -417,7 +417,7 @@ export async function payments(ids: string[], visibleTo?: string): Promise<Map<s
 	return new Map(
 		rows
 			.filter((r: any) => who.has(r.sender_id) && who.has(r.recipient_id))
-			.map((r: any) => [r.id, { id: r.id, amount: Number(r.amount_cents), note: r.note, at: new Date(r.created_at), sender: who.get(r.sender_id)!, recipient: who.get(r.recipient_id)!, reversed: r.reversed, status: r.federation_status, shared: r.shared }]),
+			.map((r: any) => [r.id, { id: r.id, amount: Number(r.amount_cents), note: r.shared ? r.note : "", at: new Date(r.created_at), sender: who.get(r.sender_id)!, recipient: who.get(r.recipient_id)!, reversed: r.reversed, status: r.federation_status, shared: r.shared }]),
 	);
 }
 

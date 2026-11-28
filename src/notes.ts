@@ -2,9 +2,9 @@ import type { Viewer } from "./auth";
 import { shownSource } from "./platforms";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
-import { blockedFor, isBlockedEitherWay, outOfView, protectedFor } from "./blocks";
-import { isStaffRequest, staffViewer } from "./staff-access";
-import { getPost, postsByIds, PostError, refuseHate } from "./posts";
+import { blockedFor, isBlockedEitherWay, outOfView } from "./blocks";
+import { isStaffRequest } from "./staff-access";
+import { getPost, postsByIds, PostError, refuseHate, seenBy } from "./posts";
 import { noteText, tweetEntry, tweetResult } from "./model";
 import { feature } from "./settings";
 import { noteStatus } from "./note-score";
@@ -108,7 +108,7 @@ export const noteHandlers = {
 	XitterPostContext: async (v: Viewer, vars: any) => {
 		const ids = [...new Set((Array.isArray(vars.ids) ? vars.ids : []).filter(isId))].slice(0, 20) as string[];
 		if (!ids.length) return { data: { xitter_post_context: [] } };
-		const posts = await sql`select p.id::text, p.source, u.instance from posts p join users u on u.id = p.user_id where p.id = any(${sql.array(ids, "INT8")}) and (not p.hidden or ${staffViewer(v.id)}) and p.user_id not in ${blockedFor(v.id)} and p.user_id not in ${outOfView(v.id)} and p.user_id not in ${protectedFor(v.id)}`;
+		const posts = await sql`select p.id::text, p.source, u.instance from posts p join users u on u.id = p.user_id where p.id = any(${sql.array(ids, "INT8")}) and ${seenBy(v.id)} and p.user_id not in ${blockedFor(v.id)} and p.user_id not in ${outOfView(v.id)}`;
 		for (const p of posts) p.source = shownSource(p.source, p.instance);
 		const visibleIds = posts.map((p: any) => p.id);
 		const notes = await notesMany(v, visibleIds);

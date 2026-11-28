@@ -1,5 +1,5 @@
 import type { User } from "./auth";
-import { blockedFor, federatedHiddenFor, GUEST_ID, hiddenFromGuests, isBlockedEitherWay, mutedFor, outOfView } from "./blocks";
+import { blockedFor, federatedHiddenFor, GUEST_ID, hiddenFromGuests, isBlockedEitherWay, mutedFor, outOfView, protectedFor } from "./blocks";
 import { staffViewer } from "./staff-access";
 import { sql } from "./db";
 import { PUBLIC_ORIGIN } from "./config";
@@ -232,6 +232,7 @@ export async function suggestedUsers(viewerId: string, limit = 20, exclude: stri
 // through friendships/update.
 export async function updateFriendship(viewerId: string, targetId: string, change: { device?: boolean; retweets?: boolean }): Promise<boolean> {
 	if (targetId === viewerId || (await isBlockedEitherWay(viewerId, targetId))) return false;
+	if (change.device === true && (await sql`select 1 where ${targetId}::bigint in ${protectedFor(viewerId)}`).length) return false;
 	if (change.device === true) await sql`insert into post_notifications (user_id, target_id) values (${viewerId}::bigint, ${targetId}::bigint) on conflict do nothing`;
 	if (change.device === false) await sql`delete from post_notifications where user_id = ${viewerId}::bigint and target_id = ${targetId}::bigint`;
 	if (change.retweets === false) await sql`insert into repost_mutes (user_id, target_id) values (${viewerId}::bigint, ${targetId}::bigint) on conflict do nothing`;

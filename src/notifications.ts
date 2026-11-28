@@ -4,7 +4,7 @@
 // for, and replies, quotes and mentions (shown as the posts themselves). Entries sort by time in milliseconds, which is also what
 // the cursors and the read marker hold.
 
-import { blockedFor, federatedMutedFor, hasMutedWord, mutedFor, suspendedFor } from "./blocks";
+import { blockedFor, federatedMutedFor, hasMutedWord, mutedFor, protectedFor, suspendedFor } from "./blocks";
 import type { User } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
@@ -72,6 +72,7 @@ async function items(viewerId: string, opts: { before?: number; after?: number; 
 		const rung = await sql`select p.id, p.user_id, p.created_at as at from posts p
 			join post_notifications pn on pn.target_id = p.user_id and pn.user_id = ${viewerId}::bigint
 			where p.reply_to_id is null and not p.hidden and p.created_at > pn.created_at and p.user_id not in ${hidden}
+				and p.user_id not in ${protectedFor(viewerId)} and ${circleMember(viewerId)}
 				and p.created_at >= ${lo} and p.created_at < ${hi}
 			order by p.created_at desc limit ${opts.limit}`;
 		for (const r of rung) out.push({ kind: "bell", key: `bell-${r.id}`, at: ms(r.at), users: [String(r.user_id)], total: 1, postId: String(r.id) });

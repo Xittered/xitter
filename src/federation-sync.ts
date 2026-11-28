@@ -156,8 +156,9 @@ async function renderPair(kind: "like" | "repost" | "follow", a: string, b: stri
 		return target ? { kind, actor: a, target, on: !!on, counts: target === ref(b) ? await userCounts(b) : null } : undefined;
 	}
 	const table = kind === "like" ? sql`likes` : sql`reposts`;
-	const [on] = await sql`select 1 from ${table} where user_id = ${a}::bigint and post_id = ${b}::bigint`;
 	const target = await canonicalOf("post", b);
+	if (target === ref(b) && !(await publicPost(b)).length) return undefined;
+	const [on] = await sql`select 1 from ${table} where user_id = ${a}::bigint and post_id = ${b}::bigint`;
 	return target ? { kind, actor: a, target, on: !!on, counts: target === ref(b) ? await postCounts(b) : null } : undefined;
 }
 
