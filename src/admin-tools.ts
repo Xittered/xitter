@@ -525,6 +525,7 @@ export const toolActions: Record<string, Action> = {
 			const id = idOf(b.id);
 			const [p] = await sql`select user_id::text from posts where id = ${id}::bigint`;
 			if (!p) throw new AdminError("No such post.", 404);
+			await guard(a, p.user_id);
 			const counts = countsOf(b.counts, ["likes", "replies", "reposts", "quotes", "bookmarks", "views"]);
 			await sql`update posts set count_overrides = ${counts ? sql`${JSON.stringify(counts)}::text::jsonb` : null} where id = ${id}::bigint`;
 			await audit(a, "set_post_counts", p.user_id, { post: id, counts });

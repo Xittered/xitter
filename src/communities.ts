@@ -53,6 +53,8 @@ async function mustBe(viewerId: string, id: string, min: Role): Promise<void> {
 	if (!atLeast(role, min)) throw new PostError("You don't have permission to do that.", 150);
 }
 
+const reviewsRequests = (role: Role, policy: string) => (policy === "RestrictedJoinRequestsRequireAdminApproval" ? atLeast(role, "Admin") : canModerate(role));
+
 async function one(viewerId: string, id: string) {
 	const obj = (await communityObjects(viewerId, [id])).get(id);
 	if (!obj) throw missing();
@@ -259,7 +261,8 @@ async function leave(v: Viewer, vars: Vars) {
 
 async function respond(v: Viewer, vars: Vars, approve: boolean) {
 	const id = communityId(vars);
-	await mustBe(v.id, id, "Moderator");
+	const { role, policy } = await roleOf(v.id, id);
+	if (!reviewsRequests(role, policy)) throw new PostError("You don't have permission to do that.", 150);
 	if (!isId(vars.userId)) throw new PostError("Invalid user id.", 144);
 	const [request] = await sql`delete from community_join_requests where community_id = ${id}::bigint and user_id = ${vars.userId}::bigint returning answer, created_at`;
 	if (request && approve) {
@@ -377,9 +380,9 @@ const toolsQuery = async (v: Viewer, vars: Vars) => {
 	const id = communityId(vars);
 	const obj = (r.data.community_results_by_rest_id as any).result;
 	if (obj?.__typename !== "Community") return r;
-	const { role } = await roleOf(v.id, id);
+	const { role, policy } = await roleOf(v.id, id);
 	obj.actions = { ...obj.actions, community_spotlight_setup_action_result: { __typename: "CommunitySpotlightSetupActionUnavailable", reason: "NotSupported", message: "Spotlight isn't available here." } };
-	obj.join_requests_result = canModerate(role) ? await joinRequests(v.id, id) : { __typename: "CommunityJoinRequestsUnavailable" };
+	obj.join_requests_result = reviewsRequests(role, policy) ? await joinRequests(v.id, id) : { __typename: "CommunityJoinRequestsUnavailable" };
 	return r;
 };
 export const communityHandlers = {
@@ -428,8 +431,8 @@ export const communityHandlers = {
 	},
 	MemberRequests_Query: async (v: Viewer, vars: Vars) => {
 		const id = communityId(vars);
-		const { role } = await roleOf(v.id, id);
-		return inCommunity(v.id, id, { join_requests_result: canModerate(role) ? await joinRequests(v.id, id) : { __typename: "CommunityJoinRequestsUnavailable" } });
+		const { role, policy } = await roleOf(v.id, id);
+		return inCommunity(v.id, id, { join_requests_result: reviewsRequests(role, policy) ? await joinRequests(v.id, id) : { __typename: "CommunityJoinRequestsUnavailable" } });
 	},
 	actions_approveMemberRequest_Mutation: (v: Viewer, vars: Vars) => respond(v, vars, true),
 	actions_denyMemberRequest_Mutation: (v: Viewer, vars: Vars) => respond(v, vars, false),

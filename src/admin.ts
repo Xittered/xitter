@@ -78,6 +78,27 @@ export const AUDIT_ACTIONS = [
 	"temporary_status", "unblock_oauth_app", "update_client", "upload_branding",
 ];
 
+function redactDetail(role: string | null | undefined, action: string, detail: any) {
+	if (!detail || typeof detail !== "object" || Array.isArray(detail)) return detail;
+	const ips = allows(role, "ip_addresses");
+	const emails = allows(role, "emails");
+	if (ips && emails) return detail;
+	const out = { ...detail };
+	if (!ips) {
+		delete out.ip;
+		delete out.admin_ips;
+		if (out.kind === "ip") delete out.value;
+	}
+	if (!emails) {
+		delete out.email;
+		if (action === "send_test_mail") delete out.to;
+		if (out.kind === "email") delete out.value;
+	}
+	return out;
+}
+
+const redactLog = <T extends { action: string; detail: unknown }>(role: string | null | undefined, rows: T[]) => rows.map((r) => ({ ...r, detail: redactDetail(role, r.action, r.detail) }));
+
 export async function audit(actor: Viewer, action: string, target: string | null, detail: unknown = null) {
 	await sql`insert into audit_log (id, actor_id, action, target, detail)
 		values (${newId()}::bigint, ${actor.id}::bigint, ${action}, ${target}, ${detail === null ? null : JSON.stringify(detail)}::text::jsonb)`;
@@ -431,7 +452,7 @@ const ACTIONS: Record<string, Action> = {
 				join users u on u.id = other.user_id
 				where mine.user_id = ${id}::bigint and mine.ip is not null and mine.created_at > now() - interval '90 days' limit 20`;
 			u.joined_from = u.signup_country ? countryDisplayName(u.signup_country) : "";
-			return { clients: clientBuilds().map(({ id, label }) => ({ id, label })), user: u, invited, log, alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
+			return { clients: clientBuilds().map(({ id, label }) => ({ id, label })), user: u, invited, log: redactLog(a.role, log as any), alts, strikes, next_step: ladder.length ? ladder[Math.min(strikes + 1, ladder.length) - 1] : 0 };
 		},
 	},
 
@@ -1105,7 +1126,7 @@ const ACTIONS: Record<string, Action> = {
 
 	audit: {
 		role: "support",
-		run: async (_a, b) => {
+		run: async (a, b) => {
 			const action = typeof b.action === "string" && /^[a-z_]{1,40}$/.test(b.action) ? b.action : null;
 			const who = typeof b.target === "string" ? b.target.trim().replace(/^@/, "").slice(0, 300).replace(new RegExp(`@${INSTANCE_ID.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"), "") : "";
 			const offset = Math.max(0, Math.min(Number(b.offset) || 0, 100_000));
@@ -1118,13 +1139,13 @@ const ACTIONS: Record<string, Action> = {
 			return {
 				total: Number(total[0]?.total ?? 0),
 				actions: [...new Set([...AUDIT_ACTIONS, ...logged.map((r: { action: string }) => r.action)])].sort(),
-				entries: await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic,
+				entries: redactLog(a.role, await sql`select l.id::text as id, l.action, l.target, l.detail, l.created_at, a.screen_name as actor, l.actor_id is null as automatic,
 					t.screen_name as target_name
 					from audit_log l left join users a on a.id = l.actor_id
 					left join users t on l.target ~ '^[0-9]+$' and t.id = l.target::bigint
 					where ${action ? sql`l.action = ${action}` : sql`true`} and ${b.automatic ? sql`l.actor_id is null` : sql`true`}
 						and ${who ? sql`lower(t.screen_name) = lower(${who})` : sql`true`}
-					order by l.id desc limit 100 offset ${offset}`,
+					order by l.id desc limit 100 offset ${offset}`),
 			};
 		},
 	},

@@ -38,6 +38,7 @@ import {
 	NOTE_MAX,
 } from "./money";
 import { hit } from "./ratelimit";
+import { staffGate } from "./staff-access";
 import { feature, settings } from "./settings";
 import { MONEY_ICON } from "./tidy";
 import { buyShopItem, myShopOrders, shopItems, shopView, ShopError } from "./money-shop";
@@ -567,7 +568,7 @@ export async function moneyRoute(req: Request, viewer: Viewer): Promise<Response
 	// a picture sent with a shop request, for the staff who review it (Admin > Equicoins)
 	const orderFile = /^\/account\/money\/shop\/file\/(\d{1,19})\/(\d{1,2})$/.exec(p);
 	if (req.method === "GET" && orderFile) {
-		if (viewer.role !== "admin" && viewer.role !== "moderator") return new Response("Not found", { status: 404 });
+		if ((viewer.role !== "admin" && viewer.role !== "moderator") || (await staffGate(req, viewer))) return new Response("Not found", { status: 404 });
 		const [f] = await sql`select image, mime from money_shop_order_files where order_id = ${orderFile[1]}::bigint and position = ${Number(orderFile[2])}`;
 		if (!f) return new Response("Not found", { status: 404 });
 		return new Response(f.image, { headers: { "content-type": f.mime, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });

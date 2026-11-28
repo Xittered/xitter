@@ -3,7 +3,7 @@
 // likes on their posts. A new wallet starts with its home instance's balance.
 // The pages are money-page.ts; the client's side is money-ui.ts.
 
-import { audit } from "./admin";
+import { audit, guard } from "./admin";
 import { esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { blockedFor, isBlockedEitherWay, protectedFor, suspendedFor } from "./blocks";
@@ -258,6 +258,7 @@ export async function adjust(viewer: Viewer, handle: string, cents: number) {
 	const to = await accountFor(handle);
 	if (!to) throw new MoneyError("There's no account here with that username.");
 	if (to.instance) throw new MoneyError("Only the account's home instance can adjust its balance.");
+	await guard(viewer, to.id);
 	await ensureWallet(to.id);
 	const [w] = await sql`update money_wallets set balance_cents = greatest(balance_cents + ${cents}, 0)
 		where user_id = ${to.id}::bigint returning balance_cents`;

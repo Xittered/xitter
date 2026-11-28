@@ -710,7 +710,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		if (blocked) return staffBlockedPage(blocked);
 		return new Response(await adminPage(), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 	}
-	if (p === "/_debug/unknown" && viewer?.role === "admin") return Response.json(Object.fromEntries([...unknown].sort((a, b) => b[1] - a[1])));
+	if (p === "/_debug/unknown" && viewer?.role === "admin" && !(await staffGate(req, viewer))) return Response.json(Object.fromEntries([...unknown].sort((a, b) => b[1] - a[1])));
 	if (API_PREFIX.test(p) || req.method !== "GET") {
 		// the event stream must outlive the default idle timeout
 		if (p.endsWith("/live_pipeline/events")) server.timeout(req, 0);
