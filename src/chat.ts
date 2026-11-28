@@ -358,8 +358,18 @@ async function withRequestFlags<T extends { event: Buffer }>(viewerId: string, r
 // --- the socket: frames are Thrift structs; {1: event} and {3: {1: [events]}}
 // carry events, {2: instruction} the rest (2 is keep-alive)
 
-type SocketData = { userId: string };
+type SocketData = { userId: string; sid?: string };
 const sockets = new Map<string, Set<ServerWebSocket<SocketData>>>();
+
+export async function closeRevokedSockets(userIds: string[] = [...sockets.keys()]) {
+	const open = userIds.flatMap((id) => [...(sockets.get(id) ?? [])].filter((ws) => ws.data.sid));
+	if (!open.length) return;
+	const rows = await sql`select encode(sha256(convert_to(token, 'UTF8')), 'hex') as sid, token from sessions where user_id = any(${sql.array(userIds, "INT8")})`;
+	const live = new Set(rows.flatMap((r: { sid: string; token: string }) => [r.sid, r.token]));
+	for (const ws of open) if (!live.has(ws.data.sid!)) ws.close(4001, "signed out");
+}
+
+setInterval(() => void closeRevokedSockets().catch(() => {}), 30_000).unref();
 
 function deliver(userIds: string[], events: Uint8Array[], except?: ServerWebSocket<SocketData>) {
 	if (!events.length) return;

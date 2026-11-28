@@ -192,7 +192,9 @@ export async function migrateRoute(req: Request, viewer: Viewer): Promise<Respon
 		if (!u || !(await Bun.password.verify(field("password"), u.password_hash).catch(() => false)))
 			return home(req, viewer, { error: "That password isn't right.", status: 400 });
 		refund();
-		return home(req, viewer, { code: await createCode(viewer.id) });
+		const code = await createCode(viewer.id, viewer.token);
+		if (!code) return home(req, viewer, { error: "Sign in again to make a migration code.", status: 401 });
+		return home(req, viewer, { code });
 	}
 	if (action === "revoke") {
 		await revokeCodes(viewer.id);

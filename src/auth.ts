@@ -170,6 +170,22 @@ export async function logout(token: string) {
 	if (s?.superadmin)
 		await sql`update users set role = null where id = ${s.user_id} and instance is not null
 			and not exists (select 1 from sessions x where x.user_id = users.id and x.superadmin and x.expires_at > now())`;
+	if (s) closeSignedOutSockets(String(s.user_id));
+}
+
+export function closeSignedOutSockets(userId: string) {
+	void import("./chat").then((chat) => chat.closeRevokedSockets([userId])).catch(() => {});
+}
+
+export async function revokeCredentials(tx: typeof sql, userId: string, keepSession = "") {
+	await tx`delete from sessions where user_id = ${userId}::bigint and token <> ${keepSession}`;
+	await tx`delete from api_tokens where user_id = ${userId}::bigint`;
+	await tx`delete from oauth_codes where user_id = ${userId}::bigint`;
+	await tx`delete from migration_tokens where user_id = ${userId}::bigint and completed_at is null`;
+	await tx`delete from login_challenges where user_id = ${userId}::bigint`;
+	await tx`delete from passkey_challenges where user_id = ${userId}::bigint`;
+	await tx`update password_resets set used = true where user_id = ${userId}::bigint and not used`;
+	await tx`update email_confirmations set used = true where user_id = ${userId}::bigint and not used`;
 }
 
 export async function expireSessions() {

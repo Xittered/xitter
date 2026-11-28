@@ -46,13 +46,22 @@ export const versionInfo = (): VersionInfo => ({
 const hashOf = (code: string) => createHash("sha256").update(code).digest("hex");
 
 // A new code replaces any earlier one that hasn't been used to finish a move.
-export async function createCode(userId: string): Promise<string> {
+export async function createCode(userId: string, issuingSession?: string): Promise<string | undefined> {
 	const code = `xmig_${randomBytes(32).toString("base64url")}`;
-	await sql.begin(async (tx) => {
+	const made = await sql.begin(async (tx) => {
+		const [account] = await tx`select id from users where id = ${userId}::bigint
+			and status <> 'suspended' and deactivated_at is null and instance is null for update`;
+		if (!account) return false;
+		if (issuingSession !== undefined) {
+			const [session] = await tx`select token from sessions where token = ${issuingSession} and user_id = ${userId}::bigint
+				and (expires_at is null or expires_at > clock_timestamp())`;
+			if (!session) return false;
+		}
 		await tx`delete from migration_tokens where user_id = ${userId}::bigint and completed_at is null`;
 		await tx`insert into migration_tokens (token_hash, user_id, expires_at) values (${hashOf(code)}, ${userId}::bigint, now() + make_interval(hours => ${CODE_TTL_HOURS}))`;
+		return true;
 	});
-	return code;
+	return made ? code : undefined;
 }
 
 export const revokeCodes = (userId: string) => sql`delete from migration_tokens where user_id = ${userId}::bigint and completed_at is null`;
@@ -228,6 +237,7 @@ export async function migrationApi(req: Request, url: URL): Promise<Response> {
 			return { deactivated };
 		});
 		if (!done) return fail(409, "This move was already finished.");
+		if (done.deactivated) void import("./chat").then((chat) => chat.closeSockets(who.userId));
 		void import("./money").then(({ moveBalance }) => moveBalance(who.userId, to)).catch((e) => console.error("Equicoins balance move:", e instanceof Error ? e.message : e));
 		return Response.json({ ok: true, ...done }, { headers: { "cache-control": "no-store" } });
 	}

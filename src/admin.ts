@@ -14,7 +14,7 @@ import { oneLine } from "./text-clean";
 import { SUPERADMINS, isSuperadminHome, superadminNameHere, superadminOf } from "./superadmins";
 import { FEDERATION_ON, ID_RE, INSTANCE_ID, acceptKeyChange, isBlocked as isFederationBlocked, isPeer, liftBlock, listBlocks, listed, listedInstance, pendingKeyChange, publicKey, registryCheckedAt, registryError, registrySequence, setBlock as setFederationBlock } from "./federation";
 import { dropRemoteMedia, pullFrom, savedRemoteMedia, storesRemoteMedia } from "./federation-sync";
-import type { Viewer } from "./auth";
+import { type Viewer, closeSignedOutSockets, revokeCredentials } from "./auth";
 import { sql } from "./db";
 import { isOrganizationSql } from "./users";
 import { flagValue, unknownFlag } from "./flags";
@@ -608,16 +608,10 @@ const ACTIONS: Record<string, Action> = {
 				await guard(a, id, true);
 				if (target.instance) throw new AdminError(`That account lives on ${target.instance}, which manages it. Here you can only moderate it.`, 403);
 				await tx`update users set password_hash = ${hash} where id = ${id}::bigint`;
-				await tx`delete from sessions where user_id = ${id}::bigint`;
-				await tx`delete from api_tokens where user_id = ${id}::bigint`;
-				await tx`delete from oauth_codes where user_id = ${id}::bigint`;
-				await tx`delete from migration_tokens where user_id = ${id}::bigint and completed_at is null`;
-				await tx`update password_resets set used = true where user_id = ${id}::bigint and not used`;
-				await tx`delete from login_challenges where user_id = ${id}::bigint`;
+				await revokeCredentials(tx, id);
 				await tx`delete from passkeys where user_id = ${id}::bigint`;
-				await tx`delete from passkey_challenges where user_id = ${id}::bigint`;
-				await tx`update email_confirmations set used = true where user_id = ${id}::bigint and not used`;
 			});
+			closeSignedOutSockets(id);
 			await audit(a, "reset_password", id);
 			return { password };
 		},
@@ -629,6 +623,7 @@ const ACTIONS: Record<string, Action> = {
 			const id = idOf(b.id);
 			await guard(a, id, true);
 			const rows = await sql`delete from sessions where user_id = ${id}::bigint returning token`;
+			closeSignedOutSockets(id);
 			await audit(a, "sign_out", id, { sessions: rows.length });
 			return { sessions: rows.length };
 		},
@@ -641,6 +636,7 @@ const ACTIONS: Record<string, Action> = {
 			const id = idOf(b.id);
 			await guard(a, id, true);
 			const rows = await sql`delete from api_tokens where user_id = ${id}::bigint returning id`;
+			await sql`delete from oauth_codes where user_id = ${id}::bigint`;
 			await audit(a, "revoke_api_tokens", id, { tokens: rows.length });
 			return { tokens: rows.length };
 		},

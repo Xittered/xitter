@@ -2,6 +2,7 @@
 // stored hashed, last an hour and work once.
 import { createHash } from "node:crypto";
 import { accountPage, esc, scriptNonce } from "./account-page";
+import { closeSignedOutSockets, revokeCredentials } from "./auth";
 import { sql } from "./db";
 import { PUBLIC_ORIGIN } from "./config";
 import { mailEnabled, sendMail } from "./mail";
@@ -84,20 +85,14 @@ export async function resetRoute(req: Request, url: URL): Promise<Response> {
 		if (!claimed) return false;
 		await tx`update users set password_hash = ${passwordHash} where id = ${row.user_id}::bigint`;
 		// Older links must not be able to replace the newly chosen password either.
-		await tx`update password_resets set used = true where user_id = ${row.user_id}::bigint and not used`;
-		await tx`delete from sessions where user_id = ${row.user_id}::bigint`;
-		await tx`delete from api_tokens where user_id = ${row.user_id}::bigint`;
 		// an app approved just before would otherwise trade its code for a new token
-		await tx`delete from oauth_codes where user_id = ${row.user_id}::bigint`;
-		await tx`delete from migration_tokens where user_id = ${row.user_id}::bigint and completed_at is null`;
-		await tx`delete from login_challenges where user_id = ${row.user_id}::bigint`;
 		// passkeys stay: they live on the owner's devices, and dropping them on
 		// every forgotten password locked people out of their usual sign-in
-		await tx`delete from passkey_challenges where user_id = ${row.user_id}::bigint`;
-		await tx`update email_confirmations set used = true where user_id = ${row.user_id}::bigint and not used`;
+		await revokeCredentials(tx, String(row.user_id));
 		return true;
 	});
 	if (!changed) return page(req, `<h1>Link expired</h1><p>This reset link is invalid or has been used. <a href="/">Back to sign in</a>, then ask for a new one.</p>`, 410);
+	closeSignedOutSockets(String(row.user_id));
 	return page(req, `<h1>Password changed</h1><p>You can now <a href="/">sign in</a> with it. Every device was signed out. Your passkeys still work; remove any you don't recognise on your <a href="/account/passkeys">passkeys page</a>.</p>`);
 }
 

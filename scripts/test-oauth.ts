@@ -44,6 +44,7 @@ const redirect = registeredRedirect;
 
 try {
 	for (const id of [developer, account, other]) await sql`insert into users(id, screen_name, name, password_hash) values(${id}::bigint, ${`oauth_${id}`}, 'OAuth test', 'unused')`;
+	for (const id of [developer, account, other]) await sql`insert into sessions(token, user_id, csrf) values(${`session-${id}`}, ${id}::bigint, ${`csrf-${id}`})`;
 	assert(!validRedirect("http://example.org/callback"), "plain HTTP remote redirect rejected");
 	assert(!validRedirect("https://example.org/callback#fragment"), "fragment rejected");
 	assert(validRedirect("http://127.0.0.1:3210/callback"), "loopback redirect allowed");

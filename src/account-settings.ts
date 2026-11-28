@@ -7,7 +7,7 @@ import { blockedNameIn, suspendForName } from "./names";
 import { isReserved, usernameProblem } from "./invites";
 import { superadminNameHere } from "./superadmins";
 import { sql } from "./db";
-import { type Viewer, clearedCookies } from "./auth";
+import { type Viewer, clearedCookies, closeSignedOutSockets, revokeCredentials } from "./auth";
 import { passwordTry } from "./ratelimit";
 import { requestIp } from "./login-history";
 
@@ -103,18 +103,12 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 			const rows = await tx`update users set password_hash = ${passwordHash}
 				where id = ${viewer.id}::bigint and password_hash = ${account.password_hash} returning id`;
 			if (!rows.length) return false;
-			await tx`update password_resets set used = true where user_id = ${viewer.id}::bigint and not used`;
 			// Other devices have to sign in again with the new password.
-			await tx`delete from sessions where user_id = ${viewer.id}::bigint and token <> ${viewer.token}`;
-			await tx`delete from api_tokens where user_id = ${viewer.id}::bigint`;
-			await tx`delete from oauth_codes where user_id = ${viewer.id}::bigint`;
-			await tx`delete from migration_tokens where user_id = ${viewer.id}::bigint and completed_at is null`;
-			await tx`delete from login_challenges where user_id = ${viewer.id}::bigint`;
-			await tx`delete from passkey_challenges where user_id = ${viewer.id}::bigint`;
-			await tx`update email_confirmations set used = true where user_id = ${viewer.id}::bigint and not used`;
+			await revokeCredentials(tx, viewer.id, viewer.token);
 			return true;
 		});
 		if (!changed) return error(231, "Your current password is incorrect.", 403);
+		closeSignedOutSockets(viewer.id);
 		return Response.json({ status: "ok" });
 	}
 
@@ -179,6 +173,7 @@ export async function revokeSessionsRoute(method: string, path: string, viewer: 
 	if (method !== "POST") return undefined;
 	if (path === "/account/sessions/revoke_all") {
 		await sql`delete from sessions where user_id = ${viewer.id}::bigint and token <> ${viewer.token}`;
+		closeSignedOutSockets(viewer.id);
 		return Response.json({ status: "ok" });
 	}
 	if (path === "/account/sessions/revoke") {
@@ -187,6 +182,7 @@ export async function revokeSessionsRoute(method: string, path: string, viewer: 
 		const rows = await sql`select token from sessions where user_id = ${viewer.id}::bigint`;
 		const hit = rows.find((r: any) => hashed(r.token) === wanted && r.token !== viewer.token);
 		if (hit) await sql`delete from sessions where token = ${hit.token}`;
+		if (hit) closeSignedOutSockets(viewer.id);
 		return Response.json({ status: "ok" });
 	}
 	return undefined;

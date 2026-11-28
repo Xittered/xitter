@@ -511,7 +511,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		const [account] = await sql`select 1 from users u where u.id = ${userId}::bigint and u.status <> 'suspended'
 			and (${sid ?? null}::text is null or exists (select 1 from sessions s where s.user_id = u.id and (encode(sha256(convert_to(s.token, 'UTF8')), 'hex') = ${sid ?? null} or s.token = ${sid ?? null})))`;
 		if (!account) return new Response("suspended", { status: 403 });
-		return server.upgrade(req, { data: { userId } }) ? undefined : new Response("expected a websocket", { status: 400 });
+		return server.upgrade(req, { data: { userId, sid } }) ? undefined : new Response("expected a websocket", { status: 400 });
 	}
 	// the chat app's way to the key backup realm: signed-in accounts only, and
 	// not faster than their messages

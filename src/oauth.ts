@@ -207,9 +207,12 @@ export async function oauthAuthorize(req: Request, url: URL, viewer: Viewer | un
 		}
 		if (value(f, "decision") !== "approve") return redirectWith(request, { error: "access_denied" });
 		const fresh = code();
-		await sql.begin(async (tx) => {
+		const issued = await sql.begin(async (tx) => {
 			const [account] = await tx`select id from users where id = ${viewer.id}::bigint and status = 'active' and deactivated_at is null and instance is null for update`;
 			if (!account) throw new Error("Account cannot authorize apps.");
+			const [session] = await tx`select token from sessions where token = ${viewer.token} and user_id = ${viewer.id}::bigint
+				and (expires_at is null or expires_at > clock_timestamp())`;
+			if (!session) return false;
 			await tx`delete from oauth_codes where expires_at < now()`;
 			let clientId = request.dbId;
 			if (!isId(request.clientId)) {
@@ -220,7 +223,9 @@ export async function oauthAuthorize(req: Request, url: URL, viewer: Viewer | un
 			}
 			await tx`insert into oauth_codes(code_hash, client_id, user_id, redirect_uri, scope, code_challenge, expires_at)
 				values(${digest(fresh)}, ${clientId}::bigint, ${viewer.id}::bigint, ${request.redirect}, ${request.scope}, ${request.challenge}, now() + interval '5 minutes')`;
+			return true;
 		});
+		if (!issued) return new Response("Sign in again to authorize this app.", { status: 401 });
 		return redirectWith(request, { code: fresh });
 	}
 	const hidden = hiddenFields({ ...requestParams(request), csrf: viewer.csrf });
@@ -315,7 +320,8 @@ export async function connectedAppsRoute(req: Request, viewer: Viewer): Promise<
 	if (!f || value(f, "csrf") !== viewer.csrf || (req.headers.get("origin") && req.headers.get("origin") !== PUBLIC_ORIGIN)) return new Response("Invalid form.", { status: 403 });
 	const id = value(f, "id");
 	if (!isId(id)) return new Response("Invalid grant.", { status: 400 });
-	await sql`delete from api_tokens where id = ${id}::bigint and user_id = ${viewer.id}::bigint and client_id is not null`;
+	const [removed] = await sql`delete from api_tokens where id = ${id}::bigint and user_id = ${viewer.id}::bigint and client_id is not null returning client_id`;
+	if (removed) await sql`delete from oauth_codes where user_id = ${viewer.id}::bigint and client_id = ${removed.client_id}`;
 	return appsPage(req, viewer, "App access removed.");
 }
 

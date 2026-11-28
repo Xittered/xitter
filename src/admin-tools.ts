@@ -8,6 +8,7 @@ import { dirname, resolve, sep } from "node:path";
 import { type Action, AdminError, audit, guard, idOf } from "./admin";
 import { clientBuild, clientBuilds, loadBuild } from "./build";
 import { INSTANCE_ID, isPeer } from "./federation";
+import { closeSignedOutSockets } from "./auth";
 import { sql } from "./db";
 import { newId } from "./ids";
 import { BADGE_TYPES, MEDIA_DIR, sniffImage } from "./media";
@@ -447,6 +448,7 @@ export const toolActions: Record<string, Action> = {
 			if (!s) throw new AdminError("No such session.", 404);
 			await guard(a, s.user_id);
 			await sql`delete from sessions where id = ${b.sessionId}::uuid`;
+			closeSignedOutSockets(s.user_id);
 			await audit(a, "revoke_session", s.user_id, { session: b.sessionId });
 			return {};
 		},

@@ -151,9 +151,19 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 		const step = matchingStep(u.totp_pending, field("code"));
 		if (step === undefined) return setup(req, u.totp_pending, viewer, "That code isn't right. Try the next one your app shows.");
 		const backups = Array.from({ length: 8 }, backupCode);
-		// the code that turned it on is spent too
-		await sql`update users set totp_enabled = true, totp_secret = totp_pending, totp_pending = null, totp_last_step = ${step},
-			totp_backup = ${JSON.stringify(backups.map((b) => sha(b.replace("-", ""))))}::text::jsonb where id = ${viewer.id}::bigint`;
+		const enabled = await sql.begin(async (tx) => {
+			const [current] = await tx`select id from users where id = ${viewer.id}::bigint and password_hash = ${u.password_hash}
+				and totp_pending = ${u.totp_pending} and not totp_enabled for update`;
+			if (!current) return false;
+			const [session] = await tx`select token from sessions where token = ${viewer.token} and user_id = ${viewer.id}::bigint
+				and (expires_at is null or expires_at > clock_timestamp())`;
+			if (!session) return false;
+			// the code that turned it on is spent too
+			await tx`update users set totp_enabled = true, totp_secret = totp_pending, totp_pending = null, totp_last_step = ${step},
+				totp_backup = ${JSON.stringify(backups.map((b) => sha(b.replace("-", ""))))}::text::jsonb where id = ${viewer.id}::bigint`;
+			return true;
+		});
+		if (!enabled) return setup(req, u.totp_pending, viewer, "Sign in again to turn on two-factor.");
 		return page(
 			req,
 			viewer,
