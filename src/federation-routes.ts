@@ -24,13 +24,13 @@ export async function startFederation() {
 	await loadRegistry();
 	ready = true;
 	if (!FEDERATION_ON) return;
-	void refreshRegistry();
-	setInterval(() => void refreshRegistry(), 5 * 60_000).unref();
+	void refreshRegistry().catch((e) => console.error("federation registry:", e));
+	setInterval(() => void refreshRegistry().catch((e) => console.error("federation registry:", e)), 5 * 60_000).unref();
 	startFederationSync();
 	startMoneyFederation();
 	const meetHomes = () => Promise.all([...new Set(SUPERADMINS.map((s) => s.instance))].filter((i) => i !== INSTANCE_ID).map((i) => keyFor(i).catch(() => undefined)));
-	void meetHomes();
-	setInterval(() => void meetHomes(), 10 * 60_000).unref();
+	void meetHomes().catch((e) => console.error("federation homes:", e));
+	setInterval(() => void meetHomes().catch((e) => console.error("federation homes:", e)), 10 * 60_000).unref();
 	setInterval(() => void pollEmergencies().catch(() => {}), 60_000).unref();
 	setInterval(() => void endSuperadminVisits().catch(() => {}), 60_000).unref();
 }

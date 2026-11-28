@@ -299,7 +299,7 @@ export async function previewsFor(urls: string[]): Promise<Map<string, Preview>>
 			fetched_at < now() - (case when ok then ${REFRESH} else ${RETRY_FAILED} end)::interval as stale
 		from link_previews where url = any(${sql.array(wanted, "TEXT")})`;
 	const known = new Map(rows.map((r: any) => [r.url as string, r]));
-	for (const url of wanted) if (!known.has(url) || known.get(url).stale) void fetchPreview(url);
+	for (const url of wanted) if (!known.has(url) || known.get(url).stale) void fetchPreview(url).catch((e) => console.error("link preview:", e));
 	return new Map(rows.filter((r: any) => r.ok).map((r: any) => [r.url as string, r as Preview]));
 }
 

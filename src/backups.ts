@@ -79,6 +79,6 @@ export function startBackups() {
 			await recordError("job", e, { path: "scheduled backup" });
 		}
 	};
-	setInterval(() => void tick(), 5 * 60_000).unref();
-	void tick();
+	setInterval(() => void tick().catch((e) => console.error("backups:", e)), 5 * 60_000).unref();
+	void tick().catch((e) => console.error("backups:", e));
 }

@@ -282,7 +282,7 @@ async function readOperationTypes() {
         }
 }
 
-void readOperationTypes();
+void readOperationTypes().catch((e) => console.error("operation types:", e));
 
 export const isMutation = (operation: string) =>
         operationTypes.mutations.has(operation) ||
@@ -290,7 +290,7 @@ export const isMutation = (operation: string) =>
 
 export const isQuery = (operation: string) => operationTypes.queries.has(operation) && !operationTypes.mutations.has(operation);
 
-setInterval(() => void readOperationTypes(), 10 * MIN).unref();
+setInterval(() => void readOperationTypes().catch((e) => console.error("operation types:", e)), 10 * MIN).unref();
 
 // what the client calls an endpoint for limits: the GraphQL operation, or the
 // REST path with its ids folded so one user's calls share a window
@@ -334,5 +334,5 @@ export function noteRefusal(bucket: Bucket, endpoint: string, userId: string) {
 	const per = `${limitOf(bucket)} per ${RULES[bucket].window / MIN} minutes`;
 	console.log(`rate limit: ${bucket} used up by ${userId} on ${endpoint} (${per})`);
 	// imported here so the limits stay free of the database for scripts that read RULES
-	void import("./errors").then(({ recordError }) => recordError("server", new Error(`Rate limit ${bucket} (${per}) used up, on ${endpoint}`), { path: endpoint, userId }));
+	void import("./errors").then(({ recordError }) => recordError("server", new Error(`Rate limit ${bucket} (${per}) used up, on ${endpoint}`), { path: endpoint, userId })).catch((e) => console.error("rate limit error log:", e));
 }

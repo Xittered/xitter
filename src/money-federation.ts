@@ -303,7 +303,7 @@ export async function pumpOnce() {
 					await tx`update money_transfers set federation_status = 'complete' where id = ${r.transfer_id}::bigint and federation_status = 'pending'`;
 					await tx`delete from money_federation_outbox where transfer_id = ${r.transfer_id}::bigint`;
 				});
-				void import("./money").then(({ announcePayment }) => announcePayment(r.transfer_id));
+				void import("./money").then(({ announcePayment }) => announcePayment(r.transfer_id)).catch((e) => console.error("Equicoins announcement:", e));
 			} else if ((status >= 400 && status < 500 && status !== 429) || r.expired) {
 				await failTransfer(r.transfer_id);
 			} else {
@@ -316,9 +316,9 @@ export async function pumpOnce() {
 }
 
 export function startMoneyFederation() {
-	void pumpOnce();
+	void pumpOnce().catch((e) => console.error("Equicoins federation queue:", e));
 	setInterval(() => void pumpOnce().catch((e) => console.error("Equicoins federation queue:", e)), 15_000).unref();
-	void syncShops();
+	void syncShops().catch((e) => console.error("Equicoins shop sync:", e));
 	setInterval(() => void syncShops().catch((e) => console.error("Equicoins shop sync:", e)), 5 * 60_000).unref();
 	const economyAndTotals = () => {
 		void syncEconomy().catch((e) => console.error("Equicoins economy:", e instanceof Error ? e.message : e));

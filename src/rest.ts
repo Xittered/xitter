@@ -472,7 +472,7 @@ export async function restRoute(method: string, path: string, viewer: Viewer, re
 		return Response.json({ totalEvents: 0, eventsFailed: 0, shouldRetry: false, retryAfterMs: null, eventsFailedSequenceNumbers: null, message: null });
 	const translation = await translateRoute(path, viewer);
 	if (translation) return translation;
-	if (method === "POST" && path.endsWith("/jot/error_log.json")) void keepClientErrors(req, viewer);
+	if (method === "POST" && path.endsWith("/jot/error_log.json")) void keepClientErrors(req, viewer).catch((e) => console.error("client error log:", e));
 	if (TELEMETRY.test(path)) return Response.json({});
 	return undefined;
 }

@@ -167,6 +167,6 @@ function autoUpdate(s: UpdateStatus) {
 
 export function startUpdateChecks() {
 	if (process.env.UPDATE_CHECK === "off") return;
-	setInterval(() => void checkForUpdate(), EVERY).unref();
-	void checkForUpdate();
+	setInterval(() => void checkForUpdate().catch((e) => console.error("update check:", e)), EVERY).unref();
+	void checkForUpdate().catch((e) => console.error("update check:", e));
 }

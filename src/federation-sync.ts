@@ -579,7 +579,7 @@ export async function pullFrom(instance: string): Promise<number> {
 		await sql`update federation_peers set last_error = ${e instanceof Error ? e.message.slice(0, 500) : String(e)}, last_error_at = now() where instance = ${instance}`;
 	} finally {
 		pulling.delete(instance);
-		if (wanted.delete(instance)) void pullFrom(instance);
+		if (wanted.delete(instance)) void pullFrom(instance).catch((e) => console.error("federation pull:", e));
 	}
 	return applied;
 }
@@ -593,7 +593,7 @@ function pokeSoon(instance: string) {
 		instance,
 		setTimeout(() => {
 			pokes.delete(instance);
-			void pullFrom(instance);
+			void pullFrom(instance).catch((e) => console.error("federation pull:", e));
 		}, 500),
 	);
 }
@@ -761,7 +761,7 @@ export function startFederationSync() {
 	setInterval(() => {
 		tick++;
 		void pokePeers().catch(() => {});
-		if (tick % 5 === 0) for (const p of peers()) if (!backingOff(p.id)) void pullFrom(p.id);
+		if (tick % 5 === 0) for (const p of peers()) if (!backingOff(p.id)) void pullFrom(p.id).catch((e) => console.error("federation pull:", e));
 		if (tick % 200 === 10) void backfillMedia().catch((e) => console.error("federation: media backfill:", e instanceof Error ? e.message : e));
 		if (tick % 3600 === 0) void sql`delete from federation_outbox where created_at < now() - interval '60 days'`.catch(() => {});
 	}, 3000).unref();

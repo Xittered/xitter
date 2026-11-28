@@ -218,7 +218,7 @@ export async function start(viewer: Viewer, sourceInput: string, code: string, a
 			throw e instanceof MigrationError ? e : new MigrationError("An import into this account is already running. Wait for it to finish.");
 		});
 		started = true;
-		void run(id, viewer, checked, code.trim(), options).finally(() => running.delete(id));
+		void run(id, viewer, checked, code.trim(), options).catch((e) => console.error("migration import:", e)).finally(() => running.delete(id));
 		return id;
 	} finally {
 		if (!started) running.delete(id);

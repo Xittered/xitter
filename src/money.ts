@@ -167,7 +167,7 @@ export async function sendMoney(senderId: string, handle: string, amountCents: n
 			values (${id}::bigint, ${to.instance}, ${senderId}::bigint, ${to.remote_id}::bigint, ${amountCents}, ${note})`;
 		return { id, to: to.screen_name, repeated: false };
 	});
-	if (!sent.repeated) void announcePayment(sent.id);
+	if (!sent.repeated) void announcePayment(sent.id).catch((e) => console.error("Equicoins announcement:", e));
 	return sent;
 }
 
