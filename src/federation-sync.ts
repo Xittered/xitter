@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MAX_POST_MEDIA, PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { flagValue } from "./flags";
 import { pronounsValue } from "./pronouns";
 import { badgeUrl, badgesOf } from "./users";
@@ -325,19 +325,25 @@ export async function applyUser(instance: string, u: any): Promise<string | unde
 	const handle = `${u.screen_name}@${instance}`;
 	await sql`update users set screen_name = screen_name || '~' || remote_id::text where lower(screen_name) = lower(${handle}) and instance = ${instance} and remote_id <> ${u.id}::bigint`;
 	const created = typeof u.created_at === "string" && !Number.isNaN(Date.parse(u.created_at)) ? new Date(u.created_at) : new Date();
-	const id = local ?? newId();
+	let id = local ?? newId();
 	if (local)
 		await sql`update users set screen_name = ${handle}, name = ${oneLine(clip(u.name, NAME_MAX))}, bio = ${cleanText(clip(u.bio, 300), { lines: 6 })}, location = ${oneLine(clip(u.location, 60))}, website = ${website}, protected = ${!!u.protected}
 			where id = ${local}::bigint`;
 	else {
-		const [{ n }] = await sql`select count(*)::int as n from users where instance = ${instance}`;
-		if (n >= MAX_ACCOUNTS) throw new FederationError(`${instance} already has ${MAX_ACCOUNTS} accounts here`);
-		await sql`insert into users (id, screen_name, name, password_hash, bio, location, website, protected, instance, remote_id, created_at)
-			values (${id}::bigint, ${handle}, ${oneLine(clip(u.name, NAME_MAX))}, '!', ${cleanText(clip(u.bio, 300), { lines: 6 })}, ${oneLine(clip(u.location, 60))}, ${website}, ${!!u.protected}, ${instance}, ${u.id}::bigint, ${created})
-			on conflict (instance, remote_id) where instance is not null do nothing`;
-		const again = await mapped(instance, "user", u.id);
-		if (again) return again;
-		await sql`insert into federated_objects (instance, kind, remote_id, local_id) values (${instance}, 'user', ${u.id}::bigint, ${id}::bigint) on conflict do nothing`;
+		const made = await sql.begin(async (tx) => {
+			await holdLock(tx, `federated-users:${instance}`);
+			const [known] = await tx`select local_id::text from federated_objects where instance = ${instance} and kind = 'user' and remote_id = ${u.id}::bigint`;
+			if (known) return { again: known.local_id as string };
+			const [{ n }] = await tx`select count(*)::int as n from users where instance = ${instance}`;
+			if (n >= MAX_ACCOUNTS) throw new FederationError(`${instance} already has ${MAX_ACCOUNTS} accounts here`);
+			const [row] = await tx`insert into users (id, screen_name, name, password_hash, bio, location, website, protected, instance, remote_id, created_at)
+				values (${id}::bigint, ${handle}, ${oneLine(clip(u.name, NAME_MAX))}, '!', ${cleanText(clip(u.bio, 300), { lines: 6 })}, ${oneLine(clip(u.location, 60))}, ${website}, ${!!u.protected}, ${instance}, ${u.id}::bigint, ${created})
+				on conflict (instance, remote_id) where instance is not null do update set instance = excluded.instance returning id::text`;
+			await tx`insert into federated_objects (instance, kind, remote_id, local_id) values (${instance}, 'user', ${u.id}::bigint, ${row.id}::bigint) on conflict do nothing`;
+			return { id: row.id as string };
+		});
+		if (made.again) return made.again;
+		id = made.id!;
 	}
 	const avatar = await remoteMedia(instance, id, u.avatar, null, null);
 	const banner = await remoteMedia(instance, id, u.banner, null, null);

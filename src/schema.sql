@@ -1498,6 +1498,10 @@ do $$ begin
 		delete from federated_objects f where kind = 'media' and not exists (select 1 from media where id = f.local_id);
 		insert into schema_steps (name) values ('federated_objects_prune');
 	end if;
+	if not exists (select 1 from schema_steps where name = 'federated_users_prune_2') then
+		delete from federated_objects f where kind = 'user' and not exists (select 1 from users where id = f.local_id);
+		insert into schema_steps (name) values ('federated_users_prune_2');
+	end if;
 end $$;
 
 create or replace function blocks_spare_admins() returns trigger language plpgsql as $$
