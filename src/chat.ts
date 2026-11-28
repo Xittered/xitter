@@ -400,13 +400,17 @@ export const chatSocket = {
 		// to the conversation's other members, not kept
 		const ev = thrift.fields(frame[1]);
 		const conversationId = ev && thrift.text(ev[4]);
-		if (!ev || !conversationId || kindOf(ev) !== KIND.typing) return;
-		const all = await members(conversationId);
-		if (!all.includes(ws.data.userId)) return;
-		try { await inGroup(ws.data.userId, conversationId, all); } catch { return; }
-		ev[3] = str(ws.data.userId);
-		ev[6] = str(String(Date.now()));
-		deliver(all, [thrift.encode(ev)], ws);
+		if (!ev || !conversationId || conversationId.includes("\0") || kindOf(ev) !== KIND.typing) return;
+		try {
+			const all = await members(conversationId);
+			if (!all.includes(ws.data.userId)) return;
+			await inGroup(ws.data.userId, conversationId, all);
+			ev[3] = str(ws.data.userId);
+			ev[6] = str(String(Date.now()));
+			deliver(all, [thrift.encode(ev)], ws);
+		} catch {
+			return;
+		}
 	},
 };
 

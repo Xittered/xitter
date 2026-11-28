@@ -739,6 +739,9 @@ async function route(req: Request): Promise<Response | undefined> {
 	return new Response(page, { headers });
 }
 
+process.on("unhandledRejection", (e) => console.error("unhandled rejection:", e));
+process.on("uncaughtException", (e) => console.error("uncaught exception:", e));
+
 const server = Bun.serve({
 	port: PORT,
 	fetch: handle,
