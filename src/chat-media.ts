@@ -3,7 +3,7 @@ import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { newId } from "./ids";
 
 const directory = join(process.env.MEDIA_DIR ?? "media", "chat");
@@ -22,15 +22,19 @@ export function chatMedia(authorize: Authorize, create: Authorize = authorize) {
 			await create(v.id, String(vars.conversation_id));
 			// what one account may hold unfinished: each upload reserves its disk
 			// until it is sealed or swept (sweepChatUploads)
-			const [open] = await sql`select count(*)::int as n, coalesce(sum(total_bytes), 0)::bigint as bytes from chat_uploads
-				where uploader_id = ${v.id}::bigint and not ready`;
-			if (open.n >= MAX_OPEN || Number(open.bytes) + size > Math.max(MAX_OPEN_BYTES, maxBytes))
-				return { data: { xchat_initialize_media_upload: { __typename: "InitializeMediaUploadError", upload_error: "InvalidRequest" } } };
 			const hash = randomBytes(24).toString("hex");
 			const resume = newId();
+			const taken = await sql.begin(async (tx) => {
+				await holdLock(tx, `chat-uploads:${v.id}`);
+				const [open] = await tx`select count(*)::int as n, coalesce(sum(total_bytes), 0)::bigint as bytes from chat_uploads
+					where uploader_id = ${v.id}::bigint and not ready`;
+				if (open.n >= MAX_OPEN || Number(open.bytes) + size > Math.max(MAX_OPEN_BYTES, maxBytes)) return false;
+				await tx`insert into chat_uploads (hash, resume_id, conversation_id, message_id, uploader_id, total_bytes)
+					values (${hash}, ${resume}::bigint, ${String(vars.conversation_id)}, ${String(vars.message_id)}, ${v.id}::bigint, ${size})`;
+				return true;
+			});
+			if (!taken) return { data: { xchat_initialize_media_upload: { __typename: "InitializeMediaUploadError", upload_error: "InvalidRequest" } } };
 			await mkdir(join(directory, hash), { recursive: true });
-			await sql`insert into chat_uploads (hash, resume_id, conversation_id, message_id, uploader_id, total_bytes)
-				values (${hash}, ${resume}::bigint, ${String(vars.conversation_id)}, ${String(vars.message_id)}, ${v.id}::bigint, ${size})`;
 			return { data: { xchat_initialize_media_upload: {
 				__typename: "InitializeMediaUploadResult", media_hash_key: hash, resume_id: resume,
 				resume_upload_url: `${PUBLIC_ORIGIN}/i/ton/data/xchat_media/${encodeURIComponent(vars.conversation_id)}/${hash}`,

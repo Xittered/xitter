@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { isId, newId } from "./ids";
 import { getPost } from "./posts";
 import { DOUG_ASK, dougBrain } from "./doug";
@@ -207,12 +207,18 @@ async function* fakeBrain(turns: { role: string; content: string }[]): AsyncGene
 	for (const w of `you said: ${turns.at(-1)?.content.slice(0, 200)}`.split(/(?<= )/)) yield w;
 }
 
-async function overDailyLimit(viewer: Viewer) {
+async function overDailyLimit(viewer: Viewer, conversationId: string, agentItem: string) {
 	const limit = settings().grok.daily_per_account;
-	if (!limit) return false;
-	const [r] = await sql`select count(*)::int as n from grok_items i join grok_conversations c on c.id = i.conversation_id
-		where c.user_id = ${viewer.id}::bigint and i.sender = 'Agent' and i.created_at > now() - interval '1 day'`;
-	return r.n >= limit;
+	return sql.begin(async (tx) => {
+		if (limit) {
+			await holdLock(tx, `grok:${viewer.id}`);
+			const [r] = await tx`select count(*)::int as n from grok_items i join grok_conversations c on c.id = i.conversation_id
+				where c.user_id = ${viewer.id}::bigint and i.sender = 'Agent' and i.created_at > now() - interval '1 day'`;
+			if (r.n >= limit) return true;
+		}
+		await tx`insert into grok_items (id, conversation_id, sender, message) values (${agentItem}::bigint, ${conversationId}::bigint, 'Agent', '')`;
+		return false;
+	});
 }
 
 const line = (o: unknown) => `${JSON.stringify(o)}\n`;
@@ -243,7 +249,7 @@ export async function addResponse(viewer: Viewer, req: Request): Promise<Respons
 	turns.push({ role: "user", content: posts.length ? `${posts.join("\n")}\n\n${asked}` : asked });
 	while (turns.length && turns[0].role !== "user") turns.shift();
 
-	const limited = await overDailyLimit(viewer);
+	const limited = await overDailyLimit(viewer, conv.id, agentItem);
 	const brain = settings().grok.brain;
 	const conversationId = conv.id;
 	const stream = new ReadableStream<Uint8Array>({
@@ -268,7 +274,8 @@ export async function addResponse(viewer: Viewer, req: Request): Promise<Respons
 				else if (!(e instanceof GrokError)) console.log(`grok: ${(e as Error)?.message ?? e}`);
 				say(`${said ? "\n\n" : ""}${e instanceof GrokError ? e.message : "Grok broke. Try again in a minute."}`);
 			}
-			await sql`insert into grok_items (id, conversation_id, sender, message) values (${agentItem}::bigint, ${conversationId}::bigint, 'Agent', ${said})`;
+			await sql`insert into grok_items (id, conversation_id, sender, message) values (${agentItem}::bigint, ${conversationId}::bigint, 'Agent', ${said})
+				on conflict (id) do update set message = excluded.message`;
 			await sql`update grok_conversations set updated_at = now() where id = ${conversationId}::bigint`;
 			ctrl.close();
 		},

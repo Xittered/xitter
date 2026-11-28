@@ -23,3 +23,5 @@ export async function migrate() {
 		await tx.unsafe(readFileSync(join(import.meta.dir, "schema.sql"), "utf8"));
 	});
 }
+
+export const holdLock = (db: typeof sql, key: string) => db`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;

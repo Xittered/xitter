@@ -12,7 +12,7 @@
 
 import { accountPage, esc } from "./account-page";
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { feature } from "./settings";
 import { staffViewer } from "./staff-access";
 
@@ -86,9 +86,12 @@ export async function circleRoute(req: Request, viewer: Viewer): Promise<Respons
 	if (u.id === viewer.id) return page(req, viewer, "", "You're always in your own Circle.");
 	const [blocked] = await sql`select 1 from blocks where (blocker_id = ${viewer.id}::bigint and blocked_id = ${u.id}::bigint) or (blocker_id = ${u.id}::bigint and blocked_id = ${viewer.id}::bigint)`;
 	if (blocked) return page(req, viewer, "", `You can't add @${u.screen_name}.`);
-	const added = await sql`insert into circle_members (owner_id, member_id)
-		select ${viewer.id}::bigint, ${u.id}::bigint where (select count(*) from circle_members where owner_id = ${viewer.id}::bigint) < ${MAX_CIRCLE}
-		on conflict do nothing returning member_id`;
+	const added = await sql.begin(async (tx) => {
+		await holdLock(tx, `circle:${viewer.id}`);
+		return tx`insert into circle_members (owner_id, member_id)
+			select ${viewer.id}::bigint, ${u.id}::bigint where (select count(*) from circle_members where owner_id = ${viewer.id}::bigint) < ${MAX_CIRCLE}
+			on conflict do nothing returning member_id`;
+	});
 	const [already] = added.length ? [] : await sql`select 1 from circle_members where owner_id = ${viewer.id}::bigint and member_id = ${u.id}::bigint`;
 	if (!added.length && !already) return page(req, viewer, "", `Your Circle is full (${MAX_CIRCLE} people).`);
 	return page(req, viewer, already ? `@${u.screen_name} is already in your Circle.` : `Added @${u.screen_name}.`);

@@ -1,6 +1,6 @@
 import type { User } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { queueReview } from "./claude-mod";
 import { INSTANCE_ID } from "./federation";
 import { idAt, newId } from "./ids";
@@ -268,11 +268,15 @@ export async function editPost(userId: string, postId: string, input: string): P
 	if (post.status !== "active") throw new PostError("Your account can't edit posts right now.", 326);
 	if (post.pinned) throw new PostError("Unpin this post before editing it.", 214);
 	if (Date.now() > new Date(post.created_at).getTime() + EDIT_WINDOW_MS) throw new PostError("This post can't be edited anymore.", 214);
-	if (post.edit_count >= MAX_EDITS) throw new PostError("This post has reached its edit limit.", 214);
-	if (text === post.text) throw new PostError("There's nothing new to save.", 214);
-	await sql`insert into post_versions (version_id, post_id, seq, text, created_at)
-		values (${newId()}::bigint, ${postId}::bigint, ${post.edit_count}, ${post.text}, ${post.edited_at ?? post.created_at})`;
-	await sql`update posts set text = ${text}, edit_count = edit_count + 1, edited_at = now() where id = ${postId}::bigint`;
+	await sql.begin(async (tx) => {
+		const [now] = await tx`select text, created_at, edit_count, edited_at from posts where id = ${postId}::bigint for update`;
+		if (!now) throw new PostError("You can only edit your own posts.", 144);
+		if (now.edit_count >= MAX_EDITS) throw new PostError("This post has reached its edit limit.", 214);
+		if (text === now.text) throw new PostError("There's nothing new to save.", 214);
+		await tx`insert into post_versions (version_id, post_id, seq, text, created_at)
+			values (${newId()}::bigint, ${postId}::bigint, ${now.edit_count}, ${now.text}, ${now.edited_at ?? now.created_at})`;
+		await tx`update posts set text = ${text}, edit_count = edit_count + 1, edited_at = now() where id = ${postId}::bigint`;
+	});
 	await saveMentions(postId, text, undefined, lookupRemoteUser);
 	queueReview("post", postId);
 }
@@ -514,13 +518,15 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 	const [author] = await db`select status, deactivated_at, role from users where id = ${userId}::bigint`;
 	if (!author || author.status === "restricted" || author.status === "suspended" || author.deactivated_at) throw new PostError("Your account can't post right now.", 326);
 	const caps = settings().daily_caps;
-	if (caps.enabled && !author.role) {
+	const capped = caps.enabled && !author.role;
+	const dailyCap = async (q: typeof sql) => {
 		const reply = !!opts.replyToId;
 		const cap = reply ? caps.replies : caps.posts;
-		const [made] = await db`select count(*)::int as n from posts
+		const [made] = await q`select count(*)::int as n from posts
 			where user_id = ${userId}::bigint and id >= ${idAt(Date.now() - 86_400_000)}::bigint and (reply_to_id is not null) = ${reply}`;
 		if (made.n >= cap) throw new PostError(`You've reached the limit of ${cap} ${reply ? (cap === 1 ? "reply" : "replies") : cap === 1 ? "post" : "posts"} a day. Try again later.`, 185);
-	}
+	};
+	if (capped) await dailyCap(db);
 	await checkLength(userId, text, db);
 	await checkMentions(userId, text, author.role, db);
 	await refuseHate(userId, text);
@@ -563,8 +569,16 @@ export async function createPost(userId: string, input: string, opts: { replyToI
 		const [m] = await db`select 1 from community_members where community_id = ${opts.communityId}::bigint and user_id = ${userId}::bigint`;
 		if (!m) throw new PostError("Only members can post in this community.", 187);
 	}
-	await db`insert into posts (id, user_id, text, reply_to_id, reply_to_user_id, conversation_id, quote_id, article_id, source, community_id, place_id, reply_policy, reply_selections, reply_allowed_values, circle_owner_id)
-		values (${id}::bigint, ${userId}::bigint, ${text}, ${opts.replyToId ?? null}::bigint, ${replyToUserId}::bigint, ${conversationId}::bigint, ${opts.quoteId ?? null}::bigint, ${opts.articleId ?? null}::bigint, ${opts.source ?? webSource()}, ${opts.communityId ?? null}::bigint, ${opts.placeId ?? null}, ${opts.replyToId ? null : control.policy}, ${db.array(opts.replyToId ? [] : control.selections, "TEXT")}, ${db.array(opts.replyToId ? [] : control.values, "TEXT")}, ${circleOwner}::bigint)`;
+	const insert = async (q: typeof sql) => {
+		if (capped) {
+			await holdLock(q, `daily-cap:${userId}`);
+			await dailyCap(q);
+		}
+		await q`insert into posts (id, user_id, text, reply_to_id, reply_to_user_id, conversation_id, quote_id, article_id, source, community_id, place_id, reply_policy, reply_selections, reply_allowed_values, circle_owner_id)
+			values (${id}::bigint, ${userId}::bigint, ${text}, ${opts.replyToId ?? null}::bigint, ${replyToUserId}::bigint, ${conversationId}::bigint, ${opts.quoteId ?? null}::bigint, ${opts.articleId ?? null}::bigint, ${opts.source ?? webSource()}, ${opts.communityId ?? null}::bigint, ${opts.placeId ?? null}, ${opts.replyToId ? null : control.policy}, ${q.array(opts.replyToId ? [] : control.selections, "TEXT")}, ${q.array(opts.replyToId ? [] : control.values, "TEXT")}, ${circleOwner}::bigint)`;
+	};
+	if (capped && !opts.db) await sql.begin(insert);
+	else await insert(db);
 	// Transactional callers resolve unknown remote handles before publication;
 	// only database writes belong inside the transaction and its row locks.
 	await saveMentions(id, text, undefined, opts.db ? undefined : lookupRemoteUser, db);

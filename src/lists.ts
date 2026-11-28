@@ -5,7 +5,7 @@
 // list.<name>_timeline.timeline.
 
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { blockedFor, outOfView } from "./blocks";
 import { isId, newId } from "./ids";
 import { cursorEntry, feedEntry, userEntry, userResult } from "./model";
@@ -17,8 +17,8 @@ type Vars = Record<string, any>;
 
 const MAX_NAME = 25;
 const MAX_DESCRIPTION = 100;
-const MAX_LISTS = 1000;
-const MAX_MEMBERS = 5000;
+export const MAX_LISTS = 1000;
+export const MAX_MEMBERS = 5000;
 const MEMBER_PAGE = 200;
 
 const globalId = (kind: string, id: string) => Buffer.from(`${kind}:${id}`).toString("base64");
@@ -250,10 +250,13 @@ async function create(v: Viewer, vars: Vars) {
 	const description = String(vars.description ?? "").trim();
 	if (description.length > MAX_DESCRIPTION) throw new PostError(`Descriptions can be up to ${MAX_DESCRIPTION} characters.`, 214);
 	if (forbiddenText(name, description)) throw new PostError("The list contains a word this instance doesn't allow.", 186);
-	const [count] = await sql`select count(*)::int as n from lists where owner_id = ${v.id}::bigint`;
-	if (count.n >= MAX_LISTS) throw new PostError("You can't have more lists.", 214);
 	const id = newId();
-	await sql`insert into lists (id, owner_id, name, description, is_private) values (${id}::bigint, ${v.id}::bigint, ${name}, ${description}, ${!!vars.isPrivate})`;
+	await sql.begin(async (tx) => {
+		await holdLock(tx, `lists:${v.id}`);
+		const [count] = await tx`select count(*)::int as n from lists where owner_id = ${v.id}::bigint`;
+		if (count.n >= MAX_LISTS) throw new PostError("You can't have more lists.", 214);
+		await tx`insert into lists (id, owner_id, name, description, is_private) values (${id}::bigint, ${v.id}::bigint, ${name}, ${description}, ${!!vars.isPrivate})`;
+	});
 	return { data: { list: await one(v.id, id) } };
 }
 
@@ -279,18 +282,23 @@ async function update(v: Viewer, vars: Vars) {
 	return { data: { list: await one(v.id, id) } };
 }
 
+export async function addListMember(tx: typeof sql, ownerId: string, listId: string, userId: string) {
+	const [blocked] = await tx`select 1 from blocks where (blocker_id = ${userId}::bigint and blocked_id = ${ownerId}::bigint) or (blocker_id = ${ownerId}::bigint and blocked_id = ${userId}::bigint)`;
+	if (blocked) throw new PostError("You can't add this account to a list.", 150);
+	const [exists] = await tx`select 1 from users where id = ${userId}::bigint`;
+	if (!exists) throw new PostError("User not found.", 144);
+	await holdLock(tx, `list-members:${listId}`);
+	const [n] = await tx`select count(*)::int as n from list_members where list_id = ${listId}::bigint`;
+	if (n.n >= MAX_MEMBERS) throw new PostError("This list is full.", 214);
+	await tx`insert into list_members (list_id, user_id) values (${listId}::bigint, ${userId}::bigint) on conflict do nothing`;
+}
+
 async function member(v: Viewer, vars: Vars, on: boolean) {
 	const id = listId(vars);
 	await requireOwn(v.id, id);
 	if (!isId(vars.userId)) throw new PostError("Invalid user id.", 144);
 	if (on) {
-		const [blocked] = await sql`select 1 from blocks where (blocker_id = ${vars.userId}::bigint and blocked_id = ${v.id}::bigint) or (blocker_id = ${v.id}::bigint and blocked_id = ${vars.userId}::bigint)`;
-		if (blocked) throw new PostError("You can't add this account to a list.", 150);
-		const [exists] = await sql`select 1 from users where id = ${vars.userId}::bigint`;
-		if (!exists) throw new PostError("User not found.", 144);
-		const [n] = await sql`select count(*)::int as n from list_members where list_id = ${id}::bigint`;
-		if (n.n >= MAX_MEMBERS) throw new PostError("This list is full.", 214);
-		await sql`insert into list_members (list_id, user_id) values (${id}::bigint, ${vars.userId}::bigint) on conflict do nothing`;
+		await sql.begin((tx) => addListMember(tx, v.id, id, String(vars.userId)));
 	} else {
 		await sql`delete from list_members where list_id = ${id}::bigint and user_id = ${vars.userId}::bigint`;
 	}
@@ -428,11 +436,16 @@ async function pinOne(v: Viewer, vars: Vars, on: boolean) {
 	if (id === ALL_ID) {
 		// stored in preferences, above
 	} else if (on) {
-		const [n] = await sql`select count(*)::int as n from pinned_lists where user_id = ${v.id}::bigint`;
-		if (n.n >= MAX_PINNED) {
+		const pinned = await sql.begin(async (tx) => {
+			await holdLock(tx, `pinned-lists:${v.id}`);
+			const [n] = await tx`select count(*)::int as n, coalesce(max(position) + 1, 0)::int as next from pinned_lists where user_id = ${v.id}::bigint`;
+			if (n.n >= MAX_PINNED) return false;
+			await tx`insert into pinned_lists (user_id, list_id, position) values (${v.id}::bigint, ${id}::bigint, ${n.next}) on conflict do nothing`;
+			return true;
+		});
+		if (!pinned) {
 			return { data: { pin_timeline: { __typename: "PinTimelineErrorResult", reason: "LimitReached", message: `You can pin up to ${MAX_PINNED} lists.` } } };
 		}
-		await sql`insert into pinned_lists (user_id, list_id, position) values (${v.id}::bigint, ${id}::bigint, ${n.n}) on conflict do nothing`;
 	} else {
 		await sql`delete from pinned_lists where user_id = ${v.id}::bigint and list_id = ${id}::bigint`;
 	}

@@ -21,7 +21,7 @@ import type { User, Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
 import { verifyChatToken } from "./chat-token";
 import { chatMedia } from "./chat-media";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { absolute } from "./media";
 import { newId } from "./ids";
 import { hit } from "./ratelimit";
@@ -534,6 +534,7 @@ async function inbox(viewerId: string) {
 // --- GraphQL operations
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && /^\d{1,19}$/.test(x)).slice(0, 100) : []);
+const conversationIds = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.map(String))].slice(0, 100) : []);
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
 function decodeBlob(value: unknown): Struct {
@@ -690,7 +691,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		return { data: { xchat_delete_conversation: { __typename: "DeleteConversationResponse", error_code: null } } };
 	},
 	MuteConversationMutation: async (v, vars) => {
-		for (const id of vars.conversationIds ?? []) { await membership(v.id, String(id)); await sql`update chat_members set muted = true where conversation_id = ${String(id)} and user_id = ${v.id}::bigint`; }
+		for (const id of conversationIds(vars.conversationIds)) { await membership(v.id, id); await sql`update chat_members set muted = true where conversation_id = ${String(id)} and user_id = ${v.id}::bigint`; }
 		return { data: { xchat_mute_conversation: { __typename: "MuteXChatConversationResponse", error_code: null } } };
 	},
 	ArchiveConversationMutation: async (v, vars) => {
@@ -699,7 +700,7 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		return { data: { xchat_archive_conversation: { __typename: "ArchiveXChatConversationResponse", error_code: null } } };
 	},
 	UnmuteConversationMutation: async (v, vars) => {
-		for (const id of vars.conversationIds ?? []) { await membership(v.id, String(id)); await sql`update chat_members set muted = false where conversation_id = ${String(id)} and user_id = ${v.id}::bigint`; }
+		for (const id of conversationIds(vars.conversationIds)) { await membership(v.id, id); await sql`update chat_members set muted = false where conversation_id = ${String(id)} and user_id = ${v.id}::bigint`; }
 		return { data: { xchat_unmute_conversation: { __typename: "MuteXChatConversationResponse", error_code: null } } };
 	},
 	UnarchiveConversationMutation: async (v, vars) => {
@@ -712,10 +713,16 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 		const id = String(vars.conversation_id ?? "");
 		await groupAdmin(v, id);
 		const added = ids(vars.user_ids);
-		const all = [...new Set([...await members(id), ...added])];
-		if (all.length > 100) throw new ChatError("Group is full.");
+		if (new Set([...await members(id), ...added]).size > 100) throw new ChatError("Group is full.");
 		await writable(v.id, [...new Set([v.id, ...added])]);
-		for (const member of added) await sql`insert into chat_members (conversation_id, user_id) values (${id}, ${member}::bigint) on conflict do nothing`;
+		const all = await sql.begin(async (tx) => {
+			await holdLock(tx, `chat-group:${id}`);
+			const now = await tx`select user_id::text as id from chat_members where conversation_id = ${id}`;
+			const all = [...new Set([...now.map((r: { id: string }) => r.id), ...added])];
+			if (all.length > 100) throw new ChatError("Group is full.");
+			for (const member of added) await tx`insert into chat_members (conversation_id, user_id) values (${id}, ${member}::bigint) on conflict do nothing`;
+			return all;
+		});
 		const seqs = await actionEvents(v, id, vars.action_signatures, [3, 4]);
 		return { data: { xchat_add_group_members: { __typename: "AddGroupMembersResponse", error_code: null,
 			current_member_ids_results: all.map((user) => ({ __typename: "UserResults", id: user, rest_id: user })), conversation_key_change_sequence_id: seqs[0] ?? null } } };
@@ -777,15 +784,19 @@ export const chatHandlers: Record<string, (viewer: Viewer, vars: Vars) => Promis
 	AddXChatPublicKeyMutation: async (v, vars) => {
 		const k = vars.public_key ?? {};
 		const long = [k.public_key, k.signing_public_key, k.identity_public_key_signature, k.registration_method].some((x) => x != null && (typeof x !== "string" || x.length > 4096));
-		const [keys] = await sql`select count(*)::int as n from chat_keys where user_id = ${v.id}::bigint`;
-		if (long || keys.n >= 200 || typeof k.public_key !== "string" || typeof k.signing_public_key !== "string")
-			return { data: { user_add_public_key: { __typename: "AddPublicKeyResponse", error_code: "InvalidPublicKey", version: null, token_map: null } } };
-		const [last] = await sql`select max(version)::text as v from chat_keys where user_id = ${v.id}::bigint`;
-		const version = vars.generate_version || !/^\d+$/.test(String(vars.version ?? "")) ? String(BigInt(last?.v ?? "0") + 1n) : String(vars.version);
-		await sql`insert into chat_keys (user_id, version, public_key, signing_public_key, identity_public_key_signature, registration_method)
-			values (${v.id}::bigint, ${version}::bigint, ${k.public_key}, ${k.signing_public_key}, ${k.identity_public_key_signature ?? ""}, ${k.registration_method ?? "CustomPin"})
-			on conflict (user_id, version) do update set public_key = excluded.public_key, signing_public_key = excluded.signing_public_key,
-				identity_public_key_signature = excluded.identity_public_key_signature, registration_method = excluded.registration_method`;
+		const version = await sql.begin(async (tx) => {
+			await holdLock(tx, `chat-keys:${v.id}`);
+			const [keys] = await tx`select count(*)::int as n from chat_keys where user_id = ${v.id}::bigint`;
+			if (long || keys.n >= 200 || typeof k.public_key !== "string" || typeof k.signing_public_key !== "string") return null;
+			const [last] = await tx`select max(version)::text as v from chat_keys where user_id = ${v.id}::bigint`;
+			const version = vars.generate_version || !/^\d+$/.test(String(vars.version ?? "")) ? String(BigInt(last?.v ?? "0") + 1n) : String(vars.version);
+			await tx`insert into chat_keys (user_id, version, public_key, signing_public_key, identity_public_key_signature, registration_method)
+				values (${v.id}::bigint, ${version}::bigint, ${k.public_key}, ${k.signing_public_key}, ${k.identity_public_key_signature ?? ""}, ${k.registration_method ?? "CustomPin"})
+				on conflict (user_id, version) do update set public_key = excluded.public_key, signing_public_key = excluded.signing_public_key,
+					identity_public_key_signature = excluded.identity_public_key_signature, registration_method = excluded.registration_method`;
+			return version;
+		});
+		if (!version) return { data: { user_add_public_key: { __typename: "AddPublicKeyResponse", error_code: "InvalidPublicKey", version: null, token_map: null } } };
 		return { data: { user_add_public_key: { __typename: "AddPublicKeyResponse", error_code: null, version, token_map: tokenMap(v.id) } } };
 	},
 	UpdateXChatUserRealmStateMutation: () => ({ data: { xchat_update_user_key_version_realm_state: { __typename: "UpdateRealmStateResponse", error_code: null } } }),

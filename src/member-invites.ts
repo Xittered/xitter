@@ -5,14 +5,14 @@
 import { accountPage, esc, formCsrfOk, withCsrf } from "./account-page";
 import type { Viewer } from "./auth";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { createInvite } from "./invites";
 import { settings } from "./settings";
 
 // what stops this account from making an invite now, or null
-async function blocker(viewer: Viewer): Promise<{ reason: string | null; made: number }> {
+async function blocker(viewer: Viewer, db: typeof sql = sql): Promise<{ reason: string | null; made: number }> {
 	const q = settings().invite_quota;
-	const [u] = await sql`select status, created_at,
+	const [u] = await db`select status, created_at,
 		(select count(*)::int from invites i where i.created_by = users.id and i.created_at > now() - interval '30 days') as made
 		from users where id = ${viewer.id}::bigint`;
 	const made: number = u?.made ?? 0;
@@ -56,9 +56,14 @@ ${!i.revoked && i.uses < i.max_uses ? `<div class="dim">Link: <a href="${esc(`${
 export async function memberInvitesRoute(req: Request, viewer: Viewer): Promise<Response> {
 	if (req.method !== "POST") return view(req, viewer);
 	if (!(await formCsrfOk(req, viewer))) return view(req, viewer, "", "That form is out of date. Try again.");
-	const { reason } = await blocker(viewer);
-	if (reason) return view(req, viewer, "", reason);
-	const q = settings().invite_quota;
-	const code = await createInvite({ createdBy: viewer.id, maxUses: q.uses, expiresAt: new Date(Date.now() + 30 * 86400e3) });
+	const made = await sql.begin(async (tx) => {
+		await holdLock(tx, `member-invites:${viewer.id}`);
+		const { reason } = await blocker(viewer, tx);
+		if (reason) return { reason };
+		const q = settings().invite_quota;
+		return { reason: null, code: await createInvite({ createdBy: viewer.id, maxUses: q.uses, expiresAt: new Date(Date.now() + 30 * 86400e3) }, tx) };
+	});
+	if (!made.code) return view(req, viewer, "", made.reason ?? "");
+	const code = made.code;
 	return view(req, viewer, `Your invite is <b>${esc(code)}</b>. Send the code or the link below.`);
 }

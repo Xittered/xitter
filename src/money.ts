@@ -8,7 +8,7 @@ import { esc } from "./account-page";
 import type { Viewer } from "./auth";
 import { blockedFor, isBlockedEitherWay, protectedFor, suspendedFor } from "./blocks";
 import { PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { hateIn } from "./hate";
 import { newId } from "./ids";
 import { linksIn } from "./links";
@@ -223,20 +223,25 @@ export async function requestMoney(requesterId: string, from: string, amountText
 		if (payer.id === requesterId) throw new MoneyError("You can't ask yourself for money.");
 		if (!amount) throw new MoneyError(`Say how much you're asking @${payer.screen_name} for.`);
 		if (await isBlockedEitherWay(requesterId, payer.id)) throw new MoneyError(`You can't ask @${payer.screen_name} for money.`);
-		const [{ n }] = await sql`select count(*)::int as n from money_requests where requester_id = ${requesterId}::bigint and payer_id is not null and status = 'open'`;
-		if (n >= OPEN_REQUESTS_MAX) throw new MoneyError(`You have ${n} requests waiting. Cancel some first.`);
-		const [dup] = await sql`select id::text from money_requests where requester_id = ${requesterId}::bigint and payer_id = ${payer.id}::bigint and status = 'open'
-			and amount_cents = ${amount} and note = ${note}`;
-		if (dup) return dup.id;
-	} else {
-		// one plain "Pay me" card each: asking again gives the same one
-		const [same] = await sql`select id::text from money_requests where requester_id = ${requesterId}::bigint and payer_id is null and status = 'open'
-			and amount_cents is not distinct from ${amount} and note = ${note}`;
-		if (same) return same.id;
 	}
-	const id = newId();
-	await sql`insert into money_requests (id, requester_id, payer_id, amount_cents, note) values (${id}::bigint, ${requesterId}::bigint, ${payer?.id ?? null}, ${amount}, ${note})`;
-	return id;
+	return sql.begin(async (tx) => {
+		await holdLock(tx, `money-requests:${requesterId}`);
+		if (payer) {
+			const [{ n }] = await tx`select count(*)::int as n from money_requests where requester_id = ${requesterId}::bigint and payer_id is not null and status = 'open'`;
+			if (n >= OPEN_REQUESTS_MAX) throw new MoneyError(`You have ${n} requests waiting. Cancel some first.`);
+			const [dup] = await tx`select id::text from money_requests where requester_id = ${requesterId}::bigint and payer_id = ${payer.id}::bigint and status = 'open'
+				and amount_cents = ${amount} and note = ${note}`;
+			if (dup) return dup.id as string;
+		} else {
+			// one plain "Pay me" card each: asking again gives the same one
+			const [same] = await tx`select id::text from money_requests where requester_id = ${requesterId}::bigint and payer_id is null and status = 'open'
+				and amount_cents is not distinct from ${amount} and note = ${note}`;
+			if (same) return same.id as string;
+		}
+		const id = newId();
+		await tx`insert into money_requests (id, requester_id, payer_id, amount_cents, note) values (${id}::bigint, ${requesterId}::bigint, ${payer?.id ?? null}, ${amount}, ${note})`;
+		return id;
+	});
 }
 
 // the payer declines a request of them, the requester cancels their own

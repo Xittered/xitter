@@ -11,7 +11,7 @@
 import { type Viewer, viewerById } from "./auth";
 import { isBlockedEitherWay } from "./blocks";
 import { chatHandlers } from "./chat";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { newId } from "./ids";
 import { userResult } from "./model";
 import { PostError } from "./posts";
@@ -171,11 +171,14 @@ async function invite(v: Viewer, ownerId: string, memberId: string, role: Role) 
 	// the invitee's own setting (Settings > Delegate)
 	if (m.delegation_invites === "Nobody" || (m.delegation_invites === "OnlyFollowing" && !m.follows_owner))
 		throw new PostError("This account doesn't accept delegation invites from you.", 214);
-	const [{ n }] = await sql`select count(*)::int as n from delegation_members where owner_id = ${ownerId}::bigint`;
-	if (n >= MAX_MEMBERS) throw new PostError(`An account can have up to ${MAX_MEMBERS} delegates.`, 214);
-	await sql`insert into delegation_members (id, owner_id, member_id, role, invited_by)
-		values (${newId()}::bigint, ${ownerId}::bigint, ${memberId}::bigint, ${role}, ${self(v)}::bigint)
-		on conflict (owner_id, member_id) do update set role = excluded.role`;
+	await sql.begin(async (tx) => {
+		await holdLock(tx, `delegates:${ownerId}`);
+		const [{ n }] = await tx`select count(*)::int as n from delegation_members where owner_id = ${ownerId}::bigint`;
+		if (n >= MAX_MEMBERS) throw new PostError(`An account can have up to ${MAX_MEMBERS} delegates.`, 214);
+		await tx`insert into delegation_members (id, owner_id, member_id, role, invited_by)
+			values (${newId()}::bigint, ${ownerId}::bigint, ${memberId}::bigint, ${role}, ${self(v)}::bigint)
+			on conflict (owner_id, member_id) do update set role = excluded.role`;
+	});
 }
 
 // ---- operations

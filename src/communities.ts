@@ -3,7 +3,7 @@
 // fields, with `communityResults` as the key a community comes back under.
 
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { blockedFor } from "./blocks";
 import { isId, newId } from "./ids";
 import {
@@ -206,14 +206,17 @@ async function create(v: Viewer, vars: Vars) {
 	const joinPolicy = JOIN_POLICIES.includes(vars.joinPolicy) ? vars.joinPolicy : "Open";
 	const invitesPolicy = INVITE_POLICIES.includes(vars.invitesPolicy) ? vars.invitesPolicy : "MemberInvitesAllowed";
 	if (v.status !== "active") throw new PostError("Your account can't create communities right now.", 326);
-	const [owned] = await sql`select count(*)::int as n from communities where creator_id = ${v.id}::bigint`;
-	if (owned.n >= MAX_CREATED) throw new PostError("You've created the most communities you can.", 214);
-	const [taken] = await sql`select 1 from communities where lower(name) = lower(${name})`;
-	if (taken) throw new PostError("A community with that name already exists.", 214);
 	const id = newId();
-	await sql`insert into communities (id, creator_id, name, description, question, join_policy, invites_policy)
-		values (${id}::bigint, ${v.id}::bigint, ${name}, ${description}, ${question}, ${joinPolicy}, ${invitesPolicy})`;
-	await sql`insert into community_members (community_id, user_id, role) values (${id}::bigint, ${v.id}::bigint, 'Admin')`;
+	await sql.begin(async (tx) => {
+		await holdLock(tx, `communities-created:${v.id}`);
+		const [owned] = await tx`select count(*)::int as n from communities where creator_id = ${v.id}::bigint`;
+		if (owned.n >= MAX_CREATED) throw new PostError("You've created the most communities you can.", 214);
+		const [taken] = await tx`select 1 from communities where lower(name) = lower(${name})`;
+		if (taken) throw new PostError("A community with that name already exists.", 214);
+		await tx`insert into communities (id, creator_id, name, description, question, join_policy, invites_policy)
+			values (${id}::bigint, ${v.id}::bigint, ${name}, ${description}, ${question}, ${joinPolicy}, ${invitesPolicy})`;
+		await tx`insert into community_members (community_id, user_id, role) values (${id}::bigint, ${v.id}::bigint, 'Admin')`;
+	});
 	return { data: { community_create_v2: await one(v.id, id) } };
 }
 
@@ -319,9 +322,12 @@ async function rules(v: Viewer, vars: Vars, op: "create" | "update" | "remove" |
 	if (op === "create") {
 		const name = clean(vars.name, MAX_RULE_NAME, "The rule name", true);
 		const description = clean(vars.description, MAX_RULE_DESCRIPTION, "The rule description");
-		const [n] = await sql`select count(*)::int as n, coalesce(max(position), 0) + 1 as next from community_rules where community_id = ${id}::bigint`;
-		if (n.n >= MAX_RULES) throw new PostError(`A community can have up to ${MAX_RULES} rules.`, 214);
-		await sql`insert into community_rules (id, community_id, name, description, position) values (${newId()}::bigint, ${id}::bigint, ${name}, ${description}, ${n.next})`;
+		await sql.begin(async (tx) => {
+			await holdLock(tx, `community-rules:${id}`);
+			const [n] = await tx`select count(*)::int as n, coalesce(max(position), 0) + 1 as next from community_rules where community_id = ${id}::bigint`;
+			if (n.n >= MAX_RULES) throw new PostError(`A community can have up to ${MAX_RULES} rules.`, 214);
+			await tx`insert into community_rules (id, community_id, name, description, position) values (${newId()}::bigint, ${id}::bigint, ${name}, ${description}, ${n.next})`;
+		});
 	} else if (op === "update") {
 		if (!isId(vars.ruleId)) throw missing();
 		const name = clean(vars.name, MAX_RULE_NAME, "The rule name", true);
@@ -331,8 +337,10 @@ async function rules(v: Viewer, vars: Vars, op: "create" | "update" | "remove" |
 		if (!isId(vars.ruleId)) throw missing();
 		await sql`delete from community_rules where id = ${vars.ruleId}::bigint and community_id = ${id}::bigint`;
 	} else {
-		const ids: string[] = Array.isArray(vars.ruleIds) ? vars.ruleIds.filter(isId) : [];
-		for (const [i, rule] of ids.entries()) await sql`update community_rules set position = ${i} where id = ${rule}::bigint and community_id = ${id}::bigint`;
+		const ids: string[] = Array.isArray(vars.ruleIds) ? [...new Set<string>(vars.ruleIds.filter(isId))] : [];
+		if (ids.length > MAX_RULES) throw new PostError(`A community can have up to ${MAX_RULES} rules.`, 214);
+		if (ids.length) await sql`update community_rules r set position = t.ord - 1 from unnest(${sql.array(ids, "INT8")}::bigint[]) with ordinality t(id, ord)
+			where r.id = t.id and r.community_id = ${id}::bigint`;
 	}
 	return { data: { [`community_rule_${op === "reorder" ? "rules_reorder" : op}`]: await one(v.id, id) } };
 }

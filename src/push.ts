@@ -11,7 +11,7 @@
 import { createECDH, createPrivateKey, generateKeyPairSync, hkdfSync, randomBytes, sign, createCipheriv } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { PUBLIC_HOSTNAME, PUBLIC_ORIGIN } from "./config";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { newId } from "./ids";
 import { mailFrom } from "./mail";
 import { type PushItem, pushItems, unreadCount } from "./notifications";
@@ -154,10 +154,14 @@ export async function pushSettingsRoute(viewerId: string, action: string, body: 
 		return Response.json({});
 	}
 	const keysFit = [d.encryption_key1, d.encryption_key2].every((k) => typeof k === "string" && k.length <= 256) && (endpoint?.length ?? 0) <= 2048;
-	const [subs] = await sql`select count(*)::int as n from push_subscriptions where user_id = ${viewerId}::bigint`;
-	if (action === "login" && endpoint && keysFit && subs.n < 50 && d.encryption_key1 && d.encryption_key2) {
-		await sql`insert into push_subscriptions (id, user_id, endpoint, p256dh, auth) values (${newId()}::bigint, ${viewerId}::bigint, ${endpoint}, ${d.encryption_key1}, ${d.encryption_key2})
-			on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`;
+	if (action === "login" && endpoint && keysFit && d.encryption_key1 && d.encryption_key2) {
+		await sql.begin(async (tx) => {
+			await holdLock(tx, `push:${viewerId}`);
+			const [subs] = await tx`select count(*)::int as n from push_subscriptions where user_id = ${viewerId}::bigint`;
+			if (subs.n >= 50) return;
+			await tx`insert into push_subscriptions (id, user_id, endpoint, p256dh, auth) values (${newId()}::bigint, ${viewerId}::bigint, ${endpoint}, ${d.encryption_key1}, ${d.encryption_key2})
+				on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`;
+		});
 	}
 	if (action === "save" && endpoint)
 		await sql`update push_subscriptions set settings = settings || ${JSON.stringify(cleanSettings(d.settings as Record<string, unknown>))}::text::jsonb

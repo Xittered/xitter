@@ -2,7 +2,7 @@
 // folder bookmarks it too; removing the bookmark leaves it in the folder's
 // list only while it stays bookmarked.
 import type { Viewer } from "./auth";
-import { sql } from "./db";
+import { holdLock, sql } from "./db";
 import { isId, newId } from "./ids";
 import { cursorEntry, tweetEntry } from "./model";
 import { PUBLIC_ORIGIN } from "./config";
@@ -10,7 +10,7 @@ import { mediaUrl, posterUrl } from "./media";
 import { PostError, folderPosts, originalPostId, setMark } from "./posts";
 
 type Vars = Record<string, any>;
-const MAX_FOLDERS = 25;
+export const MAX_FOLDERS = 25;
 
 function readCursor(value: unknown): { at: string; id: string; sort: string } | undefined {
 	if (value === undefined || value === null || value === "") return undefined;
@@ -70,10 +70,13 @@ export const bookmarkFolderHandlers = {
 	},
 	createBookmarkFolder: async (v: Viewer, vars: Vars) => {
 		const name = cleanName(vars.name);
-		const [n] = await sql`select count(*)::int as n from bookmark_folders where user_id = ${v.id}::bigint`;
-		if (n.n >= MAX_FOLDERS) throw new PostError("You have too many folders.", 214);
 		const id = newId();
-		await sql`insert into bookmark_folders (id, user_id, name) values (${id}::bigint, ${v.id}::bigint, ${name})`;
+		await sql.begin(async (tx) => {
+			await holdLock(tx, `bookmark-folders:${v.id}`);
+			const [n] = await tx`select count(*)::int as n from bookmark_folders where user_id = ${v.id}::bigint`;
+			if (n.n >= MAX_FOLDERS) throw new PostError("You have too many folders.", 214);
+			await tx`insert into bookmark_folders (id, user_id, name) values (${id}::bigint, ${v.id}::bigint, ${name})`;
+		});
 		return { data: { bookmark_collection_create: item({ id, name }) } };
 	},
 	EditBookmarkFolder: async (v: Viewer, vars: Vars) => {
