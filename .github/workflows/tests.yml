@@ -69,6 +69,7 @@ jobs:
           bun scripts/test-search-indexing.ts
           bun scripts/test-federated-search.ts
           bun scripts/test-public-api-input.ts
+          bun scripts/test-follow-banned.ts
           bun scripts/test-data-export.ts
           bun scripts/test-archive-import.ts
           DB_POOL_MAX=1 bun scripts/test-data-export-chat.ts

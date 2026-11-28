@@ -116,13 +116,14 @@ export async function userById(viewerId: string, id: string): Promise<User | und
 
 // Following a protected account asks instead; unfollowing also withdraws a request.
 export async function setFollow(followerId: string, followeeId: string, on: boolean) {
-	if (followerId === followeeId) return;
-	if (on && (await isBlockedEitherWay(followerId, followeeId))) return;
+	if (followerId === followeeId) return false;
+	if (on && (await isBlockedEitherWay(followerId, followeeId))) return false;
 	if (on) {
-		const [target] = await sql`select protected from users where id = ${followeeId}::bigint`;
-		if (target?.protected) {
+		const [target] = await sql`select protected, status, deactivated_at from users where id = ${followeeId}::bigint`;
+		if (!target || !["active", "restricted"].includes(target.status) || target.deactivated_at) return false;
+		if (target.protected) {
 			await sql`insert into follow_requests (requester_id, target_id) values (${followerId}::bigint, ${followeeId}::bigint) on conflict do nothing`;
-			return;
+			return true;
 		}
 		await sql`insert into follows (follower_id, followee_id) values (${followerId}::bigint, ${followeeId}::bigint) on conflict do nothing`;
 	} else {
@@ -131,6 +132,7 @@ export async function setFollow(followerId: string, followeeId: string, on: bool
 		if (gone.length) await sql`insert into unfollows (follower_id, followee_id) values (${followerId}::bigint, ${followeeId}::bigint)`;
 		await sql`delete from follow_requests where requester_id = ${followerId}::bigint and target_id = ${followeeId}::bigint`;
 	}
+	return true;
 }
 
 export async function pendingRequests(userId: string): Promise<string[]> {

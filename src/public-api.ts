@@ -595,7 +595,7 @@ const ROUTES: Route[] = [
 		run: async (v, m) => {
 			const u = await userOr404(v, m[1]);
 			if (u.id === v.id) throw new ApiError(400, "You can't follow yourself.");
-			await setFollow(v.id, u.id, method === "POST");
+			if (!(await setFollow(v.id, u.id, method === "POST"))) throw new ApiError(403, "You can't follow this account.");
 			return { data: userJson(await userOr404(v, m[1])) };
 		},
 	})),

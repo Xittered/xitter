@@ -441,8 +441,8 @@ async function applyPair(instance: string, e: any) {
 			await sql`delete from follows where follower_id = ${actor}::bigint and followee_id = ${target}::bigint`;
 			return void (await sql`insert into federation_outbox (kind, a) select 'user', id from users where id = ${target}::bigint and instance is null`);
 		}
-		const [t] = await sql`select protected from users where id = ${target}::bigint`;
-		if (t?.protected || (await blockedBetween(actor, target))) return;
+		const [t] = await sql`select protected, status, deactivated_at from users where id = ${target}::bigint`;
+		if (!t || t.protected || !["active", "restricted"].includes(t.status) || t.deactivated_at || (await blockedBetween(actor, target))) return;
 		await sql`insert into follows (follower_id, followee_id) values (${actor}::bigint, ${target}::bigint) on conflict do nothing`;
 		await sql`insert into federation_outbox (kind, a) select 'user', id from users where id = ${target}::bigint and instance is null`;
 		return;
