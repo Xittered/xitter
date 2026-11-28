@@ -95,6 +95,7 @@ export const moneyActions: Record<string, Action> = {
 				feed: feed?.screen_name ?? "",
 				follow_network: b.follow_network === true,
 				peer_daily_cents: cents(String(b.peer_daily ?? "").trim() || "0", "The daily limit from one instance", 0, 10_000_000_000),
+				peer_daily_move_cents: cents(String(b.peer_move_daily ?? "").trim() || "0", "The daily limit of moved balances from one instance", 0, 10_000_000_000),
 				move_balance: b.move_balance !== false,
 				network_totals: b.network_totals === true,
 			};

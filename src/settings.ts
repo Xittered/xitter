@@ -148,7 +148,7 @@ const DEFAULTS = {
 	// A peer's word is all there is for what it sends, so the default is one largest payment a day.
 	// move_balance: an account moving away takes its balance along
 	// network_totals: share this instance's totals with peers and show the network's
-	money: { starting_cents: 500, max_transfer_cents: 100_000, like_cents: 50, feed: "", follow_network: false, peer_daily_cents: 100_000, move_balance: true, network_totals: false },
+	money: { starting_cents: 500, max_transfer_cents: 100_000, like_cents: 50, feed: "", follow_network: false, peer_daily_cents: 100_000, peer_daily_move_cents: 10_000_000, move_balance: true, network_totals: false },
 	// money shop: listings are in money_shop_items; only approved announcements are shown
 	ads: { enabled: true, min_spend_cents: 500, base_cpm_cents: 20, price_scale_cents: 10_000, economy_cpm_ppm: 20, demand_share_pct: 1, max_days: 7, max_pending: 3, reject_refund_pct: 100, min_viewer_age_days: 3 },
 	money_shop: { enabled: false, announcement: null as null | { id: string; text: string; buttons: { label: string; url: string }[] } },
