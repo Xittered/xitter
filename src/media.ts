@@ -19,6 +19,7 @@ import { circleSeen } from "./circles";
 import { sql } from "./db";
 import { isId, newId } from "./ids";
 import { settings } from "./settings";
+import { limitedResponse, take } from "./ratelimit";
 import { gifProxy } from "./gifs";
 import { compressUpload } from "./media-compress";
 import { cropGif, FFMPEG, maxVideoBytes, posterFile, progress, queueVideo, sourceFile, spawnLimited, videoError, videoSupported } from "./video";
@@ -488,6 +489,10 @@ export async function mediaUpload(req: Request, url: URL, viewer: Viewer): Promi
 
 	switch (fields.command) {
 		case "INIT": {
+			if (!viewer.role && url.searchParams.get("command") !== "INIT") {
+				const h = take([["upload", viewer.id]]);
+				if (!h.ok) return limitedResponse(h);
+			}
 			const themeBg = (fields.media_category ?? "") === THEME_BACKGROUND;
 			if (themeBg && fields.source_url) return uploadError("Theme backgrounds are uploaded as files.");
 			if (fields.source_url) {

@@ -9,6 +9,7 @@ import { superadminNameHere } from "./superadmins";
 import { sql } from "./db";
 import { type Viewer, clearedCookies } from "./auth";
 import { passwordTry } from "./ratelimit";
+import { requestIp } from "./login-history";
 
 const error = (code: number, message: string, status = 400) => Response.json({ errors: [{ code, message }] }, { status });
 
@@ -27,8 +28,8 @@ async function body(req: Request): Promise<Record<string, string>> {
 
 // counted with signing in's tries for the account: from inside a session the
 // password could otherwise be guessed without end
-async function passwordCheck(viewer: Viewer, password: string | undefined): Promise<"ok" | "wrong" | "limited"> {
-	const refund = passwordTry(viewer.screen_name.toLowerCase());
+async function passwordCheck(req: Request, viewer: Viewer, password: string | undefined): Promise<"ok" | "wrong" | "limited"> {
+	const refund = passwordTry(viewer.screen_name.toLowerCase(), requestIp(req));
 	if (!refund) return "limited";
 	if (!password) return "wrong";
 	const [u] = await sql`select password_hash from users where id = ${viewer.id}::bigint`;
@@ -87,7 +88,7 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 		const f = await body(req);
 		// the hash read here is the one the update below must still find
 		const [account] = await sql`select password_hash from users where id = ${viewer.id}::bigint`;
-		const checked = await passwordCheck(viewer, f.current_password);
+		const checked = await passwordCheck(req, viewer, f.current_password);
 		if (checked === "limited") return tooMany();
 		if (!account || checked !== "ok") return error(231, "Your current password is incorrect.", 403);
 		const next = f.new_password ?? f.password ?? "";
@@ -118,14 +119,14 @@ export async function accountSettingsRoute(method: string, path: string, viewer:
 	}
 
 	if (path === "/1.1/account/verify_password.json") {
-		const checked = await passwordCheck(viewer, (await body(req)).password);
+		const checked = await passwordCheck(req, viewer, (await body(req)).password);
 		if (checked === "limited") return tooMany();
 		return checked === "ok" ? Response.json({ status: "ok" }) : error(231, "Your password is incorrect.", 403);
 	}
 
 	if (path === "/1.1/account/deactivate.json") {
 		const f = await body(req);
-		const checked = await passwordCheck(viewer, f.current_password ?? f.password);
+		const checked = await passwordCheck(req, viewer, f.current_password ?? f.password);
 		if (checked === "limited") return tooMany();
 		if (checked !== "ok") return error(231, "Your password is incorrect.", 403);
 		if (viewer.role) return error(214, "Staff accounts can't be deactivated here.");

@@ -60,7 +60,7 @@ import { legacyAnalyticsPage } from "./legacy-analytics";
 import { circleRoute } from "./circles";
 import { cardImage } from "./explore-cards";
 import { rememberIp, requestIp } from "./login-history";
-import { hit, isMutation, limitApi, limitedResponse } from "./ratelimit";
+import { addressKey, hit, isMutation, limitApi, limitedResponse } from "./ratelimit";
 import { actingViewer, delegateMay } from "./delegation";
 import { automationRoute } from "./automation";
 import { instancesRoute } from "./federation-settings";
@@ -541,17 +541,17 @@ async function route(req: Request): Promise<Response | undefined> {
 	if (p === "/api" || p === "/api/") return apiDocsPage(req);
 	if (req.method === "OPTIONS") return new Response(null, { status: 204 });
 	if (p === "/login" && req.method === "POST") {
-		const h = hit("auth", requestIp(req) ?? "unknown");
+		const h = hit("auth", addressKey(requestIp(req)));
 		if (!h.ok) return limitedResponse(h);
 		return handleLogin(req);
 	}
 	if (p === "/sessions" && req.method === "POST" && loadBuild()?.build.stateBase) {
-		const h = hit("auth", requestIp(req) ?? "unknown");
+		const h = hit("auth", addressKey(requestIp(req)));
 		if (!h.ok) return limitedResponse(h);
 		return handleOldSessions(req);
 	}
 	if (p === "/sessions/code" && (req.method === "GET" || req.method === "POST") && loadBuild()?.build.stateBase) {
-		const h = req.method === "POST" ? hit("auth", requestIp(req) ?? "unknown") : undefined;
+		const h = req.method === "POST" ? hit("auth", addressKey(requestIp(req))) : undefined;
 		if (h && !h.ok) return limitedResponse(h);
 		return handleOldCode(req);
 	}
@@ -565,7 +565,7 @@ async function route(req: Request): Promise<Response | undefined> {
 		// on every keystroke (is this name free?), which would use them up while
 		// one person types
 		if (req.method === "POST") {
-			const ip = requestIp(req) ?? "unknown";
+			const ip = addressKey(requestIp(req));
 			const step = p.replace(/^\/i\/jfapi/, "");
 			const h = step.startsWith("/onboarding/web/actions/") ? hit("auth", ip) : hit("endpoint", `${ip}:${step.replace(/\d+/g, "#")}`);
 			if (!h.ok) return limitedResponse(h);

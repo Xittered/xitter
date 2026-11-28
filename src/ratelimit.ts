@@ -5,6 +5,7 @@
 
 import { createReadStream } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
+import { isIP } from "node:net";
 import { join } from "node:path";
 import type { Viewer } from "./auth";
 import { CLIENT_DIR } from "./client-cache";
@@ -39,7 +40,8 @@ export const RULES = {
 	// passkey challenges, per address: the sign-in dialog asks for one each time it opens
 	passkey: { limit: 200, window: 15 * MIN },
 	// password tries on one account, from anywhere
-	password: { limit: 10, window: 15 * MIN },
+	password: { limit: 100, window: 15 * MIN },
+	password_address: { limit: 10, window: 15 * MIN },
 	// second-factor codes tried on one account, from anywhere: each right
 	// password opened a new five-guess challenge, so the guesses never ran out
 	code: { limit: 10, window: 60 * MIN },
@@ -138,12 +140,28 @@ export function used(bucket: Bucket, who: string): boolean {
 // A password check takes a moment, so its try counts before it runs: checked
 // with `used` and counted only once found wrong, tries sent all at once got
 // past the limit together. A right password gives its try back.
-export function passwordTry(who: string): (() => void) | undefined {
-	if (!hit("password", who).ok) return undefined;
+export function passwordTry(who: string, from: string | null | undefined): (() => void) | undefined {
+	const account = who.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+	const keys: [Bucket, string][] = [["password", account], ["password_address", `${account}:${addressKey(from)}`]];
+	if (!take(keys).ok) return undefined;
 	return () => {
-		const w = windows.get(`password:${who}`);
-		if (w && w.count > 0) w.count--;
+		for (const [bucket, key] of keys) {
+			const w = windows.get(`${bucket}:${key}`);
+			if (w && w.count > 0) w.count--;
+		}
 	};
+}
+
+export function addressKey(ip: string | null | undefined): string {
+	if (!ip) return "unknown";
+	const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+	if (mapped) return mapped[1];
+	if (isIP(ip) !== 6) return ip;
+	const [head, tail] = ip.split("::");
+	const left = head ? head.split(":") : [];
+	const right = tail ? tail.split(":") : [];
+	const groups = tail === undefined ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+	return `${groups.slice(0, 4).map((g) => (parseInt(g, 16) || 0).toString(16)).join(":")}::/64`;
 }
 
 export const limitHeaders = (h: Hit) => ({

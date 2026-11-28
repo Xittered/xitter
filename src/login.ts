@@ -1,7 +1,7 @@
 // The rules page, and sign-in by form post for scripts. People sign in and up
 // in X's own dialog, served by onboarding.ts.
 
-import { recordSignIn } from "./login-history";
+import { recordSignIn, requestIp } from "./login-history";
 import { login, loginCsrf, sessionCookies } from "./auth";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { passwordStep } from "./password-sign-in";
@@ -80,7 +80,7 @@ export async function handleOldSessions(req: Request): Promise<Response> {
 	const typed = f["session[username_or_email]"] ?? "";
 	// the dialog's password step: an email works too, and an account with a
 	// second factor gets its code asked for (this client has no screen of its own for it)
-	const step = await passwordStep(typed, f["session[password]"] ?? "");
+	const step = await passwordStep(typed, f["session[password]"] ?? "", requestIp(req));
 	if ("challenge" in step) return new Response(null, { status: 303, headers: { location: `/sessions/code?c=${step.challenge}` } });
 	if ("error" in step) return new Response(null, { status: 303, headers: { location: `/login/error?username_or_email=${encodeURIComponent(typed)}` } });
 	await recordSignIn(req, step.session);
@@ -126,7 +126,7 @@ export async function handleOldCode(req: Request): Promise<Response> {
 async function passwordLogin(req: Request, typed: string, password: string): Promise<Response> {
 	const username = typed.replace(/^@/, "").trim();
 	const account = username.toLowerCase();
-	const refund = username ? passwordTry(account) : () => {};
+	const refund = username ? passwordTry(account, requestIp(req)) : () => {};
 	if (!refund) return new Response("Too many tries for this account. Wait 15 minutes.", { status: 429 });
 	const session = username && password ? await login(username, password) : undefined;
 	if (!session) return new Response("Wrong username or password.", { status: 401 });

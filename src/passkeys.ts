@@ -253,7 +253,7 @@ export async function passkeysRoute(req: Request, url: URL, viewer: Viewer): Pro
 		const b = await body(req);
 		const password = typeof b.password === "string" ? b.password : "";
 		const account = viewer.screen_name.toLowerCase();
-		const refund = passwordTry(account);
+		const refund = passwordTry(account, requestIp(req));
 		if (!refund) return fail("Too many tries for this account. Wait 15 minutes.", 429);
 		const [u] = await sql`select password_hash from users where id = ${viewer.id}::bigint`;
 		if (password.length > 1024 || !(await Bun.password.verify(password, u?.password_hash ?? "").catch(() => false))) return fail("That password isn't right.");

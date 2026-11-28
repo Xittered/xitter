@@ -4,6 +4,7 @@ import { createHash, randomInt } from "node:crypto";
 import { accountPage, esc, withCsrf } from "./account-page";
 import { sql } from "./db";
 import { hit, passwordTry } from "./ratelimit";
+import { requestIp } from "./login-history";
 import { settings } from "./settings";
 import { matchingStep, newSecret, otpauthUrl } from "./totp";
 import { startSession, type Session, type Viewer } from "./auth";
@@ -143,7 +144,7 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 	if (req.method === "POST" && sub === "/confirm" && !u.totp_enabled && u.totp_pending) {
 		// the password too: a session someone took mustn't lock the owner out
 		// behind an authenticator only the taker has
-		const refund = passwordTry(viewer.screen_name.toLowerCase());
+		const refund = passwordTry(viewer.screen_name.toLowerCase(), requestIp(req));
 		if (!refund) return setup(req, u.totp_pending, viewer, "Too many tries for this account. Wait 15 minutes.");
 		if (!(await Bun.password.verify(field("password"), u.password_hash).catch(() => false))) return setup(req, u.totp_pending, viewer, "That password isn't right.");
 		refund();
@@ -161,10 +162,11 @@ export async function twoFactorRoute(req: Request, url: URL, viewer: Viewer): Pr
 		);
 	}
 	if (req.method === "POST" && sub === "/disable" && u.totp_enabled) {
-		const refund = passwordTry(viewer.screen_name.toLowerCase());
+		const refund = passwordTry(viewer.screen_name.toLowerCase(), requestIp(req));
 		if (!refund) return status(req, viewer, true, "Too many tries for this account. Wait 15 minutes.");
 		const ok = await Bun.password.verify(field("password"), u.password_hash).catch(() => false);
 		if (ok) refund();
+		if (ok && !hit("code", viewer.id).ok) return status(req, viewer, true, "Too many codes tried for this account. Wait an hour.");
 		if (!ok || !(await codeAccepted(viewer.id, field("code")))) return status(req, viewer, true, "The password or the code isn't right.");
 		await sql`update users set totp_enabled = false, totp_secret = null, totp_pending = null, totp_last_step = null, totp_backup = '[]'::jsonb where id = ${viewer.id}::bigint`;
 		return status(req, viewer, false);

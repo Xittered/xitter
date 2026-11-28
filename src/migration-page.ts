@@ -10,6 +10,7 @@ import { INSTANCE_ID } from "./federation";
 import { type Check, type Finding, MigrationError, check, jobs, start } from "./migration-import";
 import { codeState, createCode, revokeCodes, versionInfo } from "./migration";
 import { hit, passwordTry } from "./ratelimit";
+import { requestIp } from "./login-history";
 import { feature } from "./settings";
 
 const CSS = `
@@ -185,7 +186,7 @@ export async function migrateRoute(req: Request, viewer: Viewer): Promise<Respon
 	if (!feature("migration") && action !== "revoke") return home(req, viewer, { error: "Moving accounts is turned off on this instance.", status: 403 });
 	if (action === "code") {
 		const account = viewer.screen_name.toLowerCase();
-		const refund = passwordTry(account);
+		const refund = passwordTry(account, requestIp(req));
 		if (!refund) return home(req, viewer, { error: "Too many tries. Wait 15 minutes.", status: 429 });
 		const [u] = await sql`select password_hash from users where id = ${viewer.id}::bigint`;
 		if (!u || !(await Bun.password.verify(field("password"), u.password_hash).catch(() => false)))

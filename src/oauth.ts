@@ -12,7 +12,7 @@ import { sniffImage } from "./media";
 import { requestIp } from "./login-history";
 import { clientMetadata, metadataClientId } from "./oauth-metadata";
 import { passwordStep } from "./password-sign-in";
-import { hit, limitedResponse } from "./ratelimit";
+import { addressKey, hit, limitedResponse } from "./ratelimit";
 import { feature, settings } from "./settings";
 import { loadLook, nightModeCookies } from "./themes/api";
 import { answerChallenge } from "./two-factor";
@@ -134,11 +134,11 @@ const appCard = (request: RequestData) => {
 // Signed out, the authorize page signs you in itself (password, then a
 // second-factor code if the account has one) and comes back to the request.
 async function signInFirst(req: Request, url: URL): Promise<Response> {
-	const ip = requestIp(req) ?? "unknown";
+	const ip = addressKey(requestIp(req));
 	const f = req.method === "POST" ? await form(req) : undefined;
 	// a sign-in form posted from another site would sign you in as someone else
 	if (req.method === "POST" && (!f || req.headers.get("origin") !== PUBLIC_ORIGIN)) return new Response("Invalid sign-in form.", { status: 403 });
-	if (!f && metadataClientId(url.searchParams.get("client_id") ?? "")) {
+	if (metadataClientId(String((f ?? url.searchParams).get("client_id") ?? ""))) {
 		const limit = hit("endpoint", `oauth-metadata:${ip}`);
 		if (!limit.ok) return limitedResponse(limit);
 	}
@@ -162,7 +162,7 @@ async function signInFirst(req: Request, url: URL): Promise<Response> {
 			}
 		} else {
 			typed = value(f, "username");
-			const step = await passwordStep(typed, value(f, "password"));
+			const step = await passwordStep(typed, value(f, "password"), requestIp(req));
 			if ("session" in step) return signedIn(step.session);
 			if ("challenge" in step) challenge = step.challenge;
 			else error = step.error;
@@ -190,7 +190,7 @@ export async function oauthAuthorize(req: Request, url: URL, viewer: Viewer | un
 	const f = req.method === "POST" ? await form(req) : undefined;
 	if (req.method === "POST" && (!f || value(f, "csrf") !== viewer.csrf || (req.headers.get("origin") && req.headers.get("origin") !== PUBLIC_ORIGIN))) return new Response("Invalid authorization form.", { status: 403 });
 	// opening the page may fetch an app's metadata document; keep that bounded
-	if (!f && metadataClientId(url.searchParams.get("client_id") ?? "")) {
+	if (metadataClientId(String((f ?? url.searchParams).get("client_id") ?? ""))) {
 		const limit = hit("endpoint", `oauth-metadata:${viewer.id}`);
 		if (!limit.ok) return limitedResponse(limit);
 	}

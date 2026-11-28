@@ -25,7 +25,7 @@ import { platformSource } from "./platforms";
 import { mailEnabled } from "./mail";
 import { checkSignupCode, sendSignupCode } from "./email-address";
 import { settings } from "./settings";
-import { hit, take } from "./ratelimit";
+import { addressKey, hit, take } from "./ratelimit";
 import { requestCountry, requestIp } from "./login-history";
 import { capPassed } from "./cap";
 
@@ -252,6 +252,7 @@ async function pending(token: string): Promise<{ username: string; code: string 
 	return s;
 }
 const STALE = "That took too long. Go back and start again.";
+const INVITE_TRIES = 5;
 
 // "Set up your account" with the username they typed already in place
 function setupScreen(token: string, username: string): Message[] {
@@ -349,6 +350,11 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			headers.append("set-cookie", "xitter_invite=; Path=/; Max-Age=0");
 			return respond(fill(templates.success, { user_id: userId, username: p.screenName }), false, headers);
 		}
+		const [tried] = await sql`update signup_sessions set invite_attempts = invite_attempts + 1 where token = ${token}::uuid returning invite_attempts`;
+		if (!tried || tried.invite_attempts > INVITE_TRIES) {
+			await sql`delete from signup_sessions where token = ${token}::uuid`;
+			return respond(fieldError("code", "Too many wrong codes. Go back and start again."));
+		}
 		const code = await validCode(String(f.code ?? ""));
 		if (!code) return respond(fieldError("code", "That invite code is not valid or has been used up."));
 		await sql`update signup_sessions set code = ${code} where token = ${token}::uuid`;
@@ -378,7 +384,7 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 			const held = { ...checked, ip: given.ip, passwordHash: await Bun.password.hash(given.password), source: await platformSource(req), country: requestCountry(req) ?? null };
 			// a code sent for an earlier address mustn't confirm this one
 			await sql`update signup_sessions set pending = ${JSON.stringify(held)}::text::jsonb, email_code_hash = null where token = ${token}::uuid`;
-			if (!take([["mail", requestIp(req) ?? "unknown"], ["mail", `to:${checked.email}`]]).ok) return respond(fieldError("message", "Too many codes sent from here. Wait an hour."));
+			if (!take([["mail", addressKey(requestIp(req))], ["mail", `to:${checked.email}`]]).ok) return respond(fieldError("message", "Too many codes sent from here. Wait an hour."));
 			try {
 				if (!(await sendSignupCode(token, held))) return respond(fieldError("message", "Too many codes sent for this sign-up. Go back and start again."));
 			} catch (e: any) {
@@ -411,14 +417,14 @@ export async function onboarding(req: Request, path: string): Promise<Response |
 	}
 	if (path === "/onboarding/web/actions/begin_password_recovery") {
 		const f = await form(req);
-		if (!hit("mail", requestIp(req) ?? "unknown").ok) return respond(fieldError("username_or_email", "Too many emails from here. Wait an hour."));
+		if (!hit("mail", addressKey(requestIp(req))).ok) return respond(fieldError("username_or_email", "Too many emails from here. Wait an hour."));
 		if (!capPassed(req, true)) return respond(fieldError("username_or_email", "Verify you're human to reset a password: go to /account/forgot."));
 		await requestReset(String(f.username_or_email ?? f.username ?? ""));
 		return respond(fieldError("username_or_email", "If that account has an email, we've sent a reset link to it."));
 	}
 	if (path === "/onboarding/web/actions/login_enter_password") {
 		const f = await form(req);
-		const step = await passwordStep(String(f.username ?? ""), String(f.password ?? ""));
+		const step = await passwordStep(String(f.username ?? ""), String(f.password ?? ""), requestIp(req));
 		if ("challenge" in step) return respond(fill(templates.twoFactor, { session_token: step.challenge }, TWO_FACTOR_TEXTS));
 		if ("error" in step) return respond(fieldError("password", step.error));
 		const { session } = step;

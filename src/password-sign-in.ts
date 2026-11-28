@@ -20,13 +20,13 @@ export async function byEmail(typed: string): Promise<string | undefined> {
 	return owner && owner.status !== "suspended" ? owner.screen_name : undefined;
 }
 
-export async function passwordStep(typed: string, password: string): Promise<{ session: Session } | { challenge: string } | { error: string }> {
+export async function passwordStep(typed: string, password: string, from: string | null): Promise<{ session: Session } | { challenge: string } | { error: string }> {
 	typed = typed.trim().replace(/^@/, "");
 	const username = (await byEmail(typed)) ?? typed;
 	// guessing one account's password from many addresses still runs out;
 	// only wrong passwords count, so signing in on several devices doesn't
 	const account = username.toLowerCase();
-	const refund = username ? passwordTry(account) : () => {};
+	const refund = username ? passwordTry(account, from) : () => {};
 	if (!refund) return { error: "Too many tries for this account. Wait 15 minutes." };
 	const challenge = username && password ? await startChallenge(username, password) : undefined;
 	if (challenge) {

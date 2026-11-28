@@ -12,6 +12,7 @@ import { PUBLIC_ORIGIN } from "./config";
 import { sql } from "./db";
 import { mailEnabled, sendMail, validEmail } from "./mail";
 import { passwordTry } from "./ratelimit";
+import { requestIp } from "./login-history";
 import { settings } from "./settings";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -133,7 +134,7 @@ export async function emailRoute(req: Request, url: URL, viewer: Viewer | undefi
 	if (!validEmail(email)) return emailPage(req, viewer, current, "", "Enter a valid email address.");
 	if (disposableEmailRefused(email)) return emailPage(req, viewer, current, "", DISPOSABLE_EMAIL_ERROR);
 	// a session someone took mustn't be a place to guess the password from
-	const refund = passwordTry(viewer.screen_name.toLowerCase());
+	const refund = passwordTry(viewer.screen_name.toLowerCase(), requestIp(req));
 	if (!refund) return emailPage(req, viewer, current, "", "Too many tries for this account. Wait 15 minutes.");
 	if (!(await Bun.password.verify(String(f?.get("password") ?? ""), u.password_hash).catch(() => false))) return emailPage(req, viewer, current, "", "That password isn't right.");
 	refund();

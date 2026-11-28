@@ -918,6 +918,7 @@ alter table signup_sessions add column if not exists email_code_hash text;
 alter table signup_sessions add column if not exists email_code_at timestamptz;
 alter table signup_sessions add column if not exists email_attempts integer not null default 0;
 alter table signup_sessions add column if not exists email_sends integer not null default 0;
+alter table signup_sessions add column if not exists invite_attempts integer not null default 0;
 
 -- errors.ts: server and browser errors for Admin > Errors, one row per distinct error;
 -- a resolved error that happens again opens again
