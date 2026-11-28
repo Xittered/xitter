@@ -435,7 +435,7 @@ async function route(method: string, path: string, viewer: Viewer, req: Request)
 		const listId = f.list_id ?? "";
 		const op = listMember[1].startsWith("create") ? "ListAddMember" : "ListRemoveMember";
 		let answer: any;
-		for (const userId of String(f.user_id ?? "").split(",").filter(Boolean)) answer = await callOperation(op, viewer, { listId, userId });
+		for (const userId of [...new Set(String(f.user_id ?? "").split(",").filter(Boolean))].slice(0, 100)) answer = await callOperation(op, viewer, { listId, userId });
 		const list = answer?.data?.list ?? (await callOperation("ListByRestId", viewer, { listId }) as any)?.data?.list;
 		return Response.json(list ? restList(list) : {});
 	}
