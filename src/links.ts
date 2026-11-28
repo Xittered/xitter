@@ -104,17 +104,88 @@ const decode = (s: string) =>
 
 const clip = (s: string, max: number) => ([...s].length > max ? `${[...s].slice(0, max - 1).join("")}…` : s);
 
+const HEAD_CHARS = 300_000;
+
+function* tagsNamed(html: string, name: string): Generator<{ tag: string; end: number }> {
+	const lower = html.toLowerCase();
+	const open = `<${name}`;
+	let i = lower.indexOf(open);
+	while (i !== -1) {
+		if (/\w/.test(lower[i + open.length] ?? "")) {
+			i = lower.indexOf(open, i + 1);
+			continue;
+		}
+		const end = html.indexOf(">", i);
+		if (end === -1) return;
+		yield { tag: html.slice(i, end + 1), end: end + 1 };
+		i = lower.indexOf(open, end + 1);
+	}
+}
+
+const NAME_CHAR = /[a-z:-]/i;
+const SPACE = /\s/;
+
+function attributesOf(tag: string): Map<string, string> {
+	const attrs = new Map<string, string>();
+	const unclosed = new Set<string>();
+	let i = 0;
+	while (i < tag.length) {
+		if (!NAME_CHAR.test(tag[i])) {
+			i++;
+			continue;
+		}
+		let j = i;
+		while (j < tag.length && NAME_CHAR.test(tag[j])) j++;
+		const name = tag.slice(i, j).toLowerCase();
+		let k = j;
+		while (k < tag.length && SPACE.test(tag[k])) k++;
+		if (tag[k] !== "=") {
+			i = j;
+			continue;
+		}
+		k++;
+		while (k < tag.length && SPACE.test(tag[k])) k++;
+		const q = tag[k];
+		const quoted = q === '"' || q === "'";
+		const close = quoted && !unclosed.has(q) ? tag.indexOf(q, k + 1) : -1;
+		if (quoted && close === -1) unclosed.add(q);
+		if (close !== -1) {
+			attrs.set(name, tag.slice(k + 1, close));
+			i = close + 1;
+			continue;
+		}
+		let e = k;
+		while (e < tag.length && !SPACE.test(tag[e]) && tag[e] !== ">") e++;
+		if (e > k) attrs.set(name, tag.slice(k, e));
+		i = Math.max(e, j);
+	}
+	return attrs;
+}
+
+function titleIn(head: string): string | undefined {
+	const lower = head.toLowerCase();
+	for (const { end } of tagsNamed(head, "title")) {
+		const stop = head.indexOf("<", end);
+		if (stop !== -1 && lower.startsWith("</title>", stop)) return head.slice(end, stop);
+	}
+	return undefined;
+}
+
+function hasOgTitle(html: string): boolean {
+	for (const { tag } of tagsNamed(html.slice(0, HEAD_CHARS), "meta")) if (tag.toLowerCase().includes("og:title")) return true;
+	return false;
+}
+
 export function parsePreview(url: string, html: string): Preview | undefined {
-	const head = html.slice(0, 300_000);
+	const head = html.slice(0, HEAD_CHARS);
 	const meta = new Map<string, string>();
-	for (const tag of head.matchAll(/<meta\b[^>]*>/gi)) {
-		const attrs = new Map<string, string>();
-		for (const a of tag[0].matchAll(/([a-z:-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi)) attrs.set(a[1].toLowerCase(), a[3] ?? a[4] ?? a[5] ?? "");
+	for (const { tag } of tagsNamed(head, "meta")) {
+		const attrs = attributesOf(tag);
 		const key = (attrs.get("property") ?? attrs.get("name") ?? "").toLowerCase();
 		const content = attrs.get("content");
 		if (key && content !== undefined && !meta.has(key)) meta.set(key, decode(content));
 	}
-	const titleTag = /<title[^>]*>([^<]*)<\/title>/i.exec(head)?.[1];
+	const titleTag = titleIn(head);
 	const title = meta.get("og:title") ?? meta.get("twitter:title") ?? (titleTag ? decode(titleTag) : "");
 	if (!title) return undefined;
 	const rawImage = meta.get("og:image:secure_url") ?? meta.get("og:image") ?? meta.get("twitter:image") ?? meta.get("twitter:image:src");
@@ -208,7 +279,7 @@ export async function fetchPreview(url: string): Promise<void> {
 	try {
 		const youtube = youtubeOf(url);
 		const html = youtube ? undefined : await fetchPage(url);
-		const shell = html && isPeer(new URL(url).host) && !/<meta\b[^>]*og:title/i.test(html.slice(0, 300_000));
+		const shell = html && isPeer(new URL(url).host) && !hasOgTitle(html);
 		const p = youtube ? await youtubePreview(url, youtube.id) : html && !shell ? parsePreview(url, html) : undefined;
 		await sql`insert into link_previews (url, ok, title, description, site, image, width, height, fetched_at)
 			values (${url}, ${!!p}, ${p?.title ?? ""}, ${p?.description ?? ""}, ${p?.site ?? ""}, ${p?.image ?? null}, ${p?.width ?? 0}, ${p?.height ?? 0}, now())
