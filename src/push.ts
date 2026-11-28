@@ -80,8 +80,27 @@ function vapidHeader(endpoint: string): string {
 type Subscription = { id: string; user_id: string; endpoint: string; p256dh: string; auth: string; settings: Record<string, string>; last_pushed_at: Date };
 
 // Sends one message; a subscription the push service says is gone is dropped.
+export function subscriptionKeysValid(p256dh: string, auth: string): boolean {
+	const point = Buffer.from(p256dh, "base64url");
+	if (point.length !== 65 || point[0] !== 4 || Buffer.from(auth, "base64url").length !== 16) return false;
+	try {
+		const ecdh = createECDH("prime256v1");
+		ecdh.generateKeys();
+		ecdh.computeSecret(point);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export async function pushTo(sub: Pick<Subscription, "id" | "endpoint" | "p256dh" | "auth">, message: { title: string; body: string; url: string; tag?: string; count?: number }): Promise<boolean> {
-	const body = encryptPayload(Buffer.from(JSON.stringify({ ...message, icon: `${PUBLIC_ORIGIN}/public/app-icon.png`, badge: `${PUBLIC_ORIGIN}/public/notification-badge.png` })), Buffer.from(sub.p256dh, "base64url"), Buffer.from(sub.auth, "base64url"));
+	let body: Buffer;
+	try {
+		body = encryptPayload(Buffer.from(JSON.stringify({ ...message, icon: `${PUBLIC_ORIGIN}/public/app-icon.png`, badge: `${PUBLIC_ORIGIN}/public/notification-badge.png` })), Buffer.from(sub.p256dh, "base64url"), Buffer.from(sub.auth, "base64url"));
+	} catch {
+		await sql`delete from push_subscriptions where id = ${sub.id}::bigint`;
+		return false;
+	}
 	const r = await fetch(sub.endpoint, {
 		method: "POST",
 		headers: { authorization: vapidHeader(sub.endpoint), "content-encoding": "aes128gcm", "content-type": "application/octet-stream", ttl: "86400", urgency: "normal" },
@@ -153,7 +172,7 @@ export async function pushSettingsRoute(viewerId: string, action: string, body: 
 		if (endpoint) await sql`delete from push_subscriptions where user_id = ${viewerId}::bigint and endpoint = ${endpoint}`;
 		return Response.json({});
 	}
-	const keysFit = [d.encryption_key1, d.encryption_key2].every((k) => typeof k === "string" && k.length <= 256) && (endpoint?.length ?? 0) <= 2048;
+	const keysFit = [d.encryption_key1, d.encryption_key2].every((k) => typeof k === "string" && k.length <= 256) && (endpoint?.length ?? 0) <= 2048 && subscriptionKeysValid(d.encryption_key1 as string, d.encryption_key2 as string);
 	if (action === "login" && endpoint && keysFit && d.encryption_key1 && d.encryption_key2) {
 		await sql.begin(async (tx) => {
 			await holdLock(tx, `push:${viewerId}`);
@@ -187,26 +206,40 @@ export async function pushDue(): Promise<number> {
 		// from the one pushed to longest ago (items newest first, so each
 		// browser's share is what it would have got on its own)
 		for (const [userId, own] of Map.groupBy(subs, (s) => s.user_id)) {
-			const found = await pushItems(userId, Math.min(...own.map((s) => new Date(s.last_pushed_at).getTime())));
+			const found = await pushItems(userId, Math.min(...own.map((s) => new Date(s.last_pushed_at).getTime()))).catch((e) => {
+				console.error(`push: notifications for ${userId} failed:`, e instanceof Error ? e.message : e);
+				return undefined;
+			});
+			if (!found) continue;
 			for (const sub of own) {
-				const on = (k: string) => ({ ...DEFAULTS, ...sub.settings })[k] !== "off";
-				const since = new Date(sub.last_pushed_at).getTime();
-				const items = found.filter((i) => i.at > since && on(SWITCH[i.kind]));
-				const messages = on("direct_messages") ? await newMessages(sub.user_id, sub.last_pushed_at) : [];
-				const all = [...items, ...messages].sort((a, b) => a.at - b.at);
-				if (!all.length) continue;
-				await sql`update push_subscriptions set last_pushed_at = ${new Date(Math.max(...all.map((i) => i.at)) + 1)} where id = ${sub.id}::bigint`;
-				const name = settings().instance_name;
-				// for the installed app's icon badge
-				const count = await unreadCount(sub.user_id);
-				const out = all.length > BURST ? [{ title: name, body: `${all.length} new notifications`, url: "/notifications", tag: "summary", count }] : all.map((i) => ({ title: name, body: i.text, url: i.url, tag: i.key, count }));
-				for (const m of out) if (await pushTo(sub, m)) sent++;
+				try {
+					sent += await pushOne(sub, found);
+				} catch (e) {
+					console.error(`push: subscription ${sub.id} failed:`, e instanceof Error ? e.message : e);
+				}
 			}
 		}
 		return sent;
 	} finally {
 		pushing = false;
 	}
+}
+
+async function pushOne(sub: Subscription, found: Awaited<ReturnType<typeof pushItems>>): Promise<number> {
+	let sent = 0;
+	const on = (k: string) => ({ ...DEFAULTS, ...sub.settings })[k] !== "off";
+	const since = new Date(sub.last_pushed_at).getTime();
+	const items = found.filter((i) => i.at > since && on(SWITCH[i.kind]));
+	const messages = on("direct_messages") ? await newMessages(sub.user_id, sub.last_pushed_at) : [];
+	const all = [...items, ...messages].sort((a, b) => a.at - b.at);
+	if (!all.length) return 0;
+	await sql`update push_subscriptions set last_pushed_at = ${new Date(Math.max(...all.map((i) => i.at)) + 1)} where id = ${sub.id}::bigint`;
+	const name = settings().instance_name;
+	// for the installed app's icon badge
+	const count = await unreadCount(sub.user_id);
+	const out = all.length > BURST ? [{ title: name, body: `${all.length} new notifications`, url: "/notifications", tag: "summary", count }] : all.map((i) => ({ title: name, body: i.text, url: i.url, tag: i.key, count }));
+	for (const m of out) if (await pushTo(sub, m)) sent++;
+	return sent;
 }
 
 // who wrote since `after` (chat is end-to-end encrypted: never what)
